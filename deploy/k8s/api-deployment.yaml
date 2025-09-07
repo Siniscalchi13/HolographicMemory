@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: holo-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: holo-api
+  template:
+    metadata:
+      labels:
+        app: holo-api
+    spec:
+      containers:
+      - name: api
+        image: holographicmemory/api:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: HOLO_ROOT
+          value: /data
+        - name: GRID_SIZE
+          value: "64"
+        - name: PORT
+          value: "8000"
+        - name: HOLO_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: holo-secrets
+              key: api-key
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: holo-data
+

@@ -5,33 +5,39 @@ services:
     build:
       context: .
       dockerfile: services/api/Dockerfile
-      target: api-dev
-    container_name: holo_api
+      target: api
+    container_name: holo_api_prod
     environment:
       - HOLO_ROOT=/data
-      - GRID_SIZE=64
+      - GRID_SIZE=${GRID_SIZE:-64}
       - HOLO_API_KEY=${HOLO_API_KEY:-}
-      - HOLO_ALLOWED_ORIGINS=${HOLO_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
       - PORT=8000
     ports:
       - "8000:8000"
     volumes:
-      - ./services/api:/app/services/api:rw
-      - ./holographic-fs:/app/holographic-fs:rw
-      - ./data:/data:rw
+      - holo_data:/data
+    restart: unless-stopped
     networks:
       - holo_net
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 networks:
   holo_net:
     name: holo_net
 
 volumes:
-  data:
+  holo_data:
     name: holo_data
 

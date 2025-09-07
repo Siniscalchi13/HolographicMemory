@@ -27,14 +27,15 @@ CLI
 
 API
 
-- Local: `python -m pip install -r services/api/requirements.txt && uvicorn services.api.app:app --reload --port 8080`
-- Docker: `docker compose up --build`
+- Local: `python -m pip install -r services/api/requirements.txt && uvicorn services.api.app:app --reload --port 8000`
+- Docker (dev): `make build-images && make dev` → http://localhost:8000
+- Docker (prod): `make prod`
 - Endpoints: `/healthz`, `/stats`, `/search`, `/list`, `/store`, `/metrics` (download is 501 until recall is implemented)
  - Auth: `X-API-Key` header (set `HOLO_API_KEY` on server and desktop)
 
 Desktop GUI
 
-- Prereq: API running locally (`make api` or `docker compose up`)
+- Prereq: API running locally (`make api` or `make dev`)
 - Start app: `cd desktop/holo-desktop && npm install && npm start`
 - Features: drag-and-drop store, search by filename, live stats
 

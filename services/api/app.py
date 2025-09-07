@@ -17,6 +17,7 @@ except Exception:
     fitz = None
 
 from holographicfs.memory import mount
+from holographicfs.index import sha256_file
 from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
 import threading
 import time as _time
@@ -316,6 +317,36 @@ def thumb(path: str, w: int = 256, _: bool = Depends(require_api_key)):
     except Exception:
         # Not an image; return 1x1 transparent
         return Response(content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\x0cIDATx\x9cc````\x00\x00\x00\x04\x00\x01\x0b\xe7\x83\xbc\x00\x00\x00\x00IEND\xaeB`\x82", media_type="image/png")
+
+
+@app.get("/fileinfo")
+def fileinfo(path: str, _: bool = Depends(require_api_key)):
+    fs = get_fs()
+    p = _ensure_under_root(fs.root, Path(path))
+    ent = fs.index.lookup_by_path(p)  # type: ignore[attr-defined]
+    if not ent:
+        raise HTTPException(status_code=404, detail="Not found in index")
+    sha = None
+    try:
+        if p.exists() and p.is_file():
+            sha = sha256_file(p)
+    except Exception:
+        sha = None
+    has_preview = False
+    try:
+        if hasattr(fs.mem.backend, 'retrieve_response_hrr'):
+            txt = fs.mem.backend.retrieve_response_hrr(ent.doc_id)  # type: ignore[attr-defined]
+            has_preview = bool(isinstance(txt, str) and txt)
+    except Exception:
+        has_preview = False
+    return {
+        'path': ent.path,
+        'doc_id': ent.doc_id,
+        'size': ent.size,
+        'mtime': getattr(ent, 'mtime', 0.0),
+        'sha256': sha,
+        'has_preview': has_preview,
+    }
 
 
 @app.post("/store")
