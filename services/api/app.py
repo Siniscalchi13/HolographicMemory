@@ -40,13 +40,23 @@ def get_fs():
 app = FastAPI(title="Holographic Memory API", version="0.1.0")
 
 # Allow desktop app (Electron) to call the API locally
-allowed = os.getenv("HOLO_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,capacitor://localhost").split(",")
+allowed_env = os.getenv(
+    "HOLO_ALLOWED_ORIGINS",
+    "http://localhost:3000,http://localhost:5173,capacitor://localhost, null",
+)
+if allowed_env.strip() == "*":
+    cors_kwargs = dict(allow_origins=["*"], allow_credentials=True)
+else:
+    allow_list = [o.strip() for o in allowed_env.split(",") if o.strip()]
+    # Include 'null' to permit file:// origins from Electron
+    if "null" not in allow_list:
+        allow_list.append("null")
+    cors_kwargs = dict(allow_origins=allow_list, allow_credentials=True)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in allowed if o.strip()],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    **cors_kwargs,
 )
 
 # Simple API key guard
