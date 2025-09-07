@@ -22,9 +22,7 @@ classifiers = [
   "Operating System :: OS Independent",
   "Topic :: System :: Filesystems",
 ]
-dependencies = [
-  "numpy>=1.24",
-]
+dependencies = []
 
 [project.scripts]
 holo = "holographicfs.cli:main"

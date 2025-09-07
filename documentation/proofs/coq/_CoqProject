@@ -1,0 +1,15 @@
+-R . TAI
+proofs/coq/PolicyNonEscalation.v
+proofs/coq/EventOrder.v
+proofs/coq/ACLTtermination.v
+proofs/coq/TokenBucket.v
+proofs/coq/WALDurability.v
+proofs/coq/BudgetMonotonicity.v
+proofs/coq/DeterministicReplay.v
+proofs/coq/HolographicExactRecall.v
+proofs/coq/QMC_Core.v
+proofs/coq/QMC_POVM.v
+proofs/coq/HMC_FFT.v
+proofs/coq/HMC_Correlation.v
+proofs/coq/QMC_CHSH.v
+proofs/coq/MSC_Selection.v

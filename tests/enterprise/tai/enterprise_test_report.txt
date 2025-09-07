@@ -1,0 +1,16 @@
+================================================================================
+TAI ENTERPRISE TEST REPORT
+================================================================================
+
+Total Test Modules: 1
+Passed: 0
+Failed: 1
+Success Rate: 0.0%
+
+STARTUP: ❌ FAILED
+  Return Code: 4
+  Error: ERROR: file or directory not found: tests.enterprise.test_tai_system_startup
+
+...
+
+================================================================================

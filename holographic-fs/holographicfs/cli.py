@@ -38,9 +38,13 @@ def cmd_recall(args: argparse.Namespace) -> int:
     root = Path(args.root or Path.cwd())
     fs = mount(root, grid_size=args.grid_size, state_dir=args.state_dir)
     out = Path(args.out).expanduser() if args.out else None
-    p = fs.recall(args.query_or_doc, out=out, original=args.original)
-    print(str(p))
-    return 0
+    try:
+        p = fs.recall(args.query_or_doc, out=out, original=args.original)
+        print(str(p))
+        return 0
+    except Exception as e:
+        print(f"error: {e}")
+        return 2
 
 
 def cmd_search(args: argparse.Namespace) -> int:
