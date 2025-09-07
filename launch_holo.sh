@@ -1,43 +1,43 @@
 #!/bin/bash
 
-# HolographicMemory Docker Launch Script
-# Uses Docker for API, serves web UI - no global Python dependencies
+# ONE FUCKING COMMAND TO RULE THEM ALL
 
-echo "🚀 Starting HolographicMemory (Docker + Web UI)..."
+# Handle stop command
+if [ "$1" = "stop" ]; then
+    echo "🛑 Stopping HolographicMemory..."
+    docker compose down -v
+    echo "✅ Stopped"
+    exit 0
+fi
 
-# Kill existing processes
-echo "🧹 Cleaning up existing processes..."
+echo "🚀 Starting HolographicMemory..."
 
-# Stop any existing Docker containers
-docker compose down 2>/dev/null
+# Clean up any existing shit
+docker compose down -v 2>/dev/null
 
-sleep 2
+# Start everything
+docker compose up -d --build --remove-orphans
 
-# Start Docker API
-echo "🐳 Starting API in Docker..."
-docker compose up -d --remove-orphans
-
-# Wait for API to be healthy
-echo "⏳ Waiting for API to be ready..."
+# Wait for it to be ready
+echo "⏳ Waiting for system..."
 for i in {1..30}; do
     if curl -s http://localhost:8000/healthz >/dev/null 2>&1; then
-        echo "✅ API is running at http://localhost:8000"
-        break
-    fi
-    if [ $i -eq 30 ]; then
-        echo "❌ API failed to start after 30 seconds"
-        docker compose logs api
-        exit 1
+        echo ""
+        echo "✅ READY!"
+        echo ""
+        echo "👉 Open this in your browser: http://localhost:8000"
+        echo ""
+        echo "To stop: ./launch_holo.sh stop"
+        echo ""
+        
+        # Try to open browser automatically
+        if command -v open &> /dev/null; then
+            open http://localhost:8000
+        fi
+        exit 0
     fi
     sleep 1
 done
 
-echo ""
-echo "🎉 HolographicMemory is now running!"
-echo "📡 API: http://localhost:8000 (Docker)"
-echo "🌐 Web UI: http://localhost:8000"
-echo ""
-echo "To stop:"
-echo "  make down (stops Docker API)"
-echo ""
-echo "Open your browser to http://localhost:8000 to use the web interface!"
+echo "❌ Failed to start. Check Docker is running."
+exit 1

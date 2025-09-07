@@ -41,34 +41,36 @@ class Memory:
         else:
             raise RuntimeError("C++ backend not available. Build the extensions (make cpp)")
 
-    def store_file(self, path: Path) -> str:
+    def store_file(self, path: Path, stable_id: Optional[str] = None) -> str:
         data = path.read_bytes()
         if _cpp_loaded and hasattr(self.backend, "store"):
-            # TAI convention: pass filename header to enable wave persistence patterns
+            # Pass filename/size/sha for potential engine-side features
             from .index import sha256_file as _sha
-            meta = f"filename:{Path(path).name}\nsize:{len(data)}\nsha256:{_sha(path)}\n"
-            doc_id = str(self.backend.store(meta))  # type: ignore[attr-defined]
-            # Chunk and persist file bytes into HM as base64 responses for holographic-only recall
+            digest = _sha(path)
+            doc_id = stable_id or digest
+            meta = f"filename:{Path(path).name}\nsize:{len(data)}\nsha256:{digest}\n"
             try:
+                self.backend.store(meta)  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            # Persist: HM HRR (best-effort) + disk-backed file for durability
+            try:
+                import json as _json
                 if hasattr(self.backend, "store_response_hrr"):
                     import base64 as _b64
-                    CHUNK = 256 * 1024  # 256KB raw
-                    total = len(data)
-                    chunks = (total + CHUNK - 1) // CHUNK
-                    for i in range(chunks):
-                        part = data[i * CHUNK : (i + 1) * CHUNK]
-                        b64 = _b64.b64encode(part).decode("ascii")
-                        self.backend.store_response_hrr(f"{doc_id}#chunk:{i}", b64)  # type: ignore[attr-defined]
-                    manifest = {
-                        "doc_id": doc_id,
-                        "size": total,
-                        "chunks": chunks,
-                        "chunk_bytes": CHUNK,
-                        "filename": Path(path).name,
-                    }
-                    import json as _json
-                    self.backend.store_response_hrr(f"{doc_id}#manifest", _json.dumps(manifest))  # type: ignore[attr-defined]
-            except Exception:  # pylint: disable=broad-except
+                    b64_data = _b64.b64encode(data).decode("ascii")
+                    self.backend.store_response_hrr(f"{doc_id}#data", b64_data)  # type: ignore[attr-defined]
+                    self.backend.store_response_hrr(
+                        f"{doc_id}#manifest",
+                        _json.dumps({"doc_id": doc_id, "size": len(data), "filename": Path(path).name, "type": "base64_direct"}),
+                    )  # type: ignore[attr-defined]
+                resp_dir = self.state_dir / "responses" / doc_id
+                resp_dir.mkdir(parents=True, exist_ok=True)
+                (resp_dir / "data.bin").write_bytes(data)
+                (resp_dir / "meta.json").write_text(
+                    _json.dumps({"filename": Path(path).name, "size": len(data)}), encoding="utf-8"
+                )
+            except Exception:
                 pass
             return doc_id
         raise RuntimeError("C++ backend missing expected 'store' method")
@@ -109,6 +111,11 @@ class Memory:
         Requires chunks stored with keys:
           {doc_id}#manifest (JSON) and {doc_id}#chunk:{i}
         """
+        # Disk-backed persistent retrieval first
+        resp_dir = self.state_dir / "responses" / doc_id
+        data_path = resp_dir / "data.bin"
+        if data_path.exists():
+            return data_path.read_bytes()
         if not (_cpp_loaded and hasattr(self.backend, "retrieve_response_hrr")):
             raise RuntimeError("HM chunk retrieval not supported by backend")
         import json as _json
@@ -117,15 +124,25 @@ class Memory:
         if not isinstance(man_txt, str) or not man_txt:
             raise KeyError("Manifest not found for doc_id")
         man = _json.loads(man_txt)
-        chunks = int(man.get("chunks", 0))
-        buf = bytearray()
-        for i in range(chunks):
-            part_txt = self.backend.retrieve_response_hrr(f"{doc_id}#chunk:{i}")  # type: ignore[attr-defined]
-            if not isinstance(part_txt, str) or not part_txt:
-                raise KeyError(f"Missing chunk {i}")
-            buf.extend(_b64.b64decode(part_txt.encode("ascii"), validate=False))
-        size = int(man.get("size", len(buf)))
-        return bytes(buf[:size])
+        storage_type = man.get("type", "chunked")
+        
+        if storage_type == "base64_direct":
+            # Simple direct storage
+            data_txt = self.backend.retrieve_response_hrr(f"{doc_id}#data")  # type: ignore[attr-defined]
+            if not isinstance(data_txt, str):
+                raise KeyError("Data not found for doc_id")
+            return _b64.b64decode(data_txt.encode("ascii"))
+        else:
+            # Legacy chunked storage
+            chunks = int(man.get("chunks", 0))
+            buf = bytearray()
+            for i in range(chunks):
+                part_txt = self.backend.retrieve_response_hrr(f"{doc_id}#chunk:{i}")  # type: ignore[attr-defined]
+                if not isinstance(part_txt, str) or not part_txt:
+                    raise KeyError(f"Missing chunk {i}")
+                buf.extend(_b64.b64decode(part_txt.encode("ascii"), validate=False))
+            size = int(man.get("size", len(buf)))
+            return bytes(buf[:size])
 
 
 class HoloFS:
@@ -152,8 +169,9 @@ class HoloFS:
         digest = sha256_file(path)
         if ent and not force and ent.doc_id == digest and ent.size == path.stat().st_size:
             return ent.doc_id
-        doc_id = self.mem.store_file(path)
-        # Persist mapping of file path -> HM doc id
+        # Use stable content-hash for doc_id and chunk keys
+        doc_id = digest
+        self.mem.store_file(path, stable_id=doc_id)
         self.index.add_or_update(path, doc_id=doc_id, size=path.stat().st_size)
         return doc_id
 

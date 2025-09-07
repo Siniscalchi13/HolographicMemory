@@ -58,6 +58,14 @@ class Index:
             del self.entries[p]
             self._save()
 
+    def remove_by_doc_id(self, doc_id: str) -> int:
+        to_delete = [p for p, e in self.entries.items() if e.doc_id == doc_id]
+        for p in to_delete:
+            del self.entries[p]
+        if to_delete:
+            self._save()
+        return len(to_delete)
+
     def lookup_by_path(self, path: Path) -> Optional[IndexEntry]:
         return self.entries.get(str(path.resolve()))
 
@@ -75,4 +83,3 @@ class Index:
     def stats(self) -> Dict[str, int]:
         total = sum(e.size for e in self.entries.values())
         return {"files_indexed": len(self.entries), "original_total_bytes": total}
-

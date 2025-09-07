@@ -8,7 +8,7 @@ Components
 - Engine: `holographic-fs/native/holographic/` (C++17 via pybind11, FFTW/Accelerate)
 - API: `services/api/` (FastAPI microservice for store/search/stats)
 - Proofs: `documentation/proofs/` (Coq + markdown formal proof docs)
-- Desktop: `desktop/holo-desktop` (Electron app for drag-and-drop store/search/stats)
+- Web UI: `services/api/static/` (Web interface served by FastAPI)
 - Kubernetes: `k8s/` (Deployment, Service, PVC, Secret)
 
 Install & Build
@@ -33,15 +33,15 @@ API
 - Endpoints: `/healthz`, `/stats`, `/search`, `/list`, `/store`, `/metrics` (download is 501 until recall is implemented)
  - Auth: `X-API-Key` header (set `HOLO_API_KEY` on server and desktop)
 
-Desktop GUI
+Web UI
 
 - Prereq: API running locally (`make api` or `make dev`)
-- Start app: `cd desktop/holo-desktop && npm install && npm start`
-- Features: drag-and-drop store, search by filename, live stats
+- Open browser: http://localhost:8000
+- Features: drag-and-drop store, search by filename, live stats, file previews
 
 Enterprise Settings
 
-- API key: set `HOLO_API_KEY` on server; desktop reads `HOLO_API_KEY` env
+- API key: set `HOLO_API_KEY` on server; web UI has settings panel for API key
 - Allowed origins: `HOLO_ALLOWED_ORIGINS` (comma-separated)
 - Metrics: Prometheus at `/metrics`
 

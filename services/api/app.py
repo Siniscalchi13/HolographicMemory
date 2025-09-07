@@ -5,10 +5,12 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Query, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse, Response, FileResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List
+import zipfile
+import math
 from PIL import Image
 import io
 import base64
@@ -17,7 +19,7 @@ try:
 except Exception:
     fitz = None
 
-from holographicfs.memory import mount
+from holographicfs.memory import mount, HoloFS
 from holographicfs.index import sha256_file
 from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
 import threading
@@ -32,11 +34,20 @@ except Exception:
     FileSystemEventHandler = object  # type: ignore
 
 
-def get_fs():
+FS_SINGLETON: HoloFS | None = None
+
+
+def get_fs() -> HoloFS:
+    global FS_SINGLETON  # noqa: PLW0603
+    if FS_SINGLETON is not None:
+        return FS_SINGLETON
     root = Path(os.getenv("HOLO_ROOT", "./data")).expanduser()
     grid = int(os.getenv("GRID_SIZE", "64"))
     root.mkdir(parents=True, exist_ok=True)
-    return mount(root, grid_size=grid)
+    FS_SINGLETON = mount(root, grid_size=grid)
+    return FS_SINGLETON
+
+
 
 
 app = FastAPI(title="Holographic Memory API", version="0.1.0")
@@ -64,6 +75,15 @@ app.add_middleware(
     allow_headers=["*"],
     **cors_kwargs,
 )
+
+# Initialize singleton on startup
+@app.on_event("startup")
+async def _startup():
+    _ = get_fs()
+
+@app.on_event("shutdown")
+async def _shutdown():
+    pass
 
 # ----------------------- Static Web UI -----------------------
 _STATIC_DIR = Path(__file__).parent / "static"
@@ -134,7 +154,33 @@ def list_index(_: bool = Depends(require_api_key)):
     if not rows:
         entries = fs.index.all()  # type: ignore[attr-defined]
         rows = [(e.doc_id, e.path, e.size, getattr(e, 'mtime', 0.0)) for e in entries]
-    return {"results": [{"doc_id": d, "path": p, "size": s, "mtime": m} for d, p, s, m in rows]}
+    
+    # Get holographic memory stats for compression info
+    stats = fs.stats()
+    total_original = stats.get("original_total_bytes", 0)
+    total_holo = stats.get("holo_bytes", 0)
+    file_count = len(rows)
+    
+    # Estimate per-file holographic size (rough approximation)
+    avg_holo_per_file = total_holo / file_count if file_count > 0 else 0
+    
+    results = []
+    for d, p, s, m in rows:
+        # Rough estimate: proportional to original file size
+        if total_original > 0:
+            holo_size = int((s / total_original) * total_holo)
+        else:
+            holo_size = int(avg_holo_per_file)
+        
+        results.append({
+            "doc_id": d, 
+            "path": p, 
+            "size": s, 
+            "holo_size": holo_size,
+            "mtime": m
+        })
+    
+    return {"results": results}
 
 
 def _ensure_under_root(fs_root: Path, p: Path) -> Path:
@@ -151,6 +197,10 @@ class PathPayload(BaseModel):
 class RenamePayload(BaseModel):
     path: str
     new_path: str
+
+
+class ZipPayload(BaseModel):
+    doc_ids: List[str]
 
 
 # ----------------------- Watcher System -----------------------
@@ -335,11 +385,22 @@ def tree(_: bool = Depends(require_api_key)):
 
 
 @app.get("/thumb")
-def thumb(path: str, w: int = 256, _: bool = Depends(require_api_key)):
+def thumb(path: str | None = None, doc_id: str | None = None, w: int = 256, _: bool = Depends(require_api_key)):
     fs = get_fs()
+    # Resolve entry by path or doc_id
+    ent = None
+    if path:
+        ent = fs.index.lookup_by_path(Path(path))  # type: ignore[attr-defined]
+    elif doc_id:
+        try:
+            entries = fs.index.all()  # type: ignore[attr-defined]
+            ent = next((e for e in entries if e.doc_id == doc_id), None)
+        except Exception:
+            ent = None
+    if not ent and not path:
+        raise HTTPException(status_code=400, detail="Provide 'path' or 'doc_id'")
     # Prefer HM-stored preview (base64) keyed by doc_id
     try:
-        ent = fs.index.lookup_by_path(Path(path))  # type: ignore[attr-defined]
         if ent and hasattr(fs.mem.backend, "retrieve_response_hrr"):
             txt = fs.mem.backend.retrieve_response_hrr(ent.doc_id)  # type: ignore[attr-defined]
             if isinstance(txt, str) and txt:
@@ -347,19 +408,48 @@ def thumb(path: str, w: int = 256, _: bool = Depends(require_api_key)):
                 return Response(content=data, media_type="image/png")
     except Exception:
         pass
-    # Fallback to on-disk thumbnail (non-holographic)
-    p = _ensure_under_root(fs.root, Path(path))
-    if not p.exists():
-        raise HTTPException(status_code=404, detail="Not found")
+    # Try to retrieve file content from holographic memory
+    if ent:
+        try:
+            # Get file content from holographic memory
+            file_content = fs.mem.retrieve_bytes(ent.doc_id)
+            if file_content:
+                # Try to create thumbnail from the retrieved content
+                try:
+                    img = Image.open(io.BytesIO(file_content))
+                    img.thumbnail((w, w))
+                    buf = io.BytesIO()
+                    img.save(buf, format="PNG")
+                    return Response(content=buf.getvalue(), media_type="image/png")
+                except Exception:
+                    # Not an image, try PDF
+                    try:
+                        import fitz  # PyMuPDF
+                        doc = fitz.open(stream=file_content, filetype="pdf")
+                        page = doc[0]
+                        pix = page.get_pixmap(matrix=fitz.Matrix(w/page.rect.width, w/page.rect.height))
+                        png_data = pix.tobytes("png")
+                        doc.close()
+                        return Response(content=png_data, media_type="image/png")
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+    
+    # Fallback to on-disk thumbnail (non-holographic) - only if file exists on disk
     try:
-        img = Image.open(p)
-        img.thumbnail((w, w))
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        return Response(content=buf.getvalue(), media_type="image/png")
+        p = _ensure_under_root(fs.root, Path(ent.path if ent else path))
+        if p.exists():
+            img = Image.open(p)
+            img.thumbnail((w, w))
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            return Response(content=buf.getvalue(), media_type="image/png")
     except Exception:
-        # Not an image; return 1x1 transparent
-        return Response(content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\x0cIDATx\x9cc````\x00\x00\x00\x04\x00\x01\x0b\xe7\x83\xbc\x00\x00\x00\x00IEND\xaeB`\x82", media_type="image/png")
+        pass
+        
+    # Not an image and no holographic content; return 1x1 transparent
+    return Response(content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\x0cIDATx\x9cc````\x00\x00\x00\x04\x00\x01\x0b\xe7\x83\xbc\x00\x00\x00\x00IEND\xaeB`\x82", media_type="image/png")
 
 
 @app.get("/fileinfo")
@@ -441,8 +531,14 @@ async def store(file: UploadFile = File(...), _: bool = Depends(require_api_key)
 @app.get("/download/{doc_id}")
 def download(doc_id: str, _: bool = Depends(require_api_key)):
     fs = get_fs()
-    # Attempt pure HM chunk reconstruction via library
     try:
+        entries = fs.index.all()  # type: ignore[attr-defined]
+        ent = next((e for e in entries if e.doc_id == doc_id), None)
+        if ent:
+            p = _ensure_under_root(fs.root, Path(ent.path))
+            if p.exists():
+                return FileResponse(str(p), media_type="application/octet-stream", filename=p.name)
+        # fallback to HM bytes
         data = fs.mem.retrieve_bytes(doc_id)
         return Response(content=data, media_type="application/octet-stream")
     except Exception as e:
@@ -450,6 +546,135 @@ def download(doc_id: str, _: bool = Depends(require_api_key)):
         raise HTTPException(status_code=404, detail=f"Not retrievable: {e}")
 
 
+@app.get("/content")
+def content(path: str | None = None, doc_id: str | None = None, _: bool = Depends(require_api_key)):
+    fs = get_fs()
+    if path:
+        p = _ensure_under_root(fs.root, Path(path))
+    elif doc_id:
+        entries = fs.index.all()  # type: ignore[attr-defined]
+        ent = next((e for e in entries if e.doc_id == doc_id), None)
+        if not ent:
+            raise HTTPException(status_code=404, detail="Unknown doc_id")
+        p = _ensure_under_root(fs.root, Path(ent.path))
+    else:
+        raise HTTPException(status_code=400, detail="Provide 'path' or 'doc_id'")
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="Not found")
+    return FileResponse(str(p), filename=p.name)
+
+
 @app.get("/metrics")
 def metrics():
     return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+# Administrative shutdown (dev only; guarded by env flag and API key if set)
+@app.post("/shutdown")
+def shutdown(_: bool = Depends(require_api_key)):
+    if os.getenv("HOLO_ALLOW_SHUTDOWN", "0") != "1":
+        raise HTTPException(status_code=403, detail="Shutdown disabled")
+    # Give response then exit
+    def _stop():
+        import os as _os, time as _t
+        _t.sleep(0.5)
+        _os._exit(0)  # noqa: SLF001
+    import threading as _th
+    _th.Thread(target=_stop, daemon=True).start()
+    return {"status": "shutting_down"}
+
+
+# ----------------------- Management Operations -----------------------
+
+@app.delete("/files/{doc_id}")
+def delete_file(doc_id: str, _: bool = Depends(require_api_key)):
+    fs = get_fs()
+    # Remove from index
+    removed = 0
+    try:
+        # try typed method
+        removed = fs.index.remove_by_doc_id(doc_id)  # type: ignore[attr-defined]
+    except Exception:
+        # fallback: manual sweep
+        try:
+            entries = fs.index.all()  # type: ignore[attr-defined]
+            for e in entries:
+                if e.doc_id == doc_id:
+                    fs.index.remove(Path(e.path))  # type: ignore[attr-defined]
+                    removed += 1
+        except Exception:
+            pass
+    # Remove persistent holographic responses on disk
+    try:
+        resp_dir = Path(fs.state_dir) / "responses" / doc_id  # type: ignore[attr-defined]
+        if resp_dir.exists():
+            for p in sorted(resp_dir.glob("**/*"), reverse=True):
+                try:
+                    if p.is_file():
+                        p.unlink()
+                except Exception:
+                    pass
+            try:
+                resp_dir.rmdir()
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return {"status": "deleted", "doc_id": doc_id, "removed": removed}
+
+
+@app.post("/zip")
+def zip_selected(payload: ZipPayload, _: bool = Depends(require_api_key)):
+    fs = get_fs()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for did in payload.doc_ids:
+            try:
+                entries = fs.index.all()  # type: ignore[attr-defined]
+                ent = next((e for e in entries if e.doc_id == did), None)
+                name = Path(ent.path).name if ent else f"{did}.bin"
+                data: bytes
+                if ent and Path(ent.path).exists():
+                    data = Path(ent.path).read_bytes()
+                else:
+                    data = fs.mem.retrieve_bytes(did)
+                zf.writestr(name, data)
+            except Exception as e:
+                # include an error note in the zip for visibility
+                zf.writestr(f"{did}.error.txt", str(e))
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="application/zip", headers={"Content-Disposition": "attachment; filename=selected.zip"})
+
+
+@app.get("/wave/{doc_id}")
+def wave_pattern(doc_id: str, n: int = 256, _: bool = Depends(require_api_key)):
+    """Return a simple frequency magnitude spectrum for the document bytes (naive DFT).
+
+    This is a lightweight stand-in visualization until direct engine coefficients are exposed.
+    """
+    fs = get_fs()
+    try:
+        data = fs.mem.retrieve_bytes(doc_id)
+    except Exception:
+        # Fallback to on-disk
+        entries = fs.index.all()  # type: ignore[attr-defined]
+        ent = next((e for e in entries if e.doc_id == doc_id), None)
+        if not ent:
+            raise HTTPException(status_code=404, detail="Unknown doc_id")
+        p = _ensure_under_root(fs.root, Path(ent.path))
+        data = p.read_bytes()
+    # Build real-valued signal from first N bytes
+    N = max(32, min(int(n or 256), 1024))
+    xs = [float(b) / 255.0 for b in data[:N]]
+    mags: List[float] = []
+    for k in range(N):
+        re = 0.0; im = 0.0
+        for t, x in enumerate(xs):
+            ang = -2.0 * math.pi * k * t / N
+            re += x * math.cos(ang)
+            im += x * math.sin(ang)
+        mags.append((re * re + im * im) ** 0.5)
+    # Normalize to [0,1]
+    mmax = max(mags) if mags else 1.0
+    mags = [m / mmax for m in mags]
+    return {"doc_id": doc_id, "n": N, "magnitudes": mags}

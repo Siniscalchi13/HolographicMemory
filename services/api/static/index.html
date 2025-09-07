@@ -28,15 +28,24 @@
             <div class="pill" id="viewMode" title="Toggle view">list</div>
           </div>
         </div>
+        <div id="toolbar" class="row" style="display:none; margin:8px 0;">
+          <button id="btnDeleteSel" class="btn btn-danger">🗑️ Delete Selected</button>
+          <button id="btnZipSel" class="btn btn-primary">📦 Download Selected</button>
+          <span id="selection-count" class="muted small">0 files selected</span>
+        </div>
         <div id="drop">Drag & drop files here, or <input type="file" id="file" multiple></div>
         <div id="gridview"></div>
         <table id="listview">
           <thead><tr>
+            <th style="width:28px"><input type="checkbox" id="select-all"></th>
             <th style="width:40px"></th>
             <th>Name</th>
             <th>Type</th>
-            <th>Size</th>
+            <th>Original Size</th>
+            <th>Holo Size</th>
+            <th>Compression</th>
             <th>Modified</th>
+            <th style="width:100px">Actions</th>
           </tr></thead>
           <tbody id="rows"></tbody>
         </table>
@@ -57,4 +66,3 @@
     <script src="/static/app.js" type="module"></script>
   </body>
   </html>
-

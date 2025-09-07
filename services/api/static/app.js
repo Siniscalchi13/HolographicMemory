@@ -35,34 +35,93 @@ function renderRows(rows){
   grid.style.display='none'
   $('#rows').innerHTML = sorted.map(r=>{
     const name = r.path.split('/').pop()
-    return `<tr data-path="${r.path}">
+    const originalSize = r.size || 0
+    const holoSize = r.holo_size || 0
+    const ratio = holoSize > 0 ? (originalSize / holoSize).toFixed(1) : '—'
+    return `<tr data-path="${r.path}" data-doc-id="${r.doc_id}">
+      <td><input type="checkbox" class="file-checkbox" data-doc-id="${r.doc_id}" data-filename="${name}"></td>
       <td>📄</td>
       <td>${name}</td>
       <td>${ext(name) || '—'}</td>
-      <td>${fmt(r.size||0)}</td>
+      <td>${fmt(originalSize)} bytes</td>
+      <td>${fmt(holoSize)} bytes</td>
+      <td>${ratio}x</td>
       <td>${r.mtime? new Date(r.mtime*1000).toLocaleString(): '—'}</td>
+      <td>
+        <button onclick="downloadFile('${r.doc_id}', '${name}')" class="btn small">⬇️</button>
+        <button onclick="deleteOne('${r.doc_id}'); return false;" class="btn small btn-danger">🗑️</button>
+      </td>
     </tr>`
   }).join('')
   bindRowEvents()
   $('#statusBar').textContent = `${sorted.length} items`
+  bindSelection()
 }
 
 function bindRowEvents(){
   document.querySelectorAll('#rows tr').forEach(tr=>{
     tr.addEventListener('click', async ()=>{
       const path = tr.getAttribute('data-path')
+      const docId = tr.getAttribute('data-doc-id')
       document.querySelectorAll('#rows tr').forEach(x=>x.classList.remove('sel'))
       tr.classList.add('sel')
-      const res = await fetch(`/thumb?path=${encodeURIComponent(path)}&w=320`, { headers: apiHeaders() })
-      if (res.ok){
-        const blob = await res.blob()
-        const url = URL.createObjectURL(blob)
-        $('#preview').innerHTML = `<img src="${url}" style="max-width:100%"/>`
-      } else {
-        $('#preview').innerHTML = `<div class="muted">No preview available</div>`
-      }
+      
+      console.log('[web] previewing', { path, docId })
+      await showPreview(path, docId)
     })
   })
+}
+
+async function showPreview(path, docId) {
+  const filename = path.split('/').pop()
+  const fileExt = ext(filename).toLowerCase()
+  
+  try {
+    // Try to download the actual file content for preview
+    const res = await fetch(`/download/${docId}`, { headers: apiHeaders() })
+    if (!res.ok) {
+      $('#preview').innerHTML = `<div class="muted">Cannot preview: ${res.statusText}</div>`
+      return
+    }
+    
+    if (fileExt === 'txt' || fileExt === 'md' || fileExt === 'py' || fileExt === 'js' || fileExt === 'json' || fileExt === 'html' || fileExt === 'css') {
+      // Text files - show content
+      const text = await res.text()
+      $('#preview').innerHTML = `<pre style="white-space: pre-wrap; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto;">${text.slice(0, 5000)}</pre>`
+    } else if (fileExt === 'png' || fileExt === 'jpg' || fileExt === 'jpeg' || fileExt === 'gif' || fileExt === 'webp') {
+      // Images - show full size
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      $('#preview').innerHTML = `<img src="${url}" style="max-width: 100%; max-height: 400px; object-fit: contain;"/>`
+    } else if (fileExt === 'pdf') {
+      // PDFs - show download link and try thumbnail
+      const thumbRes = await fetch(`/thumb?path=${encodeURIComponent(path)}&w=400`, { headers: apiHeaders() })
+      if (thumbRes.ok) {
+        const thumbBlob = await thumbRes.blob()
+        const thumbUrl = URL.createObjectURL(thumbBlob)
+        $('#preview').innerHTML = `
+          <div>
+            <img src="${thumbUrl}" style="max-width: 100%; max-height: 300px; object-fit: contain; border: 1px solid #ddd;"/>
+            <p class="muted">PDF preview (first page)</p>
+          </div>`
+      } else {
+        $('#preview').innerHTML = `<div class="muted">PDF file - click download to view</div>`
+      }
+    } else {
+      // Other files - show file info
+      const blob = await res.blob()
+      $('#preview').innerHTML = `
+        <div class="muted">
+          <p><strong>${filename}</strong></p>
+          <p>Size: ${fmt(blob.size)} bytes</p>
+          <p>Type: ${fileExt || 'unknown'}</p>
+          <p>Click download button to save file</p>
+        </div>`
+    }
+  } catch (error) {
+    console.error('[web] preview error', error)
+    $('#preview').innerHTML = `<div class="muted">Preview error: ${error.message}</div>`
+  }
 }
 
 function showError(msg){
@@ -71,6 +130,79 @@ function showError(msg){
   b.style.display = 'block'
   setTimeout(()=>{ b.style.display='none' }, 6000)
 }
+
+function downloadFile(docId, filename){
+  console.log('[web] downloading', { docId, filename })
+  const url = `/download/${docId}`
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
+function bindSelection(){
+  const toolbar = $('#toolbar')
+  const cbAll = $('#select-all')
+  if (cbAll) cbAll.onchange = toggleSelectAll
+  document.querySelectorAll('.file-checkbox').forEach(cb=>{
+    cb.addEventListener('change', updateSelectionCount)
+  })
+  updateSelectionCount()
+}
+
+function toggleSelectAll(){
+  const all = $('#select-all').checked
+  document.querySelectorAll('.file-checkbox').forEach(cb=>{ cb.checked = all })
+  updateSelectionCount()
+}
+
+function getSelected(){
+  return Array.from(document.querySelectorAll('.file-checkbox:checked')).map(cb=>({ doc_id: cb.dataset.docId, filename: cb.dataset.filename }))
+}
+
+async function deleteOne(docId){
+  if (!confirm('Delete this file?')) return
+  const r = await fetch(`/files/${docId}`, { method: 'DELETE', headers: apiHeaders() })
+  if (!r.ok){ showError('Delete failed'); return }
+  // remove from current rows and re-render
+  window.CURRENT_ROWS = window.CURRENT_ROWS.filter(r=> r.doc_id !== docId)
+  renderRows(window.CURRENT_ROWS)
+}
+
+async function deleteSelected(){
+  const sel = getSelected()
+  if (sel.length === 0) return
+  if (!confirm(`Delete ${sel.length} files?`)) return
+  for (const s of sel){
+    try { await fetch(`/files/${s.doc_id}`, { method: 'DELETE', headers: apiHeaders() }) } catch {}
+  }
+  // refresh list
+  await refresh()
+}
+
+async function downloadSelected(){
+  const sel = getSelected()
+  if (sel.length === 0) return
+  const body = JSON.stringify({ doc_ids: sel.map(s=>s.doc_id) })
+  const r = await fetch('/zip', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, apiHeaders()), body })
+  if (!r.ok){ showError('Zip download failed'); return }
+  const blob = await r.blob(); const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url; a.download = 'selected.zip'; document.body.appendChild(a); a.click(); document.body.removeChild(a)
+}
+
+function updateSelectionCount(){
+  const sel = getSelected(); const cnt = $('#selection-count'); const bar = $('#toolbar')
+  if (cnt) cnt.textContent = `${sel.length} files selected`
+  if (bar) bar.style.display = sel.length > 0 ? 'flex' : 'none'
+}
+
+// wire toolbar buttons
+document.addEventListener('DOMContentLoaded', ()=>{
+  const bDel = document.getElementById('btnDeleteSel'); if (bDel) bDel.onclick = deleteSelected
+  const bZip = document.getElementById('btnZipSel'); if (bZip) bZip.onclick = downloadSelected
+})
 
 async function refresh(){
   try {
@@ -174,4 +306,3 @@ window.addEventListener('DOMContentLoaded', async () => {
   st.textContent = ok? 'Connected' : 'Waiting for API…'
   await refresh()
 })
-
