@@ -24,8 +24,7 @@ except ImportError:
         _cpp_loaded = False
 
 
-from .index import sha256_file
-from .index_hm import HolographicIndex
+from .index import sha256_file, Index
 
 
 class Memory:
@@ -141,8 +140,8 @@ class HoloFS:
         self.state_dir = Path(state_dir or (self.root / ".holofs")).resolve()
         self.grid_size = int(grid_size)
         self.mem = Memory(self.state_dir, grid_size=self.grid_size)
-        # Index backed by holographic memory itself
-        self.index = HolographicIndex(self.mem.backend)
+        # Persistent on-disk index for durability across processes
+        self.index = Index(self.state_dir)
 
     def store(self, path: Path, force: bool = False) -> str:
         path = Path(path)
@@ -154,7 +153,8 @@ class HoloFS:
         if ent and not force and ent.doc_id == digest and ent.size == path.stat().st_size:
             return ent.doc_id
         doc_id = self.mem.store_file(path)
-        self.index.add_or_update(path, doc_id, size=path.stat().st_size, sha256=digest)
+        # Persist mapping of file path -> HM doc id
+        self.index.add_or_update(path, doc_id=doc_id, size=path.stat().st_size)
         return doc_id
 
     def recall(self, query_or_doc: str, out: Optional[Path] = None, original: bool = False) -> Path:

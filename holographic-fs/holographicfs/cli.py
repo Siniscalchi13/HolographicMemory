@@ -50,11 +50,22 @@ def cmd_recall(args: argparse.Namespace) -> int:
 def cmd_search(args: argparse.Namespace) -> int:
     root = Path(args.root or Path.cwd())
     fs = mount(root, grid_size=args.grid_size, state_dir=args.state_dir)
-    # Prefer index-based search by filename/path
+    # Prefer index-based search by filename/path; fallback to content search
     results = fs.search_index(args.query)
-    for doc_id, path, size in results[: args.k]:
-        print(f"{doc_id}\t{size}\t{path}")
-    return 0
+    if results:
+        for row in results[: args.k]:
+            # Support tuples with or without mtime
+            doc_id, path, size = row[0], row[1], row[2]
+            print(f"{doc_id}\t{size}\t{path}")
+        return 0
+    # Fallback to holographic content search (if available)
+    try:
+        hits = fs.search(args.query, k=args.k)
+        for doc_id, score, text in hits:
+            print(f"{doc_id}\t{score:.3f}\t{text}")
+        return 0
+    except Exception:
+        return 0
 
 
 def cmd_stats(args: argparse.Namespace) -> int:

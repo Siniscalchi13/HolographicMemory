@@ -1,0 +1,6 @@
+This is a test document for holographic storage!
+
+HolographicMemory can store this text using wave-based encoding,
+compress it efficiently, and retrieve it with perfect accuracy.
+
+This demonstrates the revolutionary storage technology in action.
