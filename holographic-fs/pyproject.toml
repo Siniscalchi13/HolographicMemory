@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "holographicfs"
+version = "0.1.0"
+description = "HolographicFS: local holographic memory store with instant search"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "HolographicMemory Authors", email = "team@holographicmemory.org" }]
+license = "MIT"
+keywords = ["holographic", "memory", "storage", "compression", "search"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: OS Independent",
+  "Topic :: System :: Filesystems",
+]
+dependencies = [
+  "numpy>=1.24",
+]
+
+[project.scripts]
+holo = "holographicfs.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/SmartHausAI/HolographicMemory"
+Repository = "https://github.com/SmartHausAI/HolographicMemory"
+Issues = "https://github.com/SmartHausAI/HolographicMemory/issues"
+
+[tool.setuptools.packages.find]
+include = ["holographicfs*"]

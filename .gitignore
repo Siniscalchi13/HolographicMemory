@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# OS
+.DS_Store
+
+# HoloFS state
+**/.holofs/
+**/.python_holographic_state/
+
+# Coverage / Test
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
