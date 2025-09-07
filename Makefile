@@ -30,7 +30,6 @@ launch:
 stop:
 	@echo "🛑 Stopping HolographicMemory processes..."
 	@pkill -f "uvicorn.*app:app" 2>/dev/null || echo "No API processes running"
-	@pkill -f "electron.*holo-desktop" 2>/dev/null || echo "No desktop processes running"
 	@echo "✅ All processes stopped"
 
 clean:

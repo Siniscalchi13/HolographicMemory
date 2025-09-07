@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Holographic Memory</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header>
+      <div>Holographic Memory</div>
+      <div class="muted" id="status">Connecting…</div>
+    </header>
+    <div id="banner" class="banner"></div>
+    <main class="grid">
+      <section class="card">
+        <h3>Folders</h3>
+        <div id="tree"></div>
+      </section>
+      <section class="card">
+        <div class="row space">
+          <div>
+            <h3 style="display:inline">Files</h3>
+            <span id="cwd" class="muted"></span>
+          </div>
+          <div class="row">
+            <input type="text" id="q" placeholder="Search by filename" />
+            <div class="pill" id="viewMode" title="Toggle view">list</div>
+          </div>
+        </div>
+        <div id="drop">Drag & drop files here, or <input type="file" id="file" multiple></div>
+        <div id="gridview"></div>
+        <table id="listview">
+          <thead><tr>
+            <th style="width:40px"></th>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Size</th>
+            <th>Modified</th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </section>
+      <section class="card">
+        <h3>Preview</h3>
+        <div id="preview"></div>
+        <h3>Stats</h3>
+        <div id="stats"></div>
+        <div class="muted" id="statusBar">0 items</div>
+        <h3>Settings</h3>
+        <div class="row">
+          <input id="apiKey" type="password" placeholder="API key (optional)" />
+          <button id="saveKey">Save</button>
+        </div>
+      </section>
+    </main>
+    <script src="/static/app.js" type="module"></script>
+  </body>
+  </html>
+

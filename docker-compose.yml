@@ -8,11 +8,13 @@ services:
       target: api-dev
     container_name: holo_api
     environment:
-      - HOLO_ROOT=/data
-      - GRID_SIZE=64
-      - HOLO_API_KEY=${HOLO_API_KEY:-}
-      - HOLO_ALLOWED_ORIGINS=${HOLO_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
-      - PORT=8000
+      HOLO_ROOT: /data
+      GRID_SIZE: 64
+      # Force no auth in dev for seamless desktop connection
+      HOLO_API_KEY: ""
+      # Allow all origins in dev (includes Electron file:// as null)
+      HOLO_ALLOWED_ORIGINS: "*"
+      PORT: 8000
     ports:
       - "8000:8000"
     volumes:
@@ -34,4 +36,3 @@ networks:
 volumes:
   data:
     name: holo_data
-

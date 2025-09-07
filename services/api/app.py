@@ -3,9 +3,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Query, Header, Depends
+from fastapi import FastAPI, File, UploadFile, HTTPException, Query, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from fastapi.responses import JSONResponse, PlainTextResponse, Response, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List
 from PIL import Image
@@ -20,6 +21,7 @@ from holographicfs.memory import mount
 from holographicfs.index import sha256_file
 from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
 import threading
+import logging
 import time as _time
 from typing import Optional
 try:
@@ -38,6 +40,9 @@ def get_fs():
 
 
 app = FastAPI(title="Holographic Memory API", version="0.1.0")
+logger = logging.getLogger("holo.api")
+if not logger.handlers:
+    logging.basicConfig(level=logging.INFO)
 
 # Allow desktop app (Electron) to call the API locally
 allowed_env = os.getenv(
@@ -45,7 +50,8 @@ allowed_env = os.getenv(
     "http://localhost:3000,http://localhost:5173,capacitor://localhost, null",
 )
 if allowed_env.strip() == "*":
-    cors_kwargs = dict(allow_origins=["*"], allow_credentials=True)
+    # With wildcard origins, credentials must be disabled per CORS spec
+    cors_kwargs = dict(allow_origins=["*"], allow_credentials=False)
 else:
     allow_list = [o.strip() for o in allowed_env.split(",") if o.strip()]
     # Include 'null' to permit file:// origins from Electron
@@ -58,6 +64,33 @@ app.add_middleware(
     allow_headers=["*"],
     **cors_kwargs,
 )
+
+# ----------------------- Static Web UI -----------------------
+_STATIC_DIR = Path(__file__).parent / "static"
+if _STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
+@app.get("/")
+def web_index():
+    idx = _STATIC_DIR / "index.html"
+    if idx.exists():
+        return FileResponse(str(idx))
+    return JSONResponse({"message": "Holographic Memory API", "docs": "/docs"})
+
+# Request logging middleware (method, path, origin, CORS preflight)
+@app.middleware("http")
+async def log_requests(request: Request, call_next):  # type: ignore[override]
+    try:
+        origin = request.headers.get('origin')
+        logger.info("%s %s origin=%s ua=%s", request.method, request.url.path, origin, request.headers.get('user-agent'))
+        if request.method == 'OPTIONS':
+            logger.info("CORS preflight for %s", request.headers.get('access-control-request-method'))
+        response = await call_next(request)
+        logger.info("%s %s -> %s", request.method, request.url.path, response.status_code)
+        return response
+    except Exception:
+        logger.exception("request handling error: %s %s", request.method, request.url.path)
+        raise
 
 # Simple API key guard
 def require_api_key(x_api_key: str | None = Header(default=None)):
@@ -363,13 +396,20 @@ def fileinfo(path: str, _: bool = Depends(require_api_key)):
 async def store(file: UploadFile = File(...), _: bool = Depends(require_api_key)):
     counter_store.inc()
     fs = get_fs()
+    logger.info("/store upload filename=%s content_type=%s", getattr(file, 'filename', ''), getattr(file, 'content_type', ''))
     if not file.filename:
+        logger.warning("/store missing filename")
         raise HTTPException(status_code=400, detail="Missing filename")
     dst = Path(fs.root) / file.filename
     dst.parent.mkdir(parents=True, exist_ok=True)
-    data = await file.read()
-    dst.write_bytes(data)
-    doc_id = fs.store(dst)
+    try:
+        data = await file.read()
+        logger.info("/store received bytes=%s", len(data) if data is not None else 0)
+        dst.write_bytes(data)
+        doc_id = fs.store(dst)
+    except Exception as e:
+        logger.exception("/store failed")
+        raise HTTPException(status_code=500, detail=str(e))
     # Store HM-based thumbnail (base64) for images and PDFs
     thumb_png: bytes | None = None
     # Try raster image
@@ -406,6 +446,7 @@ def download(doc_id: str, _: bool = Depends(require_api_key)):
         data = fs.mem.retrieve_bytes(doc_id)
         return Response(content=data, media_type="application/octet-stream")
     except Exception as e:
+        logger.warning("/download failed for %s: %s", doc_id, e)
         raise HTTPException(status_code=404, detail=f"Not retrievable: {e}")
 
 
