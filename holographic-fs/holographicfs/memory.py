@@ -1,21 +1,18 @@
 from __future__ import annotations
 
-import os
+import sys
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple
-
-import sys
-from pathlib import Path as _Path
 
 # Prefer C++ backend
 _cpp_loaded = False
 try:  # Try import directly if installed in site-packages
     import holographic_cpp as _hn  # type: ignore
     _cpp_loaded = True
-except Exception:
+except ImportError:
     # Try to add local build dir to sys.path: <repo>/holographic-fs/native/holographic
     try:
-        _pkg_root = _Path(__file__).resolve().parents[1]  # holographic-fs/
+        _pkg_root = Path(__file__).resolve().parents[1]  # holographic-fs/
         _cpp_dir = _pkg_root / "native" / "holographic"
         if _cpp_dir.exists():
             p = str(_cpp_dir)
@@ -23,7 +20,7 @@ except Exception:
                 sys.path.insert(0, p)
             import holographic_cpp as _hn  # type: ignore
             _cpp_loaded = True
-    except Exception:
+    except ImportError:
         _cpp_loaded = False
 
 
@@ -40,8 +37,8 @@ class Memory:
         if _cpp_loaded:
             try:
                 self.backend = _hn.HolographicMemory(int(grid_size))  # type: ignore[name-defined, attr-defined]
-            except Exception:
-                raise RuntimeError("C++ backend not available or failed to initialize")
+            except Exception as exc:
+                raise RuntimeError("C++ backend not available or failed to initialize") from exc
         else:
             raise RuntimeError("C++ backend not available. Build the extensions (make cpp)")
 
@@ -72,7 +69,7 @@ class Memory:
                     }
                     import json as _json
                     self.backend.store_response_hrr(f"{doc_id}#manifest", _json.dumps(manifest))  # type: ignore[attr-defined]
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 pass
             return doc_id
         raise RuntimeError("C++ backend missing expected 'store' method")
@@ -81,12 +78,12 @@ class Memory:
         # Try holographic-only bytes reconstruction from stored chunks
         try:
             data = self.retrieve_bytes(doc_id)
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             # Fallback: if engine exposes direct retrieve (future), try it
             if _cpp_loaded and hasattr(self.backend, "retrieve"):
                 data = self.backend.retrieve(doc_id)  # type: ignore[attr-defined]
             else:
-                raise RuntimeError("Holographic retrieve not available for this document")
+                raise RuntimeError("Holographic retrieve not available for this document") from None
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_bytes(data)
         return out_path
@@ -95,7 +92,7 @@ class Memory:
         if _cpp_loaded and hasattr(self.backend, "query"):
             try:
                 return [(r[0], float(r[1]), r[2]) for r in self.backend.query(query, int(k))]  # type: ignore[attr-defined]
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 pass
         return []
 
@@ -103,7 +100,7 @@ class Memory:
         if _cpp_loaded and hasattr(self.backend, "get_stats"):
             try:
                 return dict(self.backend.get_stats())  # type: ignore[attr-defined]
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 pass
         return {}
 
@@ -182,7 +179,7 @@ class HoloFS:
         # Prefer engine retrieval, else fallback to original file copy
         try:
             return self.mem.retrieve_to(doc_id, out)
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             # Fallback: copy original file if available
             ent = next((e for e in self.index.all() if e.doc_id == doc_id), None)
             if not ent:
