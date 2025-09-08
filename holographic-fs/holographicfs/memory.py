@@ -65,7 +65,7 @@ def calculate_optimal_dimension(file_size: int) -> int:
 class Memory:
     """Thin wrapper around Python holographic memory for HoloFS."""
 
-    def __init__(self, state_dir: Path, grid_size: int = 32) -> None:
+    def __init__(self, state_dir: Path, grid_size: int = 32, use_gpu: bool = True) -> None:
         self.state_dir = Path(state_dir)
         self.state_dir.mkdir(parents=True, exist_ok=True)
         if _cpp_loaded:
@@ -82,6 +82,26 @@ class Memory:
                 self.backend3d = _hn3d.HolographicMemory3D(int(grid_size))  # type: ignore[name-defined, attr-defined]
             except Exception:
                 self.backend3d = None
+
+        # Optional Metal GPU backend
+        self.gpu_backend = None
+        self.use_gpu = False
+        if use_gpu:
+            try:
+                import holographic_metal as _hm  # type: ignore
+                if hasattr(_hm, "MetalHolographicBackend"):
+                    be = _hm.MetalHolographicBackend()  # type: ignore[attr-defined]
+                    ok = True
+                    if hasattr(be, "initialize"):
+                        try:
+                            ok = bool(be.initialize())  # type: ignore[attr-defined]
+                        except Exception:
+                            ok = False
+                    if ok:
+                        self.gpu_backend = be
+                        self.use_gpu = True
+            except Exception:
+                self.gpu_backend = None
 
     def store_file(self, path: Path, stable_id: Optional[str] = None) -> str:
         """Store file bytes using exact-recall 3D backend and record wave meta.
@@ -182,6 +202,42 @@ class Memory:
             except Exception:  # pylint: disable=broad-except
                 pass
         return {}
+
+    # ----------------- GPU helpers (optional) -----------------
+    def store_batch_gpu(self, batch_data: List[List[float]]) -> List[List[float]]:
+        """Store/encode a batch using GPU acceleration if available.
+
+        Returns encoded holographic patterns (list of vectors). If GPU is
+        unavailable, returns an empty list.
+        """
+        if not self.use_gpu or self.gpu_backend is None:
+            return []
+        try:
+            # Prefer new API: batch_encode(batch, pattern_dim)
+            if hasattr(self.gpu_backend, "batch_encode"):
+                return self.gpu_backend.batch_encode(batch_data, int(self.grid_size))  # type: ignore[attr-defined]
+            # Legacy module-level function via wrapper
+            if hasattr(self.gpu_backend, "gpu_batch_store"):
+                return self.gpu_backend.gpu_batch_store(batch_data, int(self.grid_size))  # type: ignore[attr-defined]
+        except Exception:
+            return []
+        return []
+
+    def get_performance_metrics(self) -> dict:
+        """Return last known GPU/CPU performance metrics (if available)."""
+        metrics: dict = {"cpu": {}}
+        if self.use_gpu and self.gpu_backend is not None:
+            try:
+                if hasattr(self.gpu_backend, "get_last_metrics"):
+                    m = self.gpu_backend.get_last_metrics()  # type: ignore[attr-defined]
+                    metrics["gpu"] = {
+                        "operations_per_second": float(getattr(m, "operations_per_second", 0.0)),
+                        "memory_bandwidth_gb_s": float(getattr(m, "memory_bandwidth_gb_s", 0.0)),
+                        "batch_encode_time_ms": float(getattr(m, "batch_encode_time_ms", 0.0)),
+                    }
+            except Exception:
+                pass
+        return metrics
 
     def retrieve_bytes(self, doc_id: str) -> bytes:
         """Reconstruct file bytes using available mechanisms.

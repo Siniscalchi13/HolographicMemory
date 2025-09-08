@@ -24,3 +24,9 @@ build/
 coverage.xml
 htmlcov/
 
+# Metal GPU build artifacts
+holographic-fs/native/holographic/lib.macosx-metal/
+
+# Large generated holographic patterns/snapshots
+data/holographic_memory/
+*/data/holographic_memory/
