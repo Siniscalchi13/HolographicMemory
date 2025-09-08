@@ -26,6 +26,15 @@ public:
     std::vector<std::vector<float>> batch_holographic_store(
         const std::vector<std::vector<float>>& batch_data, 
         uint32_t pattern_dimension);
+
+    // FFT-like transform (naive kernel). Outputs real/imag as separate arrays.
+    void fft_transform(const std::vector<float>& input,
+                       std::vector<float>& real_out,
+                       std::vector<float>& imag_out);
+
+    // Similarity search: query (dim) vs stored (pattern_count x dim). Returns similarities per pattern.
+    std::vector<float> similarity_search(const std::vector<float>& query,
+                                         const std::vector<std::vector<float>>& stored);
     
     // Performance metrics
     struct PerformanceMetrics {

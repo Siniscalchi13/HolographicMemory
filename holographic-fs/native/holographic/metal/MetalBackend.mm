@@ -39,6 +39,8 @@ void MetalBackend::load_shaders() {
     // Create pipeline states
     pso_vector_add_ = create_pipeline("enhanced_vector_add");
     pso_batch_store_ = create_pipeline("batch_holographic_store");
+    pso_similarity_ = create_pipeline("holographic_similarity_search");
+    pso_fft_ = create_pipeline("holographic_fft_transform");
 }
 
 id<MTLComputePipelineState> MetalBackend::create_pipeline(const std::string& function_name) {
@@ -171,6 +173,70 @@ std::vector<std::vector<float>> MetalBackend::batch_holographic_store(
     return result;
 }
 
+std::vector<float> MetalBackend::similarity_search(const std::vector<float>& query,
+                                         const std::vector<std::vector<float>>& stored) {
+    if (!available() || stored.empty()) return {};
+    uint32_t pattern_count = (uint32_t)stored.size();
+    uint32_t dim = (uint32_t)stored[0].size();
+    // Flatten stored
+    std::vector<float> flat;
+    flat.reserve((size_t)pattern_count * dim);
+    for (auto &v : stored) flat.insert(flat.end(), v.begin(), v.end());
+
+    std::vector<float> sims(pattern_count, 0.0f);
+    id<MTLBuffer> bq = [device_ newBufferWithBytes:query.data() length:dim * sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bs = [device_ newBufferWithBytes:flat.data() length:flat.size() * sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bo = [device_ newBufferWithBytes:sims.data() length:sims.size() * sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bpc = [device_ newBufferWithBytes:&pattern_count length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bd = [device_ newBufferWithBytes:&dim length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+
+    id<MTLCommandBuffer> cmd = [queue_ commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
+    [enc setComputePipelineState:pso_similarity_];
+    [enc setBuffer:bq offset:0 atIndex:0];
+    [enc setBuffer:bs offset:0 atIndex:1];
+    [enc setBuffer:bo offset:0 atIndex:2];
+    [enc setBuffer:bpc offset:0 atIndex:3];
+    [enc setBuffer:bd offset:0 atIndex:4];
+    NSUInteger tgX = 256;
+    NSUInteger gridX = ((pattern_count + tgX - 1) / tgX) * tgX;
+    [enc dispatchThreads:MTLSizeMake(gridX, 1, 1) threadsPerThreadgroup:MTLSizeMake(tgX, 1, 1)];
+    [enc endEncoding];
+    [cmd commit];
+    [cmd waitUntilCompleted];
+    memcpy(sims.data(), [bo contents], sims.size() * sizeof(float));
+    // ARC cleanup
+    return sims;
+}
+
+void MetalBackend::fft_transform(const std::vector<float>& input,
+                       std::vector<float>& real_out,
+                       std::vector<float>& imag_out) {
+    if (!available() || input.empty()) { real_out.clear(); imag_out.clear(); return; }
+    uint32_t n = (uint32_t)input.size();
+    real_out.assign(n, 0.0f);
+    imag_out.assign(n, 0.0f);
+    id<MTLBuffer> bin = [device_ newBufferWithBytes:input.data() length:n*sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> br = [device_ newBufferWithBytes:real_out.data() length:n*sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bi = [device_ newBufferWithBytes:imag_out.data() length:n*sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> blen = [device_ newBufferWithBytes:&n length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+
+    id<MTLCommandBuffer> cmd = [queue_ commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
+    [enc setComputePipelineState:pso_fft_];
+    [enc setBuffer:bin offset:0 atIndex:0];
+    [enc setBuffer:br offset:0 atIndex:1];
+    [enc setBuffer:bi offset:0 atIndex:2];
+    [enc setBuffer:blen offset:0 atIndex:3];
+    NSUInteger tgX = 256;
+    NSUInteger gridX = ((n + tgX - 1) / tgX) * tgX;
+    [enc dispatchThreads:MTLSizeMake(gridX, 1, 1) threadsPerThreadgroup:MTLSizeMake(tgX, 1, 1)];
+    [enc endEncoding];
+    [cmd commit];
+    [cmd waitUntilCompleted];
+    memcpy(real_out.data(), [br contents], n*sizeof(float));
+    memcpy(imag_out.data(), [bi contents], n*sizeof(float));
+}
 } // namespace holo
 
 #endif

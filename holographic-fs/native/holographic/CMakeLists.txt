@@ -33,3 +33,20 @@ target_compile_options(holographic_native_3d PRIVATE
   -ffast-math
   -DNDEBUG
 )
+
+# Metal GPU backend (Objective-C++)
+if(APPLE)
+  enable_language(OBJCXX)
+  pybind11_add_module(holographic_gpu
+    metal/MetalBackend.mm
+    metal/MetalHoloCore.mm
+    gpu_binding.cpp)
+  target_compile_options(holographic_gpu PRIVATE -O3 -DNDEBUG)
+  target_link_libraries(holographic_gpu PRIVATE "-framework Metal" "-framework Foundation" "-framework MetalPerformanceShaders")
+  # Ensure .metal sources are available at runtime for source-compile
+  file(COPY metal/holographic_memory.metal DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/metal)
+
+  add_executable(gpu_bench benchmarks_gpu.cpp metal/MetalBackend.mm metal/MetalHoloCore.mm)
+  target_compile_options(gpu_bench PRIVATE -O3 -DNDEBUG)
+  target_link_libraries(gpu_bench PRIVATE "-framework Metal" "-framework Foundation" "-framework MetalPerformanceShaders")
+endif()
