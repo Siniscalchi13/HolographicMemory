@@ -34,6 +34,14 @@ holographic/
 ├── holographic_cpp.cpython-312-darwin.so     # Size: ~300 KB - C++ module (Py 3.12) | Status: Working
 ├── holographic_fast.cpython-311-darwin.so    # Size: 272.6 KB - Fast module (Py 3.11) | Status: Working
 ├── holographic_wave_simd.cpython-311-darwin.so # Size: 269.3 KB - SIMD module (Py 3.11) | Status: Working
+├── patterns/                                 # Holographic wave pattern files (.hwp)
+│   ├── document.pdf.hwp                      # Individual file patterns
+│   ├── image.png.hwp
+│   └── ...
+├── current.hwp                               # Complete memory field
+└── snapshots/                                # Historical snapshots
+    ├── snapshot_20250908T002359.hwp
+    └── ...
 └── build/                            # Purpose: Generated artifacts | Status: Working
     ├── lib.macosx-*/holographic_cpp.cpython-*.so
     └── temp.macosx-*/holographic_memory.o
@@ -52,22 +60,22 @@ All holographic memory backends now include automatic wave persistence with thre
 #### **1. Individual File Patterns**
 
 - **Automatic Saving**: When text begins with `filename:<name>`, saves individual wave pattern
-- **Location**: `{HLOG_DATA_DIR}/patterns/{original_filename}.wave`
-- **Format**: Binary `.wave` files with rich metadata headers
+- **Location**: `{HLOG_DATA_DIR}/patterns/{original_filename}.hwp`
+- **Format**: Binary `.hwp` files with rich metadata headers
 - **Compression**: 90-98% size reduction compared to original files
 - **Backend Support**: All backends (native, fast, optimized, wave SIMD)
 
 #### **2. Current Complete Memory Field**
 
 - **Automatic Updates**: Updated after each store operation
-- **Location**: `{HLOG_DATA_DIR}/current.wave`
+- **Location**: `{HLOG_DATA_DIR}/current.hwp`
 - **Purpose**: Live holographic memory state with all files superposed
 - **Size**: Depends on grid resolution (32³ = ~500KB, 64³ = ~4MB, 128³ = ~32MB)
 
 #### **3. Historical Snapshots**
 
 - **Automatic Creation**: Hourly snapshots + guaranteed shutdown snapshot
-- **Location**: `{HLOG_DATA_DIR}/snapshots/snapshot_YYYYmmddTHHMMSS.wave`
+- **Location**: `{HLOG_DATA_DIR}/snapshots/snapshot_YYYYmmddTHHMMSS.hwp`
 - **Purpose**: Timestamped backups for disaster recovery and analysis
 - **Retention**: All snapshots kept (configurable)
 
@@ -80,7 +88,7 @@ All holographic memory backends now include automatic wave persistence with thre
 
 ### 📁 Wave File Format
 
-Each `.wave` file contains:
+Each `.hwp` file contains:
 
 - **Header**: Magic number + version + data type + dimension + timestamp + metadata length
 - **Metadata**: JSON with file information, creation time, and semantic data
@@ -203,9 +211,9 @@ Each `.wave` file contains:
 
 ## =============
 
-- Patterns: `{HLOG_DATA_DIR}/patterns/{original_filename}.wave` saved during store (when first line begins with `filename:`)
-- Current: `{HLOG_DATA_DIR}/current.wave` updated after each store/batch
-- Snapshots: `{HLOG_DATA_DIR}/snapshots/snapshot_YYYYmmddTHHMMSS.wave` hourly and at shutdown
+- Patterns: `{HLOG_DATA_DIR}/patterns/{original_filename}.hwp` saved during store (when first line begins with `filename:`)
+- Current: `{HLOG_DATA_DIR}/current.hwp` updated after each store/batch
+- Snapshots: `{HLOG_DATA_DIR}/snapshots/snapshot_YYYYmmddTHHMMSS.hwp` hourly and at shutdown
 
 Internals:
 

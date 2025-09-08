@@ -1,0 +1,18 @@
+{
+  "doc_id": "6d060604f291b4a0998d35d33d5e4274f02d04b9c9aade6933f3c61773812d47",
+  "original": {
+    "filename": "HomeCare Connect - businessplan.docx",
+    "size": 80237,
+    "sha256": "6d060604f291b4a0998d35d33d5e4274f02d04b9c9aade6933f3c61773812d47",
+    "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  },
+  "version": 3,
+  "holographic_wave": {
+    "dtype": "float16",
+    "endian": "little",
+    "count": 64,
+    "amplitudes_b64": "1T4BNhc0QTOZN6c5OjZ4NAAA60NDPQoxvDAjNe4w9i8AAKcyYUKZPkA4ZzRUKCoxAADTM88xoT8RQAk5BCxLMQAAZTOyGek41UIbP3g9hzMAAHMwezF1NvQ0CjndOCw0AADvJq0wwTIFOV00ijkzOgAAfSqgMPIzFTTYOMAzZDY=",
+    "phases_b64": "Or3mPV2/dD6cwVKpVUHKu3g4A0BWQYpBzEH3vSNAVLqBvgQyCMBCLHtB1j72OP+7Y716vzSvLj41QNOzYMAUQSe4nT4ewfK4RsIXQMnA7y+qwD5BSryFwF4+tTzQvP+ydDTrwIS/qj7APaLAfj43Qcw6mz93QPI9YjCePEY9Ka8=",
+    "source": "holographic_engine"
+  }
+}

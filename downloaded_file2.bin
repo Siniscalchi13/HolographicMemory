@@ -1,1 +1,0 @@
-{"detail":"Not retrievable: 'Manifest not found for doc_id'"}

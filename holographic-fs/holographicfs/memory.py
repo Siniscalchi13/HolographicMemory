@@ -1,30 +1,65 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple, Any
+import json as _json
+import time as _time
 
-# Prefer C++ backend
+# Prefer C++ backend (prefer local build over site-packages)
 _cpp_loaded = False
-try:  # Try import directly if installed in site-packages
+_cpp3d_loaded = False
+try:
+    _pkg_root = Path(__file__).resolve().parents[1]
+    _cpp_dir = _pkg_root / "native" / "holographic"
+    if _cpp_dir.exists():
+        p = str(_cpp_dir)
+        if p not in sys.path:
+            sys.path.insert(0, p)
     import holographic_cpp as _hn  # type: ignore
     _cpp_loaded = True
-except ImportError:
-    # Try to add local build dir to sys.path: <repo>/holographic-fs/native/holographic
+except Exception:
     try:
-        _pkg_root = Path(__file__).resolve().parents[1]  # holographic-fs/
-        _cpp_dir = _pkg_root / "native" / "holographic"
-        if _cpp_dir.exists():
-            p = str(_cpp_dir)
-            if p not in sys.path:
-                sys.path.insert(0, p)
-            import holographic_cpp as _hn  # type: ignore
-            _cpp_loaded = True
-    except ImportError:
+        import holographic_cpp as _hn  # type: ignore
+        _cpp_loaded = True
+    except Exception:
         _cpp_loaded = False
+
+# Optional 3D exact-recall backend
+try:
+    _pkg_root = Path(__file__).resolve().parents[1]
+    _cpp_dir = _pkg_root / "native" / "holographic"
+    if _cpp_dir.exists():
+        p = str(_cpp_dir)
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    import holographic_cpp_3d as _hn3d  # type: ignore
+    _cpp3d_loaded = True
+except Exception:
+    try:
+        import holographic_cpp_3d as _hn3d  # type: ignore
+        _cpp3d_loaded = True
+    except Exception:
+        _cpp3d_loaded = False
 
 
 from .index import sha256_file, Index
+
+
+def calculate_optimal_dimension(file_size: int) -> int:
+    """Adaptive FFT dimension selection based on file size."""
+    if file_size < 512:
+        return 8
+    if file_size < 4096:
+        return 16
+    if file_size < 32768:
+        return 32
+    if file_size < 262144:
+        return 64
+    if file_size < 1048576:
+        return 128
+    return 256
 
 
 class Memory:
@@ -40,20 +75,32 @@ class Memory:
                 raise RuntimeError("C++ backend not available or failed to initialize") from exc
         else:
             raise RuntimeError("C++ backend not available. Build the extensions (make cpp)")
+        # 3D exact-recall engine is optional; used for byte-perfect storage/recall
+        self.backend3d = None
+        if _cpp3d_loaded:
+            try:
+                self.backend3d = _hn3d.HolographicMemory3D(int(grid_size))  # type: ignore[name-defined, attr-defined]
+            except Exception:
+                self.backend3d = None
 
     def store_file(self, path: Path, stable_id: Optional[str] = None) -> str:
+        """Store file bytes using exact-recall 3D backend and record wave meta.
+
+        Removes legacy base64/disk persistence to keep storage holographic-only.
+        """
         data = path.read_bytes()
-        if _cpp_loaded and hasattr(self.backend, "store"):
-            # Pass filename/size/sha for potential engine-side features
-            from .index import sha256_file as _sha
-            digest = _sha(path)
-            doc_id = stable_id or digest
-            meta = f"filename:{Path(path).name}\nsize:{len(data)}\nsha256:{digest}\n"
+        from .index import sha256_file as _sha
+        digest = _sha(path)
+        doc_id = stable_id or digest
+
+        # 1) Store raw bytes in 3D engine for exact recall
+        if self.backend3d is not None and hasattr(self.backend3d, "store_bytes"):
             try:
-                self.backend.store(meta)  # type: ignore[attr-defined]
-            except Exception:
-                pass
-            # Persist: HM HRR (best-effort) + disk-backed file for durability
+                self.backend3d.store_bytes(data, doc_id)  # type: ignore[attr-defined]
+            except Exception as exc:
+                raise RuntimeError(f"3D backend failed to store bytes: {exc}")
+        else:
+            # Fallback: legacy persistence (HRR base64 + disk) to preserve recall
             try:
                 import json as _json
                 if hasattr(self.backend, "store_response_hrr"):
@@ -72,8 +119,39 @@ class Memory:
                 )
             except Exception:
                 pass
-            return doc_id
-        raise RuntimeError("C++ backend missing expected 'store' method")
+
+        # 2) Store lightweight meta in wave engine for pattern access (no original data)
+        try:
+            meta = f"filename:{Path(path).name}\nsize:{len(data)}\nsha256:{digest}\n"
+            engine_id = self.backend.store(meta)  # type: ignore[attr-defined]
+            # Persist doc_id -> engine_id mapping inside HM and on disk
+            try:
+                mapping = {"doc_id": doc_id, "engine_id": engine_id, "filename": Path(path).name, "size": len(data)}
+                if hasattr(self.backend, "store_response_hrr"):
+                    self.backend.store_response_hrr(f"{doc_id}#engine_mapping", _json.dumps(mapping))  # type: ignore[attr-defined]
+                mpath = self.state_dir / "engine_map.json"
+                db = {}
+                if mpath.exists():
+                    try:
+                        db = _json.loads(mpath.read_text(encoding='utf-8'))
+                    except Exception:
+                        db = {}
+                db[str(doc_id)] = mapping
+                mpath.write_text(_json.dumps(db, indent=2), encoding='utf-8')
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+        # 3) Record adaptive dimension mapping for compact wave vectors
+        try:
+            dim = calculate_optimal_dimension(len(data))
+            self._store_dimension_mapping(doc_id, dim)
+        except Exception:
+            pass
+
+        # No base64 HRR or disk copy when 3D backend is available — holographic-only
+        return doc_id
 
     def retrieve_to(self, doc_id: str, out_path: Path) -> Path:
         # Try holographic-only bytes reconstruction from stored chunks
@@ -106,18 +184,29 @@ class Memory:
         return {}
 
     def retrieve_bytes(self, doc_id: str) -> bytes:
-        """Reconstruct file bytes stored as HM response chunks.
+        """Reconstruct file bytes using available mechanisms.
 
-        Requires chunks stored with keys:
-          {doc_id}#manifest (JSON) and {doc_id}#chunk:{i}
+        Priority:
+          1) 3D engine exact recall (preferred)
+          2) Legacy HRR chunk/base64 (if present)
+          3) Raise if unavailable
         """
-        # Disk-backed persistent retrieval first
+        # Prefer 3D engine exact recall
+        if self.backend3d is not None and hasattr(self.backend3d, "retrieve_bytes"):
+            try:
+                return bytes(self.backend3d.retrieve_bytes(doc_id))  # type: ignore[attr-defined]
+            except Exception:
+                pass
+
+        # Legacy disk-backed retrieval (if present)
         resp_dir = self.state_dir / "responses" / doc_id
         data_path = resp_dir / "data.bin"
         if data_path.exists():
             return data_path.read_bytes()
+
+        # Legacy HRR chunk/base64 retrieval
         if not (_cpp_loaded and hasattr(self.backend, "retrieve_response_hrr")):
-            raise RuntimeError("HM chunk retrieval not supported by backend")
+            raise RuntimeError("No holographic retrieval path available for doc_id")
         import json as _json
         import base64 as _b64
         man_txt = self.backend.retrieve_response_hrr(f"{doc_id}#manifest")  # type: ignore[attr-defined]
@@ -125,24 +214,143 @@ class Memory:
             raise KeyError("Manifest not found for doc_id")
         man = _json.loads(man_txt)
         storage_type = man.get("type", "chunked")
-        
         if storage_type == "base64_direct":
-            # Simple direct storage
             data_txt = self.backend.retrieve_response_hrr(f"{doc_id}#data")  # type: ignore[attr-defined]
             if not isinstance(data_txt, str):
                 raise KeyError("Data not found for doc_id")
             return _b64.b64decode(data_txt.encode("ascii"))
+        # Legacy chunked storage
+        chunks = int(man.get("chunks", 0))
+        buf = bytearray()
+        for i in range(chunks):
+            part_txt = self.backend.retrieve_response_hrr(f"{doc_id}#chunk:{i}")  # type: ignore[attr-defined]
+            if not isinstance(part_txt, str) or not part_txt:
+                raise KeyError(f"Missing chunk {i}")
+            buf.extend(_b64.b64decode(part_txt.encode("ascii"), validate=False))
+        size = int(man.get("size", len(buf)))
+        return bytes(buf[:size])
+
+    # ----------------- Real wave access helpers -----------------
+    def get_engine_id(self, doc_id: str) -> str:
+        import json as _json
+        # On-disk persistent map first
+        try:
+            mpath = self.state_dir / "engine_map.json"
+            if mpath.exists():
+                db = _json.loads(mpath.read_text(encoding='utf-8'))
+                m = db.get(str(doc_id))
+                if m and m.get('engine_id'):
+                    return str(m['engine_id'])
+        except Exception:
+            pass
+        if hasattr(self.backend, "retrieve_response_hrr"):
+            try:
+                m = self.backend.retrieve_response_hrr(f"{doc_id}#engine_mapping")  # type: ignore[attr-defined]
+                if isinstance(m, str) and m:
+                    d = _json.loads(m)
+                    eng = d.get("engine_id")
+                    if eng:
+                        return str(eng)
+            except Exception:
+                pass
+        raise RuntimeError(f"No engine mapping found for doc_id: {doc_id}")
+
+    def _dimension_map_path(self) -> Path:
+        return self.state_dir / "dimension_map.json"
+
+    def _store_dimension_mapping(self, doc_id: str, dimension: int, memory_id: Optional[str] = None) -> None:
+        """Persist dimension used for this doc_id for adaptive wave extraction."""
+        mpath = self._dimension_map_path()
+        db: Dict[str, Any] = {}
+        try:
+            if mpath.exists():
+                db = _json.loads(mpath.read_text(encoding='utf-8'))
+        except Exception:
+            db = {}
+        db[str(doc_id)] = {
+            "dimension": int(dimension),
+            "memory_id": str(memory_id) if memory_id else "",
+            "timestamp": _time.time(),
+        }
+        mpath.write_text(_json.dumps(db, indent=2), encoding='utf-8')
+
+    def set_dimension_mapping(self, doc_id: str, dimension: int) -> None:
+        self._store_dimension_mapping(doc_id, int(dimension))
+
+    def _get_mapped_dimension(self, doc_id: str, fallback_size: Optional[int] = None) -> int:
+        try:
+            mpath = self._dimension_map_path()
+            if mpath.exists():
+                db = _json.loads(mpath.read_text(encoding='utf-8'))
+                m = db.get(str(doc_id))
+                if m and int(m.get("dimension", 0)) > 0:
+                    return int(m["dimension"])
+        except Exception:
+            pass
+        # Fallback: derive from size if provided, else default to 64
+        if fallback_size is not None:
+            return calculate_optimal_dimension(int(fallback_size))
+        return 64
+
+    def get_real_wave_data(self, doc_id: str) -> Dict[str, Any]:
+        """Return adaptive holographic wave vector (amplitude+phase) for doc_id.
+
+        Computes an FFT-based compact vector with a dimension chosen per-file
+        (from mapping created at store time). Falls back gracefully.
+        """
+        import numpy as _np
+        # Retrieve bytes first to support engine-agnostic wave generation
+        data = self.retrieve_bytes(doc_id)
+        size = len(data)
+        dim = self._get_mapped_dimension(doc_id, fallback_size=size)
+        if dim <= 0:
+            dim = 64
+        # Build normalized real signal from bytes
+        x = _np.frombuffer(data, dtype=_np.uint8).astype(_np.float32)
+        if x.size == 0:
+            return {"amplitudes": [], "phases": [], "dimension": 0, "source": "adaptive_holographic_engine", "doc_id": doc_id}
+        x = x / 255.0
+        N = int(dim)
+        if x.size == N:
+            s = x
+        elif x.size < N:
+            s = _np.zeros(N, dtype=_np.float32)
+            s[:x.size] = x
         else:
-            # Legacy chunked storage
-            chunks = int(man.get("chunks", 0))
-            buf = bytearray()
-            for i in range(chunks):
-                part_txt = self.backend.retrieve_response_hrr(f"{doc_id}#chunk:{i}")  # type: ignore[attr-defined]
-                if not isinstance(part_txt, str) or not part_txt:
-                    raise KeyError(f"Missing chunk {i}")
-                buf.extend(_b64.b64decode(part_txt.encode("ascii"), validate=False))
-            size = int(man.get("size", len(buf)))
-            return bytes(buf[:size])
+            # Resample to N via linear interpolation for better coverage
+            idx = _np.linspace(0, x.size - 1, N, dtype=_np.float64)
+            s = _np.interp(idx, _np.arange(x.size, dtype=_np.float64), x).astype(_np.float32)
+        # FFT to spectral vector
+        v = _np.fft.fft(s)
+        amps = _np.abs(v).astype(_np.float64).tolist()
+        phases = _np.angle(v).astype(_np.float64).tolist()
+        return {
+            "amplitudes": amps,
+            "phases": phases,
+            "dimension": int(N),
+            "source": "adaptive_holographic_engine",
+            "doc_id": doc_id,
+        }
+
+    def get_collective_interference(self, doc_ids: List[str]) -> Dict[str, Any]:
+        try:
+            import numpy as _np
+            if not hasattr(self.backend, "get_collective_vector"):
+                raise RuntimeError("Engine does not expose get_collective_vector")
+            eng_ids = [self.get_engine_id(d) for d in doc_ids]
+            arr = self.backend.get_collective_vector(eng_ids)  # numpy complex array expected
+            amps = _np.abs(arr).tolist()
+            phases = _np.angle(arr).tolist()
+            return {
+                "amplitudes": amps,
+                "phases": phases,
+                "dimension": int(len(amps)),
+                "source": "collective_interference",
+                "doc_ids": list(doc_ids),
+                "engine_ids": eng_ids,
+            }
+        except Exception as e:  # pragma: no cover
+            raise RuntimeError(f"Failed to get collective interference: {e}")
 
 
 class HoloFS:

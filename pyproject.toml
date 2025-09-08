@@ -1,0 +1,85 @@
+[build-system]
+requires = ["setuptools>=65", "wheel", "pybind11>=2.10.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "holographic-memory"
+dynamic = ["version"]
+description = "Enterprise-grade holographic memory system with 7-layer architecture"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "SmartHaus Group", email = "dev@smarthaus.ai" }]
+license = { text = "Proprietary" }
+keywords = ["holographic", "memory", "ai", "storage", "enterprise"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Filesystems",
+]
+
+dependencies = [
+    "numpy>=1.21.0",
+    "scipy>=1.7.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+    "pydantic>=2.0.0",
+    "click>=8.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.0.0",
+    "pre-commit>=3.0.0",
+]
+enterprise = [
+    "prometheus-client>=0.16.0",
+    "cryptography>=40.0.0",
+    "redis>=4.5.0",
+]
+
+[project.scripts]
+holo = "holographic_memory.cli:main"
+
+[project.urls]
+Homepage = "https://smarthaus.ai/holographic-memory"
+Repository = "https://github.com/SmartHausGroup/HolographicMemory"
+Documentation = "https://docs.smarthaus.ai/holographic-memory"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["holographic_memory*", "services*"]
+exclude = ["tests*", "benchmarks*", "documentation*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "holographic_memory.__version__"}
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--cov=holographic_memory --cov-report=html --cov-report=term-missing"

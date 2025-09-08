@@ -118,10 +118,215 @@ async function showPreview(path, docId) {
           <p>Click download button to save file</p>
         </div>`
     }
+
+    // Append wave visualization with 2D/3D toggle
+    try {
+      let wave = null; let real = false
+      try {
+        console.log(`[Wave] Fetching data for docId: ${docId}`)
+        const wreal = await fetch(`/wave/${docId}/real`, { headers: apiHeaders() })
+        if (wreal.ok) {
+          wave = await wreal.json();
+          real = true;
+          console.log(`[Wave] Got real data:`, wave.magnitudes?.length, 'magnitudes,', wave.phases?.length, 'phases')
+        } else {
+          console.warn(`[Wave] Real endpoint failed: ${wreal.status}`)
+        }
+      } catch(e) {
+        console.warn(`[Wave] Real endpoint error:`, e)
+      }
+      if (!wave){
+        console.log(`[Wave] Falling back to DFT endpoint`)
+        const wres = await fetch(`/wave/${docId}`, { headers: apiHeaders() })
+        if (wres.ok) {
+          wave = await wres.json();
+          console.log(`[Wave] Got DFT data:`, wave.magnitudes?.length, 'magnitudes')
+        } else {
+          console.warn(`[Wave] DFT endpoint failed: ${wres.status}`)
+        }
+      }
+      if (!wave) throw new Error('No wave data')
+
+      // Create visualization controls
+      const controlsDiv = document.createElement('div')
+      controlsDiv.style.cssText = 'margin-top: 12px; margin-bottom: 8px; display: flex; gap: 8px; align-items: center;'
+      controlsDiv.innerHTML = `
+        <div class="muted" style="flex: 1;">${real? '🌌 Authentic holographic wave' : '📊 DFT approximation'} spectrum</div>
+        <button id="toggle-2d-3d" style="padding: 4px 8px; background: #6366f1; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Show 3D</button>
+        <button id="toggle-animation" style="padding: 4px 8px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Animate</button>
+      `
+      document.getElementById('preview').appendChild(controlsDiv)
+
+      // Create 2D canvas visualization (default)
+      const canvas = document.createElement('canvas')
+      canvas.id = 'wave-canvas-2d'
+      canvas.width = 420; canvas.height = 120
+      canvas.style.cssText = 'border: 1px solid #e2e8f0; border-radius: 4px;'
+
+      const ctx = canvas.getContext('2d')
+      ctx.fillStyle = '#f8fafc'; ctx.fillRect(0,0,canvas.width,canvas.height)
+      const W = canvas.width, H = canvas.height
+      const mags = wave.magnitudes || []
+      const count = Math.max(1, mags.length)
+      const bar = Math.max(1, Math.floor(W / count))
+      const phases = wave.phases || new Array(count).fill(0)
+      mags.forEach((m,i)=>{
+        const h = Math.max(1, Math.floor(m * (H-10)))
+        // simple phase->hue mapping
+        const hue = Math.floor(((phases[i]||0)/(Math.PI*2) + 1) * 180) % 360
+        ctx.fillStyle = `hsl(${hue},70%,55%)`
+        ctx.fillRect(i*bar, H-h, Math.max(1, bar-1), h)
+      })
+
+      // Create 3D container (hidden by default)
+      const container3D = document.createElement('div')
+      container3D.id = 'wave-container-3d'
+      container3D.style.cssText = 'width: 420px; height: 300px; border: 1px solid #e2e8f0; border-radius: 4px; display: none;'
+
+      // Add both to preview
+      document.getElementById('preview').appendChild(canvas)
+      document.getElementById('preview').appendChild(container3D)
+
+      // Wire up toggle buttons
+      let currentViewer = null
+      let is3D = false
+      let isAnimating = false
+
+      document.getElementById('toggle-2d-3d').onclick = async () => {
+        const btn = document.getElementById('toggle-2d-3d')
+        is3D = !is3D
+
+        if (is3D) {
+          // Switch to 3D
+          canvas.style.display = 'none'
+          container3D.style.display = 'block'
+          btn.textContent = 'Show 2D'
+
+          // Load 3D viewer if not already loaded
+          if (!currentViewer) {
+            try {
+              const { WaveViewer3D } = await import('./wave-viewer-3d.js')
+              currentViewer = new WaveViewer3D()
+              await currentViewer.initScene(container3D)
+              currentViewer.updateData(wave.magnitudes || [], wave.phases || [])
+            } catch (e) {
+              console.error('[3D] Failed to load viewer:', e)
+              container3D.innerHTML = '<div style="padding: 20px; text-align: center; color: #ef4444;">3D visualization not supported on this device</div>'
+            }
+          }
+        } else {
+          // Switch to 2D
+          canvas.style.display = 'block'
+          container3D.style.display = 'none'
+          btn.textContent = 'Show 3D'
+
+          // Stop 3D animation if running
+          if (currentViewer && isAnimating) {
+            currentViewer.toggleAnimation()
+          }
+        }
+      }
+
+      document.getElementById('toggle-animation').onclick = () => {
+        const btn = document.getElementById('toggle-animation')
+        isAnimating = !isAnimating
+        btn.textContent = isAnimating ? 'Stop' : 'Animate'
+        btn.style.background = isAnimating ? '#ef4444' : '#10b981'
+
+        if (currentViewer && is3D) {
+          currentViewer.toggleAnimation()
+        }
+      }
+
+    } catch (e) {
+      console.warn('[web] wave viz failed', e)
+      // Add fallback message
+      const fallback = document.createElement('div')
+      fallback.innerHTML = '<div class="muted" style="margin-top: 12px;">Wave visualization unavailable</div>'
+      document.getElementById('preview').appendChild(fallback)
+    }
   } catch (error) {
     console.error('[web] preview error', error)
     $('#preview').innerHTML = `<div class="muted">Preview error: ${error.message}</div>`
   }
+}
+
+function renderMemoryField(fieldData) {
+  const canvas = document.getElementById('memory-field-canvas')
+  if (!canvas) return
+
+  const ctx = canvas.getContext('2d')
+  const width = canvas.width = canvas.offsetWidth || 280
+  const height = canvas.height = 120
+
+  // Clear canvas with dark background
+  ctx.fillStyle = '#0f0f23'
+  ctx.fillRect(0, 0, width, height)
+
+  const amplitudes = fieldData.magnitudes || []
+  const phases = fieldData.phases || []
+
+  if (amplitudes.length === 0) {
+    ctx.fillStyle = '#6b7280'
+    ctx.font = '12px monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('No field data', width/2, height/2)
+    return
+  }
+
+  // Create interference pattern visualization
+  const step = Math.max(1, Math.floor(amplitudes.length / width))
+  const barWidth = Math.max(1, Math.floor(width / (amplitudes.length / step)))
+
+  for (let i = 0; i < amplitudes.length; i += step) {
+    const amp = amplitudes[i] || 0
+    const phase = phases[i] || 0
+
+    // Convert phase to hue (0-360)
+    const hue = Math.floor(((phase + Math.PI) / (2 * Math.PI)) * 360) % 360
+
+    // Height based on amplitude
+    const barHeight = Math.max(1, Math.floor(amp * height * 0.8))
+
+    // Create gradient for interference effect
+    const gradient = ctx.createLinearGradient(0, height - barHeight, 0, height)
+    gradient.addColorStop(0, `hsl(${hue}, 70%, 60%)`)
+    gradient.addColorStop(0.5, `hsl(${(hue + 60) % 360}, 50%, 40%)`)
+    gradient.addColorStop(1, `hsl(${(hue + 120) % 360}, 30%, 20%)`)
+
+    ctx.fillStyle = gradient
+    ctx.fillRect(i * barWidth / step, height - barHeight, barWidth, barHeight)
+
+    // Add interference lines
+    ctx.strokeStyle = `hsl(${hue}, 80%, 70%)`
+    ctx.lineWidth = 0.5
+    ctx.beginPath()
+    ctx.moveTo(i * barWidth / step, height - barHeight)
+    ctx.lineTo(i * barWidth / step + barWidth, height - barHeight + Math.sin(phase) * 10)
+    ctx.stroke()
+  }
+
+  // Add subtle animation
+  let animationOffset = 0
+  const animateField = () => {
+    animationOffset += 0.02
+    ctx.globalAlpha = 0.3
+
+    // Add moving interference waves
+    for (let x = 0; x < width; x += 20) {
+      const wave = Math.sin((x * 0.1) + animationOffset) * 5
+      ctx.strokeStyle = '#4c1d95'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(x, height/2 + wave)
+      ctx.lineTo(x + 10, height/2 + Math.sin(((x + 10) * 0.1) + animationOffset) * 5)
+      ctx.stroke()
+    }
+
+    ctx.globalAlpha = 1
+    requestAnimationFrame(animateField)
+  }
+  animateField()
 }
 
 function showError(msg){
@@ -133,13 +338,39 @@ function showError(msg){
 
 function downloadFile(docId, filename){
   console.log('[web] downloading', { docId, filename })
-  const url = `/download/${docId}`
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
+  // Create a proper download with API headers
+  fetch(`/download/${docId}`, { headers: apiHeaders() })
+    .then(response => {
+      if (!response.ok) throw new Error(`Download failed: ${response.statusText}`)
+      return response.blob().then(blob => ({ blob, response }))
+    })
+    .then(({ blob, response }) => {
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+
+      // Use filename from Content-Disposition header if available, otherwise use provided filename
+      const contentDisposition = response.headers.get('content-disposition')
+      if (contentDisposition && contentDisposition.includes('filename=')) {
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+        if (filenameMatch && filenameMatch[1]) {
+          a.download = filenameMatch[1].replace(/['"]/g, '')
+        } else {
+          a.download = filename
+        }
+      } else {
+        a.download = filename
+      }
+
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    })
+    .catch(error => {
+      console.error('[web] download error', error)
+      showError(`Download failed: ${error.message}`)
+    })
 }
 
 function bindSelection(){
@@ -219,6 +450,20 @@ async function refresh(){
 
     const tree = await api('/tree')
     $('#tree').innerHTML = renderTree(tree)
+
+    // Add collective holographic memory field visualization
+    const memoryFieldDiv = document.createElement('div')
+    memoryFieldDiv.id = 'memory-field-viz'
+    memoryFieldDiv.style.cssText = 'margin-top: 20px; padding: 12px; background: linear-gradient(135deg, #1e1b4b, #312e81); border-radius: 8px; color: white;'
+    memoryFieldDiv.innerHTML = `
+      <h4 style="margin: 0 0 8px 0; font-size: 14px;">🌌 Holographic Memory Field</h4>
+      <canvas id="memory-field-canvas" style="width: 100%; height: 120px; background: #0f0f23; border-radius: 4px; border: 1px solid #4c1d95;"></canvas>
+      <div style="margin-top: 8px; font-size: 11px; opacity: 0.8;">
+        <span id="field-status">Loading field data...</span>
+      </div>
+    `
+    document.getElementById('tree').appendChild(memoryFieldDiv)
+
     document.querySelectorAll('.tree-node').forEach(el=>{
       el.addEventListener('click', ()=>{
         const p = el.getAttribute('data-path')
@@ -230,6 +475,35 @@ async function refresh(){
     const list = await api('/list')
     window.CURRENT_ROWS = (list.results||[])
     renderRows(window.CURRENT_ROWS)
+
+    // Load collective memory field data AFTER CURRENT_ROWS is populated
+    try {
+      const docIds = window.CURRENT_ROWS?.map(r => r.doc_id) || []
+      if (docIds.length > 0) {
+        console.log('[web] Loading collective field for', docIds.length, 'files')
+        const collectiveResponse = await fetch('/wave/collective/real', {
+          method: 'POST',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, apiHeaders()),
+          body: JSON.stringify({ doc_ids: docIds.slice(0, 10) }) // Limit to first 10 for performance
+        })
+
+        if (collectiveResponse.ok) {
+          const fieldData = await collectiveResponse.json()
+          console.log('[web] Collective field data loaded:', fieldData.amplitudes?.length, 'amplitudes')
+          renderMemoryField(fieldData)
+          document.getElementById('field-status').textContent = `${docIds.length} patterns superposed`
+        } else {
+          console.warn('[web] Collective field response not ok:', collectiveResponse.status)
+          document.getElementById('field-status').textContent = 'Field data unavailable'
+        }
+      } else {
+        console.warn('[web] No doc_ids available for collective field')
+        document.getElementById('field-status').textContent = 'No files to visualize'
+      }
+    } catch (e) {
+      console.warn('[web] collective field failed:', e)
+      document.getElementById('field-status').textContent = 'Field visualization failed'
+    }
   } catch (e) {
     console.error('[web] refresh error', e)
     $('#status').textContent = 'API not running'
@@ -306,3 +580,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   st.textContent = ok? 'Connected' : 'Waiting for API…'
   await refresh()
 })
+
+// Expose functions for inline per-row actions (module scope isn't global)
+// eslint-disable-next-line no-undef
+window.downloadFile = downloadFile
+// eslint-disable-next-line no-undef
+window.deleteOne = deleteOne

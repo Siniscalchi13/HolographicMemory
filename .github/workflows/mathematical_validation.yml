@@ -1,0 +1,59 @@
+name: Mathematical Invariant Validation
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest fastapi uvicorn
+          # Service-specific requirements
+          pip install -r services/math_core/requirements.txt
+          pip install -r services/vault/requirements.txt
+          pip install -r services/router/requirements.txt
+          pip install -r services/telemetry/requirements.txt
+
+      - name: Markdown lint (non-blocking)
+        uses: actions/setup-node@v4
+      - name: Run markdownlint
+        run: |
+          npx --yes markdownlint-cli '**/*.md'
+
+      - name: Install Coq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y coq coq-mathcomp-ssreflect coq-coquelicot
+
+      - name: Verify Coq proofs
+        working-directory: documentation/proofs/coq
+        run: |
+          coq_makefile -f _CoqProject -o Makefile
+          make -j2
+
+      - name: Run unit tests (services)
+        env:
+          HOLO_MICRO_THRESHOLD: '256'
+          HOLO_MICRO_K8_MAX: '1024'
+        run: |
+          pytest -q services/math_core services/vault services/router services/telemetry
+
+      - name: Run API invariants (selected)
+        env:
+          HOLO_MICRO_THRESHOLD: '256'
+          HOLO_MICRO_K8_MAX: '1024'
+          HOLO_FALLBACK_BASE64: 'false'
+        run: |
+          pytest -q services/api/tests/test_smallfile_micro.py services/api/tests/test_vault_route.py services/api/tests/test_largefile_v4.py services/api/tests/test_telemetry_endpoint.py

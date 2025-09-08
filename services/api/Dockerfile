@@ -41,7 +41,7 @@ RUN python -m pip install --upgrade pip && \
     python -m pip install pytest
 
 # Mount code in dev via bind mounts; keep structure present
-COPY services/api /app/services/api
+COPY services /app/services
 COPY holographic-fs /app/holographic-fs
 
 # Install editable for hot reload
@@ -76,8 +76,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /build/wheels /wheels
 RUN python -m pip install --no-cache-dir /wheels/*
 
-# Copy API code only
-COPY services/api /app/services/api
+# Copy all services
+COPY services /app/services
 
 # Create non-root user
 RUN useradd -m -u 10001 appuser && mkdir -p /data && chown -R appuser:appuser /data

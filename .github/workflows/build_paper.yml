@@ -1,0 +1,31 @@
+name: Build Academic Paper
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  paper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install TeX Live
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended latexmk
+      - name: Build PDF
+        working-directory: documentation/papers
+        run: |
+          latexmk -pdf -interaction=nonstopmode HOLOGRAPHIC_MEMORY_ACADEMIC_PAPER.tex
+          ls -la
+      - name: Move to target path
+        run: |
+          mkdir -p documentation
+          cp documentation/papers/HOLOGRAPHIC_MEMORY_ACADEMIC_PAPER.pdf documentation/HOLOGRAPHIC_MEMORY_ACADEMIC_PAPER.pdf || true
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: holographic_memory_paper
+          path: |
+            documentation/papers/HOLOGRAPHIC_MEMORY_ACADEMIC_PAPER.pdf
+            documentation/HOLOGRAPHIC_MEMORY_ACADEMIC_PAPER.pdf

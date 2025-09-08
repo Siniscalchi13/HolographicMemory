@@ -14,6 +14,8 @@ services:
       HOLO_API_KEY: ""
       # Allow all origins in dev (includes Electron file:// as null)
       HOLO_ALLOWED_ORIGINS: "*"
+      # Persist native holographic wave files under the mounted data volume
+      HLOG_DATA_DIR: /data/holographic_memory
       HOLO_ALLOW_SHUTDOWN: "1"
       PORT: 8000
     ports:

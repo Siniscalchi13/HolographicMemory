@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, UploadFile, HTTPException, Query, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, Response, FileResponse, StreamingResponse
+import json
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List
@@ -20,7 +21,12 @@ except Exception:
     fitz = None
 
 from holographicfs.memory import mount, HoloFS
+from services.api.hwp_v4 import build_sparse_layer, write_hwp_v4, write_hwp_v4_micro
 from holographicfs.index import sha256_file
+from services.api.router_layers import route_layers
+from services.router import MathematicalRouter
+from services.telemetry import PerformanceTelemetry
+from services.vault import SecurityGuard
 from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
 import threading
 import logging
@@ -80,6 +86,10 @@ app.add_middleware(
 @app.on_event("startup")
 async def _startup():
     _ = get_fs()
+    # Initialize SOA services
+    app.state.router = MathematicalRouter()
+    app.state.telemetry = PerformanceTelemetry()
+    app.state.guard = SecurityGuard()
 
 @app.on_event("shutdown")
 async def _shutdown():
@@ -96,6 +106,65 @@ def web_index():
     if idx.exists():
         return FileResponse(str(idx))
     return JSONResponse({"message": "Holographic Memory API", "docs": "/docs"})
+
+
+@app.get("/dashboard")
+def dashboard(_: bool = Depends(require_api_key)):
+    # Minimal HTML dashboard with inline JS fetching /telemetry
+    html = f"""
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8' />
+    <title>Holographic Memory Dashboard</title>
+    <style>
+      body {{ font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }}
+      h1 {{ margin-bottom: 8px; }}
+      .grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }}
+      pre {{ background: #f6f8fa; padding: 12px; border-radius: 6px; overflow: auto; }}
+      .card {{ border: 1px solid #e1e4e8; border-radius: 6px; padding: 12px; }}
+    </style>
+  </head>
+  <body>
+    <h1>Holographic Memory Dashboard</h1>
+    <p>Live telemetry, compression ratios, and suggested dimension rebalancing.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>Overall</h3>
+        <div id="overall"></div>
+      </div>
+      <div class="card">
+        <h3>Suggested Dimensions (D_k*)</h3>
+        <pre id="dims"></pre>
+      </div>
+      <div class="card" style="grid-column: 1 / span 2;">
+        <h3>Per-Layer Metrics</h3>
+        <pre id="layers"></pre>
+      </div>
+    </div>
+    <script>
+      async function refresh() {{
+        const resp = await fetch('/telemetry', {{ headers: {{ 'x-api-key': '{os.getenv('HOLO_API_KEY','')}' }} }});
+        if (!resp.ok) {{ document.getElementById('overall').innerText = 'Error loading telemetry'; return; }}
+        const data = await resp.json();
+        const t = data.telemetry || {{}};
+        const o = t.overall || {{}};
+        document.getElementById('overall').innerHTML = `
+          <b>Original bytes:</b> ${o.bytes_original||0}<br/>
+          <b>Stored bytes:</b> ${o.bytes_stored||0}<br/>
+          <b>Compression×:</b> ${o.compression_x||'n/a'}<br/>
+          <b>Retrievals:</b> ${o.retrievals||0}<br/>
+        `;
+        document.getElementById('dims').innerText = JSON.stringify(data.suggested_dimensions||{{}}, null, 2);
+        document.getElementById('layers').innerText = JSON.stringify(t.per_layer||{{}}, null, 2);
+      }}
+      refresh();
+      setInterval(refresh, 4000);
+    </script>
+  </body>
+ </html>
+    """
+    return Response(content=html, media_type="text/html")
 
 # Request logging middleware (method, path, origin, CORS preflight)
 @app.middleware("http")
@@ -166,16 +235,25 @@ def list_index(_: bool = Depends(require_api_key)):
     
     results = []
     for d, p, s, m in rows:
-        # Rough estimate: proportional to original file size
-        if total_original > 0:
-            holo_size = int((s / total_original) * total_holo)
-        else:
-            holo_size = int(avg_holo_per_file)
-        
+        # Get actual .hwp file size and original file size from metadata
+        hwp_path = Path(p)
+        holo_size = hwp_path.stat().st_size if hwp_path.exists() else 0
+
+        # Extract original file size from .hwp metadata
+        original_size = s  # fallback to index size
+        if hwp_path.exists() and hwp_path.suffix.lower() == ".hwp":
+            try:
+                import json as _json
+                hwp_data = _json.loads(hwp_path.read_text(encoding="utf-8"))
+                if "original" in hwp_data:
+                    original_size = hwp_data["original"].get("size", s)
+            except:
+                pass  # fallback to index size
+
         results.append({
-            "doc_id": d, 
-            "path": p, 
-            "size": s, 
+            "doc_id": d,
+            "path": p,
+            "size": original_size,
             "holo_size": holo_size,
             "mtime": m
         })
@@ -490,13 +568,176 @@ async def store(file: UploadFile = File(...), _: bool = Depends(require_api_key)
     if not file.filename:
         logger.warning("/store missing filename")
         raise HTTPException(status_code=400, detail="Missing filename")
-    dst = Path(fs.root) / file.filename
-    dst.parent.mkdir(parents=True, exist_ok=True)
     try:
         data = await file.read()
         logger.info("/store received bytes=%s", len(data) if data is not None else 0)
-        dst.write_bytes(data)
-        doc_id = fs.store(dst)
+        # Router decision (format/layers/vault)
+        metadata = {"filename": file.filename, "content_type": getattr(file, 'content_type', '') or ''}
+        routing = getattr(app.state, 'router', None).route_content(data, metadata) if hasattr(app.state, 'router') else {"vault": False, "format": "v4", "layers": [("knowledge", 1.0)], "K": int(os.getenv("HOLO_TOPK", "32") or 32)}
+        # Compute doc_id: random nonce for vault; content hash otherwise
+        if routing.get("vault"):
+            doc_id = getattr(app.state, 'guard', None).generate_vault_id() if hasattr(app.state, 'guard') else __import__('secrets').token_hex(16)
+            digest = doc_id  # for consistency in payloads
+        else:
+            digest = sha256_file(Path(file.filename)) if False else __import__('hashlib').sha256(data).hexdigest()
+            doc_id = digest
+        # Record adaptive wave dimension mapping for this file size
+        try:
+            from holographicfs.memory import calculate_optimal_dimension as _calc_dim
+            fs.mem.set_dimension_mapping(doc_id, _calc_dim(len(data)))  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        # Create holographic-only pattern file (.hwp) under patterns dir
+        patterns_dir = Path(os.getenv("HLOG_DATA_DIR", str(Path(fs.root) / "holographic_memory"))) / "patterns"
+        patterns_dir.mkdir(parents=True, exist_ok=True)
+        stem = Path(file.filename).name or doc_id[:8]
+        hwp_path = patterns_dir / f"{stem}.hwp"
+        # Build .hwp payload: store holographic wave pattern ONLY (no original data)
+        import json as _json
+        # 1) Store original bytes into 3D engine for exact recall (no base64 persistence)
+        try:
+            if hasattr(fs.mem, "backend3d") and fs.mem.backend3d is not None:  # type: ignore[attr-defined]
+                fs.mem.backend3d.store_bytes(data, doc_id)  # type: ignore[attr-defined]
+            else:
+                # Fallback to high-level API if exposed
+                try:
+                    fs.mem.store_file(Path(file.filename), stable_id=doc_id)  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+        except Exception:
+            # Continue; download will fail if exact recall backend is missing
+            pass
+        # 2) For non-vault, store lightweight meta in wave engine for mapping (optional)
+        if not routing.get("vault"):
+            try:
+                meta = f"filename:{Path(file.filename).name}\nsize:{len(data)}\nsha256:{digest}\n"
+                engine_id = fs.mem.backend.store(meta)  # type: ignore[attr-defined]
+                # Persist doc_id -> engine_id mapping inside HM for later real-wave queries
+                try:
+                    mapping = {"doc_id": doc_id, "engine_id": engine_id, "filename": file.filename, "size": len(data)}
+                    # In-engine mapping for same-process retrieval
+                    fs.mem.backend.store_response_hrr(f"{doc_id}#engine_mapping", _json.dumps(mapping))  # type: ignore[attr-defined]
+                    # On-disk mapping for robustness across restarts
+                    mpath = Path(fs.state_dir) / "engine_map.json"  # type: ignore[attr-defined]
+                    db = {}
+                    if mpath.exists():
+                        try:
+                            db = _json.loads(mpath.read_text(encoding='utf-8'))
+                        except Exception:
+                            db = {}
+                    db[str(doc_id)] = mapping
+                    mpath.write_text(_json.dumps(db, indent=2), encoding='utf-8')
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+        # 3) Write .hwp according to router decision
+        try:
+            fmt = str(routing.get("format", "v4"))
+            if fmt == "micro":
+                # Ultra-compact micro header, no coefficients (K=0)
+                write_hwp_v4_micro(
+                    hwp_path,
+                    doc_id_hex=doc_id,
+                    original_size=len(data),
+                    dimension=0,
+                    layers_count=0 if routing.get("vault") else len(routing.get("layers", []) or []),
+                )
+            elif fmt == "microK8":
+                # Small semantic sketch with K=8 for tiny files
+                wave_data = fs.mem.get_real_wave_data(doc_id)
+                amps = wave_data.get("amplitudes", []) or []
+                phs = wave_data.get("phases", []) or []
+                dim = int(wave_data.get("dimension", 0) or len(amps))
+                layer = build_sparse_layer("k8", list(map(float, amps)), list(map(float, phs)), top_k=8)
+                from services.api.hwp_v4 import write_hwp_v4_micro_k8
+                write_hwp_v4_micro_k8(
+                    hwp_path,
+                    doc_id_hex=doc_id,
+                    original_size=len(data),
+                    dimension=dim,
+                    indices=layer.get("indices", []),
+                    amps_q=layer.get("amps_q", []),
+                    phs_q=layer.get("phs_q", []),
+                    amp_scale=float(layer.get("amp_scale", 1.0)),
+                )
+            else:
+                wave_data = fs.mem.get_real_wave_data(doc_id)
+                amps = wave_data.get("amplitudes", []) or []
+                phs = wave_data.get("phases", []) or []
+                dim = int(wave_data.get("dimension", 0) or len(amps))
+                # Use router-provided layers and K
+                weights = routing.get("layers", []) or [("knowledge", 1.0)]
+                top_k = int(routing.get("K", int(os.getenv("HOLO_TOPK", "32") or 32)))
+                layers = []
+                for lname, _w in weights:
+                    L = build_sparse_layer(lname, list(map(float, amps)), list(map(float, phs)), top_k=top_k)
+                    layers.append(L)
+                if not layers:
+                    layers.append(build_sparse_layer("knowledge", list(map(float, amps)), list(map(float, phs)), top_k=top_k))
+                write_hwp_v4(
+                    hwp_path,
+                    doc_id=doc_id,
+                    filename=file.filename,
+                    original_size=len(data),
+                    content_type=getattr(file, 'content_type', '') or '',
+                    dimension=dim,
+                    layers=layers,
+                )
+        except Exception as e:
+            # If wave computation fails, write a minimal header-only v4 for index visibility
+            try:
+                write_hwp_v4(
+                    hwp_path,
+                    doc_id=doc_id,
+                    filename=file.filename,
+                    original_size=len(data),
+                    content_type=getattr(file, 'content_type', '') or '',
+                    dimension=0,
+                    layers=[],
+                )
+            except Exception:
+                raise e
+        # 4) Optional fallback: write sidecar JSON with base64 if requested or 3D backend missing (disabled for Vault)
+        try:
+            fallback = os.getenv("HOLO_FALLBACK_BASE64", "false").lower() in ("1", "true", "yes")
+            no3d = not (hasattr(fs.mem, "backend3d") and fs.mem.backend3d is not None)  # type: ignore[attr-defined]
+            if (fallback or no3d) and not routing.get("vault"):
+                sidecar = hwp_path.with_suffix(hwp_path.suffix + ".json")
+                import base64 as _b64
+                payload = {
+                    "version": 3,
+                    "doc_id": doc_id,
+                    "original": {
+                        "filename": file.filename,
+                        "size": len(data),
+                        "sha256": digest,
+                        "content_type": getattr(file, 'content_type', '') or '',
+                    },
+                    "encoding": "base64",
+                    "data": _b64.b64encode(data).decode("ascii"),
+                }
+                sidecar.write_text(json.dumps(payload), encoding="utf-8")
+        except Exception:
+            pass
+
+        # 5) Index and telemetry
+        try:
+            fs.index.add_or_update(hwp_path, doc_id=doc_id, size=len(data))  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        try:
+            stored = hwp_path.stat().st_size if hwp_path.exists() else 0
+            telem = getattr(app.state, 'telemetry', None)
+            if telem is not None:
+                if routing.get("vault"):
+                    telem.track_compression(len(data), stored, "vault")
+                else:
+                    for lname, _w in (routing.get("layers") or [("knowledge", 1.0)]):
+                        telem.track_compression(len(data), stored, str(lname))
+        except Exception:
+            pass
     except Exception as e:
         logger.exception("/store failed")
         raise HTTPException(status_code=500, detail=str(e))
@@ -525,6 +766,7 @@ async def store(file: UploadFile = File(...), _: bool = Depends(require_api_key)
             fs.mem.backend.store_response_hrr(doc_id, b64)  # type: ignore[attr-defined]
         except Exception:
             pass
+    # Note: no original file is persisted; only .hwp pattern exists
     return {"doc_id": doc_id, "filename": file.filename}
 
 
@@ -537,9 +779,68 @@ def download(doc_id: str, _: bool = Depends(require_api_key)):
         if ent:
             p = _ensure_under_root(fs.root, Path(ent.path))
             if p.exists():
+                # If .hwp, reconstruct from holographic backend; support v3 JSON and v4 binary
+                if p.suffix.lower() == ".hwp":
+                    # Try legacy JSON (v3) for inline data and metadata
+                    try:
+                        import json as _json, base64 as _b64
+                        j = _json.loads(p.read_text(encoding="utf-8"))
+                        if j.get("data"):
+                            raw = _b64.b64decode((j.get("data") or "").encode("ascii"), validate=False)
+                            original = j.get("original", {})
+                            fname = original.get("filename") or f"{doc_id}.bin"
+                            content_type = original.get("content_type") or "application/octet-stream"
+                            try:
+                                getattr(app.state, 'telemetry', None) and app.state.telemetry.track_retrieval()
+                            except Exception:
+                                pass
+                            return Response(content=raw, media_type=content_type, headers={"Content-Disposition": f"attachment; filename={Path(fname).name}"})
+                        original = j.get("original", {})
+                        fname = original.get("filename") or f"{doc_id}.bin"
+                        ctype = original.get("content_type") or "application/octet-stream"
+                    except Exception:
+                        fname = Path(ent.path).stem
+                        ctype = "application/octet-stream"
+                    # Reconstruct from engine; if it fails, try v4 sidecar JSON fallback
+                    try:
+                        data = fs.mem.retrieve_bytes(doc_id)
+                        try:
+                            getattr(app.state, 'telemetry', None) and app.state.telemetry.track_retrieval()
+                        except Exception:
+                            pass
+                        return Response(content=data, media_type=ctype, headers={"Content-Disposition": f"attachment; filename={Path(fname).name}"})
+                    except Exception as _e:
+                        # Sidecar: .hwp.json with base64 content
+                        sidecar = p.with_suffix(p.suffix + ".json")
+                        if sidecar.exists():
+                            try:
+                                import json as _json, base64 as _b64
+                                sj = _json.loads(sidecar.read_text(encoding="utf-8"))
+                                if sj.get("data"):
+                                    raw = _b64.b64decode((sj.get("data") or "").encode("ascii"), validate=False)
+                                    original = sj.get("original", {})
+                                    fname2 = original.get("filename") or f"{doc_id}.bin"
+                                    ctype2 = original.get("content_type") or "application/octet-stream"
+                                    try:
+                                        getattr(app.state, 'telemetry', None) and app.state.telemetry.track_retrieval()
+                                    except Exception:
+                                        pass
+                                    return Response(content=raw, media_type=ctype2, headers={"Content-Disposition": f"attachment; filename={Path(fname2).name}"})
+                            except Exception:
+                                pass
+                        raise HTTPException(status_code=500, detail=f"Reconstruction failed: {_e}")
+                # Legacy managed files
+                try:
+                    getattr(app.state, 'telemetry', None) and app.state.telemetry.track_retrieval()
+                except Exception:
+                    pass
                 return FileResponse(str(p), media_type="application/octet-stream", filename=p.name)
-        # fallback to HM bytes
+        # Fallback to HM bytes (if present)
         data = fs.mem.retrieve_bytes(doc_id)
+        try:
+            getattr(app.state, 'telemetry', None) and app.state.telemetry.track_retrieval()
+        except Exception:
+            pass
         return Response(content=data, media_type="application/octet-stream")
     except Exception as e:
         logger.warning("/download failed for %s: %s", doc_id, e)
@@ -559,14 +860,118 @@ def content(path: str | None = None, doc_id: str | None = None, _: bool = Depend
         p = _ensure_under_root(fs.root, Path(ent.path))
     else:
         raise HTTPException(status_code=400, detail="Provide 'path' or 'doc_id'")
+
     if not p.exists():
         raise HTTPException(status_code=404, detail="Not found")
+
+    # Check if this is a .hwp holographic file that needs reconstruction
+    if p.suffix == '.hwp':
+        filename = p.stem
+        content_type = ''
+        # Try legacy JSON (v3) first
+        try:
+            import json, base64, mimetypes
+            j = json.loads(p.read_text(encoding='utf-8'))
+            original = j.get('original', {})
+            filename = original.get('filename', filename)
+            content_type = original.get('content_type', '')
+            enc = j.get('data')
+            if enc:
+                raw = base64.b64decode(enc)
+                if not content_type:
+                    content_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+                try:
+                    getattr(app.state, 'telemetry', None) and app.state.telemetry.track_retrieval()
+                except Exception:
+                    pass
+                return Response(content=raw, media_type=content_type, headers={"Content-Disposition": f"attachment; filename={Path(filename).name}"})
+            # else fall through to engine reconstruction
+        except Exception:
+            # try sidecar .hwp.json fallback
+            sidecar = p.with_suffix(p.suffix + ".json")
+            if sidecar.exists():
+                try:
+                    import json, base64, mimetypes
+                    sj = json.loads(sidecar.read_text(encoding='utf-8'))
+                    original = sj.get('original', {})
+                    filename = original.get('filename', filename)
+                    content_type = original.get('content_type', '')
+                    enc = sj.get('data')
+                    if enc:
+                        raw = base64.b64decode(enc)
+                        if not content_type:
+                            content_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+                        try:
+                            getattr(app.state, 'telemetry', None) and app.state.telemetry.track_retrieval()
+                        except Exception:
+                            pass
+                        return Response(content=raw, media_type=content_type, headers={"Content-Disposition": f"attachment; filename={Path(filename).name}"})
+                except Exception:
+                    pass
+        # Reconstruct via engine using index-resolved doc_id
+        entries = fs.index.all()  # type: ignore[attr-defined]
+        ent = next((e for e in entries if Path(e.path) == p), None)
+        if not ent:
+            raise HTTPException(status_code=404, detail="Unknown holographic file")
+        try:
+            raw = fs.mem.retrieve_bytes(ent.doc_id)
+        except Exception as e:
+            # last fallback: sidecar
+            sidecar = p.with_suffix(p.suffix + ".json")
+            if sidecar.exists():
+                try:
+                    import json, base64
+                    sj = json.loads(sidecar.read_text(encoding='utf-8'))
+                    enc = sj.get('data')
+                    if enc:
+                        raw = base64.b64decode(enc)
+                    else:
+                        raise e
+                except Exception:
+                    raise HTTPException(status_code=500, detail=f"Reconstruction failed: {e}")
+            else:
+                raise HTTPException(status_code=500, detail=f"Reconstruction failed: {e}")
+        if not content_type:
+            import mimetypes
+            content_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+        try:
+            getattr(app.state, 'telemetry', None) and app.state.telemetry.track_retrieval()
+        except Exception:
+            pass
+        return Response(content=raw, media_type=content_type, headers={"Content-Disposition": f"attachment; filename={Path(filename).name}"})
+
+    # Default behavior for non-.hwp files
     return FileResponse(str(p), filename=p.name)
 
 
 @app.get("/metrics")
 def metrics():
     return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+@app.get("/telemetry")
+def telemetry(_: bool = Depends(require_api_key)):
+    telem = getattr(app.state, 'telemetry', None)
+    if telem is None:
+        raise HTTPException(status_code=503, detail="Telemetry not initialized")
+    snap = telem.snapshot()
+    # Suggested rebalancing using default importance and budget
+    default_importance = {
+        "identity": 0.8,
+        "knowledge": 1.0,
+        "experience": 0.9,
+        "preference": 0.7,
+        "context": 0.8,
+        "wisdom": 1.0,
+        "vault": 0.1,
+    }
+    # Default budget from env or heuristic (sum of current dimension map if known)
+    total_budget = int(os.getenv("HOLO_DIM_BUDGET", "688") or 688)  # sum of initial dims
+    suggested = telem.suggest_rebalancing(default_importance, total_budget, floors=None)
+    return {
+        "telemetry": snap,
+        "suggested_dimensions": suggested,
+    }
 
 
 # Administrative shutdown (dev only; guarded by env flag and API key if set)
@@ -620,6 +1025,37 @@ def delete_file(doc_id: str, _: bool = Depends(require_api_key)):
                 pass
     except Exception:
         pass
+
+    # Remove .hwp/.wave files from patterns directory
+    try:
+        patterns_dir = Path(os.getenv("HLOG_DATA_DIR", str(Path(fs.root) / "holographic_memory"))) / "patterns"
+        if patterns_dir.exists():
+            for ext in ['.hwp', '.wave']:
+                for hwp_file in patterns_dir.glob(f"*{ext}"):
+                    try:
+                        if hwp_file.exists():
+                            import json
+                            try:
+                                content = json.loads(hwp_file.read_text())
+                                # Check if this file contains our doc_id
+                                if (content.get("doc_id") == doc_id or
+                                    str(hwp_file).find(doc_id[:8]) != -1):  # partial match for filename
+                                    hwp_file.unlink()
+                                    print(f"Removed holographic file: {hwp_file}")
+                                    removed += 1
+                            except Exception:
+                                # If we can't read the JSON, try filename-based matching
+                                if doc_id[:8] in hwp_file.name:
+                                    hwp_file.unlink()
+                                    print(f"Removed holographic file (filename match): {hwp_file}")
+                                    removed += 1
+                    except Exception as e:
+                        print(f"Error removing file {hwp_file}: {e}")
+                        pass
+    except Exception as e:
+        print(f"Error in patterns cleanup: {e}")
+        pass
+
     return {"status": "deleted", "doc_id": doc_id, "removed": removed}
 
 
@@ -635,7 +1071,20 @@ def zip_selected(payload: ZipPayload, _: bool = Depends(require_api_key)):
                 name = Path(ent.path).name if ent else f"{did}.bin"
                 data: bytes
                 if ent and Path(ent.path).exists():
-                    data = Path(ent.path).read_bytes()
+                    p = Path(ent.path)
+                    if p.suffix.lower() == ".hwp":
+                        # Reconstruct original file from .hwp (legacy or wave-only)
+                        import json as _json, base64 as _b64
+                        j = _json.loads(p.read_text(encoding="utf-8"))
+                        original = j.get("original", {})
+                        name = original.get("filename") or name
+                        if j.get("data"):
+                            data = _b64.b64decode((j.get("data") or "").encode("ascii"), validate=False)
+                        else:
+                            # Wave-only: recall via engine using doc_id
+                            data = fs.mem.retrieve_bytes(did)
+                    else:
+                        data = p.read_bytes()
                 else:
                     data = fs.mem.retrieve_bytes(did)
                 zf.writestr(name, data)
@@ -678,3 +1127,43 @@ def wave_pattern(doc_id: str, n: int = 256, _: bool = Depends(require_api_key)):
     mmax = max(mags) if mags else 1.0
     mags = [m / mmax for m in mags]
     return {"doc_id": doc_id, "n": N, "magnitudes": mags}
+
+
+@app.get("/wave/{doc_id}/real")
+def real_wave_pattern(doc_id: str, _: bool = Depends(require_api_key)):
+    """Return authentic holographic wave data (amplitude + phase) from the engine."""
+    fs = get_fs()
+    try:
+        wd = fs.mem.get_real_wave_data(doc_id)  # type: ignore[attr-defined]
+        return {
+            "doc_id": doc_id,
+            "magnitudes": wd.get("amplitudes", []),
+            "phases": wd.get("phases", []),
+            "dimension": wd.get("dimension", 0),
+            "source": wd.get("source", "holographic_engine"),
+            "authentic": True,
+            "engine_id": wd.get("engine_id", "")
+        }
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Real holographic data not found: {e}")
+
+
+@app.post("/wave/collective/real")
+def real_collective_interference(payload: dict, _: bool = Depends(require_api_key)):
+    fs = get_fs()
+    doc_ids = payload.get("doc_ids", [])
+    if not isinstance(doc_ids, list) or not doc_ids:
+        raise HTTPException(status_code=400, detail="No doc_ids provided")
+    try:
+        wd = fs.mem.get_collective_interference(doc_ids)  # type: ignore[attr-defined]
+        return {
+            "doc_ids": doc_ids,
+            "magnitudes": wd.get("amplitudes", []),
+            "phases": wd.get("phases", []),
+            "dimension": wd.get("dimension", 0),
+            "source": wd.get("source", "collective_interference"),
+            "authentic": True,
+            "engine_ids": wd.get("engine_ids", [])
+        }
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Collective interference failed: {e}")

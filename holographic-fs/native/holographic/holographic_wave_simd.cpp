@@ -159,7 +159,7 @@ private:
         std::vector<float> p = phase_field;
         std::ostringstream mj;
         mj << "{\"type\":\"snapshot\",\"dimension\":" << dimension << ",\"backend\":\"wave_simd\"}";
-        write_wave_file_amp_phase(snapshots_dir / (std::string("snapshot_") + timestamp_str() + ".wave"), a, p, mj.str());
+        write_wave_file_amp_phase(snapshots_dir / (std::string("snapshot_") + timestamp_str() + ".hwp"), a, p, mj.str());
     }
 
     void write_current_locked() {
@@ -188,7 +188,7 @@ public:
         else base_dir = std::filesystem::path("data") / "holographic_memory";
         patterns_dir = base_dir / "patterns";
         snapshots_dir = base_dir / "snapshots";
-        current_wave_path = base_dir / "current.wave";
+        current_wave_path = base_dir / "current.hwp";
         ensure_dirs();
     }
 
@@ -440,7 +440,7 @@ public:
             if (!orig.empty()) {
                 std::ostringstream mj;
                 mj << "{\"type\":\"pattern\",\"filename\":\"" << sanitize(orig) << "\",\"dimension\":" << dimension << ",\"backend\":\"wave_simd\"}";
-                write_wave_file_amp_phase(patterns_dir / (sanitize(orig) + ".wave"), pattern.amplitude, pattern.phase, mj.str());
+                write_wave_file_amp_phase(patterns_dir / (sanitize(orig) + ".hwp"), pattern.amplitude, pattern.phase, mj.str());
             }
 
             // Superpose onto field with SIMD

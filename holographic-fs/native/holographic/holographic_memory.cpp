@@ -25,6 +25,7 @@
 #include <sstream>
 #include <iomanip>
 #include <random>
+#include <mutex>
 #ifdef __APPLE__
 #include <Accelerate/Accelerate.h>
 // Complex dot product function declaration
@@ -52,6 +53,8 @@ namespace py = pybind11;
 
 class HolographicMemory {
 private:
+    // Thread-safety for field/matrix access
+    mutable std::mutex field_mutex;
     // Core holographic field - aligned for SIMD
     alignas(32) std::vector<std::complex<double>> field;
     alignas(32) std::vector<std::complex<double>> workspace;
@@ -324,7 +327,7 @@ private:
         std::ostringstream mj;
         mj << "{\"type\":\"snapshot\",\"dimension\":" << dimension
            << ",\"count\":" << memory_count << ",\"backend\":\"native\"}";
-        std::filesystem::path snap = snapshots_dir / (std::string("snapshot_") + timestamp_str() + ".wave");
+        std::filesystem::path snap = snapshots_dir / (std::string("snapshot_") + timestamp_str() + ".hwp");
         write_wave_file_complex(snap, copy, mj.str());
     }
 
@@ -403,7 +406,7 @@ public:
         else base_dir = std::filesystem::path("data") / "holographic_memory";
         patterns_dir = base_dir / "patterns";
         snapshots_dir = base_dir / "snapshots";
-        current_wave_path = base_dir / "current.wave";
+        current_wave_path = base_dir / "current.hwp";
         ensure_dirs();
         // Initialize HRR field to zeros
         hrr_field.assign(dim, std::complex<double>(0.0, 0.0));
@@ -616,7 +619,7 @@ public:
         // Persist individual pattern if filename tag present
         std::string orig_name = extract_filename_tag(text);
         if (!orig_name.empty()) {
-            std::filesystem::path outp = patterns_dir / (sanitize(orig_name) + ".wave");
+            std::filesystem::path outp = patterns_dir / (sanitize(orig_name) + ".hwp");
             std::ostringstream mj;
             mj << "{\"type\":\"pattern\",\"filename\":\"" << sanitize(orig_name) << "\",";
             mj << "\"dimension\":" << dimension << ",\"backend\":\"native\"}";
@@ -801,7 +804,7 @@ public:
         uint64_t next_seq = session_seq[session] + 1; // predict id
         {
             std::ostringstream fn;
-            fn << "session_" << sanitize(session) << "_seq_" << next_seq << ".wave";
+            fn << "session_" << sanitize(session) << "_seq_" << next_seq << ".hwp";
             std::ostringstream mj;
             mj << "{\"type\":\"pattern\",\"session\":\"" << sanitize(session) << "\",\"role\":\"" << role
                << "\",\"seq\":" << next_seq << ",\"dimension\":" << dimension << ",\"backend\":\"native\"}";
@@ -1228,6 +1231,54 @@ public:
         // Update current field to reflect cleared state
         try { write_current_locked(); } catch (...) {}
     }
+
+    // -------- Real wave data getters (exposed via pybind) --------
+public:
+    py::array_t<std::complex<double>> get_memory_vector(const std::string& memory_id) {
+        std::lock_guard<std::mutex> lock(field_mutex);
+        auto it = memory_index.find(memory_id);
+        if (it == memory_index.end()) {
+            throw std::runtime_error("Memory ID not found: " + memory_id);
+        }
+        size_t idx = it->second;
+        if (idx >= memories.size()) {
+            throw std::runtime_error("Invalid memory index");
+        }
+        std::complex<double>* ptr = &mem_matrix[idx * dimension];
+        // Return 1D numpy array referencing internal buffer row (no copy)
+        return py::array_t<std::complex<double>>(
+            { (py::ssize_t)dimension },                // shape
+            { (py::ssize_t)sizeof(std::complex<double>) }, // strides
+            ptr,
+            py::cast(this)
+        );
+    }
+
+    py::array_t<std::complex<double>> get_collective_vector(const std::vector<std::string>& memory_ids) {
+        std::lock_guard<std::mutex> lock(field_mutex);
+        py::array_t<std::complex<double>> out((py::ssize_t)dimension);
+        auto buf = out.request();
+        auto* dst = static_cast<std::complex<double>*>(buf.ptr);
+        std::fill(dst, dst + dimension, std::complex<double>(0.0, 0.0));
+        for (const auto& id : memory_ids) {
+            auto it = memory_index.find(id);
+            if (it == memory_index.end()) continue;
+            size_t idx = it->second;
+            const std::complex<double>* row = &mem_matrix[idx * dimension];
+            for (size_t i = 0; i < dimension; ++i) dst[i] += row[i];
+        }
+        return out;
+    }
+
+    py::array_t<std::complex<double>> get_collective_field() {
+        std::lock_guard<std::mutex> lock(field_mutex);
+        return py::array_t<std::complex<double>>(
+            { (py::ssize_t)dimension },
+            { (py::ssize_t)sizeof(std::complex<double>) },
+            field.data(),
+            py::cast(this)
+        );
+    }
 };
 
 // Python bindings
@@ -1291,6 +1342,24 @@ PYBIND11_MODULE(holographic_cpp, m) {
              "Total HRR memory usage in bytes (field + dict)")
         .def("get_hrr_stats", &HolographicMemory::get_hrr_stats,
              "HRR field stats: dimension, field size MB, unique responses, total memory MB")
+        // --- Real wave getters (authentic engine data) ---
+        .def("get_memory_vector", &HolographicMemory::get_memory_vector,
+             py::arg("memory_id"), "Get complex frequency vector for one memory (authentic)")
+        .def("get_collective_vector", &HolographicMemory::get_collective_vector,
+             py::arg("memory_ids"), "Get combined complex vector for given memory ids")
+        .def("get_collective_field", &HolographicMemory::get_collective_field,
+             "Get the full superposed field vector")
         .def_property_readonly("memory_count",
              [](const HolographicMemory& self) { return self.get_stats()["memory_count"]; });
+
+    // Module-level helpers (alternate access)
+    m.def("hm_get_memory_vector", [](HolographicMemory& self, const std::string& memory_id){
+        return self.get_memory_vector(memory_id);
+    }, py::arg("hm"), py::arg("memory_id"));
+    m.def("hm_get_collective_vector", [](HolographicMemory& self, const std::vector<std::string>& ids){
+        return self.get_collective_vector(ids);
+    }, py::arg("hm"), py::arg("memory_ids"));
+    m.def("hm_get_collective_field", [](HolographicMemory& self){
+        return self.get_collective_field();
+    }, py::arg("hm"));
 }

@@ -4,7 +4,7 @@
  * - 3D complex field ψ(x,y,z) stored as contiguous row‑major array (N×N×N)
  * - Disjoint spatial placement for exact round‑trip of input bytes
  * - 3D FFT (FFTW) used only for interference visualization (|FFTN(ψ)|^2)
- * - Persistence compatible with existing .wave scheme; adds shape/dtype meta
+ * - Persistence compatible with existing .hwp scheme; adds shape/dtype meta
  *
  * Build: via existing setup.py/CMake in this directory
  */
@@ -120,7 +120,7 @@ private:
         std::ostringstream mj;
         mj << "{\"type\":\"snapshot\",\"backend\":\"native_3d\",\"shape\":[" << N << "," << N << "," << N
            << "],\"dtype\":\"complex128\",\"endian\":\"little\"}";
-        auto snap = snapshots_dir / (std::string("snapshot_") + timestamp_str() + ".wave");
+        auto snap = snapshots_dir / (std::string("snapshot_") + timestamp_str() + ".hwp");
         write_wave_file(snap, copy, mj.str());
     }
 
@@ -129,7 +129,7 @@ private:
         std::ostringstream mj;
         mj << "{\"type\":\"pattern\",\"backend\":\"native_3d\",\"shape\":[" << amps.size() << "]"
               ",\"dtype\":\"complex128\",\"endian\":\"little\"}"; // 1D slice pattern
-        auto outp = patterns_dir / (name + ".wave");
+        auto outp = patterns_dir / (name + ".hwp");
         write_wave_file(outp, amps, mj.str());
     }
 
@@ -200,10 +200,10 @@ public:
         else base_dir = std::filesystem::path("data") / "holographic_memory";
         patterns_dir = base_dir / "patterns";
         snapshots_dir = base_dir / "snapshots";
-        current_wave_path = base_dir / "current.wave";
+        current_wave_path = base_dir / "current.hwp";
         meta_path = base_dir / "metadata_3d.json";
         ensure_dirs();
-        // Attempt to load field from current.wave
+        // Attempt to load field from current.hwp
         try {
             if (std::filesystem::exists(current_wave_path)) {
                 std::ifstream ifs(current_wave_path, std::ios::binary);

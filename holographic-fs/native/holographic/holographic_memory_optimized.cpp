@@ -198,7 +198,7 @@ private:
         }
         std::ostringstream mj;
         mj << "{\"type\":\"snapshot\",\"dimension\":" << dimension << ",\"backend\":\"optimized\"}";
-        write_wave_file_complex(snapshots_dir / (std::string("snapshot_") + timestamp_str() + ".wave"), copy, mj.str());
+        write_wave_file_complex(snapshots_dir / (std::string("snapshot_") + timestamp_str() + ".hwp"), copy, mj.str());
     }
 
     void write_current_locked() {
@@ -234,7 +234,7 @@ public:
         else base_dir = std::filesystem::path("data") / "holographic_memory";
         patterns_dir = base_dir / "patterns";
         snapshots_dir = base_dir / "snapshots";
-        current_wave_path = base_dir / "current.wave";
+        current_wave_path = base_dir / "current.hwp";
         ensure_dirs();
     }
 
@@ -364,7 +364,7 @@ public:
         if (!orig_name.empty()) {
             std::ostringstream mj;
             mj << "{\"type\":\"pattern\",\"filename\":\"" << sanitize(orig_name) << "\",\"dimension\":" << dimension << ",\"backend\":\"optimized\"}";
-            write_wave_file_complex(patterns_dir / (sanitize(orig_name) + ".wave"), workspace.buffer, mj.str());
+            write_wave_file_complex(patterns_dir / (sanitize(orig_name) + ".hwp"), workspace.buffer, mj.str());
         }
 
         // Update current and snapshot
@@ -466,7 +466,7 @@ public:
             if (!orig.empty()) {
                 std::ostringstream mj;
                 mj << "{\"type\":\"pattern\",\"filename\":\"" << sanitize(orig) << "\",\"dimension\":" << dimension << ",\"backend\":\"optimized\"}";
-                write_wave_file_complex(patterns_dir / (sanitize(orig) + ".wave"), all_frequencies[i], mj.str());
+                write_wave_file_complex(patterns_dir / (sanitize(orig) + ".hwp"), all_frequencies[i], mj.str());
             }
         }
 

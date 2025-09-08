@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import requests
 
 from .utils import upload_file, list_files
 
@@ -20,11 +21,19 @@ def test_file_upload_flow(base_url: str, tmp_path: Path):
     assert doc1 != doc2, "doc_ids must be unique for different content"
 
     rows = list_files(base_url)
-    paths = [r.get("path") for r in rows]
     ids = [r.get("doc_id") for r in rows]
-    assert any(name1 in p for p in paths), "Uploaded file a.txt not listed"
-    assert any(name2 in p for p in paths), "Uploaded file b.txt not listed"
-    assert doc1 in ids and doc2 in ids
+
+    # Check that doc_ids are present (files are stored as .hwp holographic patterns)
+    assert doc1 in ids, f"doc_id {doc1} not found in list"
+    assert doc2 in ids, f"doc_id {doc2} not found in list"
+
+    # Verify holographic reconstruction works for both files
+    for doc_id in [doc1, doc2]:
+        response = requests.get(f"{base_url}/content", params={"doc_id": doc_id})
+        assert response.status_code == 200, f"Failed to reconstruct file {doc_id}"
+        # For .hwp files, content should be reconstructed as text/plain (may include charset)
+        content_type = response.headers.get("content-type", "")
+        assert content_type.startswith("text/plain"), f"Unexpected content-type for {doc_id}: {content_type}"
 
 
 def test_concurrent_uploads(base_url: str, tmp_path: Path):
