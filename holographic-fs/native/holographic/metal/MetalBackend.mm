@@ -4,6 +4,7 @@
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #import <MetalPerformanceShaders/MetalPerformanceShaders.h>
+#import <MetalPerformanceShadersGraph/MetalPerformanceShadersGraph.h>
 #include <cstring>
 
 namespace {
@@ -247,31 +248,74 @@ std::vector<std::vector<float>> MetalBackend::batch_encode_fft(
     if (!available() || batch_data.empty()) return {};
     uint32_t batch_size = (uint32_t)batch_data.size();
     uint32_t data_length = (uint32_t)batch_data[0].size();
-    std::vector<float> flat_in; flat_in.reserve((size_t)batch_size * data_length);
-    for (auto &v : batch_data) flat_in.insert(flat_in.end(), v.begin(), v.end());
+
+    // Prepare padded input [batch_size, pattern_dimension]
+    std::vector<float> flat_in((size_t)batch_size * pattern_dimension, 0.0f);
+    for (uint32_t b = 0; b < batch_size; ++b) {
+        const auto &src = batch_data[b];
+        uint32_t copyN = std::min(pattern_dimension, (uint32_t)src.size());
+        std::memcpy(&flat_in[(size_t)b * pattern_dimension], src.data(), copyN * sizeof(float));
+    }
     std::vector<float> flat_out((size_t)batch_size * pattern_dimension, 0.0f);
 
-    id<MTLBuffer> bin = [device_ newBufferWithBytes:flat_in.data() length:flat_in.size()*sizeof(float) options:MTLResourceStorageModeManaged];
-    id<MTLBuffer> bout = [device_ newBufferWithBytes:flat_out.data() length:flat_out.size()*sizeof(float) options:MTLResourceStorageModeManaged];
-    id<MTLBuffer> bbs = [device_ newBufferWithBytes:&batch_size length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
-    id<MTLBuffer> bdl = [device_ newBufferWithBytes:&data_length length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
-    id<MTLBuffer> bpd = [device_ newBufferWithBytes:&pattern_dimension length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+    // Try MPSGraph path when available (macOS 14+)
+    bool usedGraph = false;
+    if (NSClassFromString(@"MPSGraph") != nil) {
+        @autoreleasepool {
+            MPSGraph *graph = [[MPSGraph alloc] init];
+            MPSShape *shape = (MPSShape*)@[@(batch_size), @(pattern_dimension)];
+            MPSGraphTensor *input = [graph placeholderWithShape:shape dataType:MPSDataTypeFloat32 name:nil];
+            MPSGraphFFTDescriptor *fftDesc = [MPSGraphFFTDescriptor descriptor];
+            fftDesc.inverse = NO;
+            fftDesc.scalingMode = MPSGraphFFTScalingModeUnitary;
+            NSArray<NSNumber*> *axes = @[ @1 ];
+            MPSGraphTensor *fftT = [graph fastFourierTransformWithTensor:input axes:axes descriptor:fftDesc name:nil];
+            // magnitude = sqrt(re^2 + im^2)
+            MPSGraphTensor *re = [graph realPartOfTensor:fftT name:nil];
+            MPSGraphTensor *im = [graph imaginaryPartOfTensor:fftT name:nil];
+            MPSGraphTensor *re2 = [graph squareWithTensor:re name:nil];
+            MPSGraphTensor *im2 = [graph squareWithTensor:im name:nil];
+            MPSGraphTensor *sum = [graph additionWithPrimaryTensor:re2 secondaryTensor:im2 name:nil];
+            MPSGraphTensor *mag = [graph squareRootWithTensor:sum name:nil];
 
-    id<MTLCommandBuffer> cmd = [queue_ commandBuffer];
-    id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
-    [enc setComputePipelineState:pso_batch_store_fft_];
-    [enc setBuffer:bin offset:0 atIndex:0];
-    [enc setBuffer:bout offset:0 atIndex:1];
-    [enc setBuffer:bbs offset:0 atIndex:2];
-    [enc setBuffer:bdl offset:0 atIndex:3];
-    [enc setBuffer:bpd offset:0 atIndex:4];
-    NSUInteger tgX = 256;
-    NSUInteger gridX = ((batch_size + tgX - 1) / tgX) * tgX;
-    [enc dispatchThreads:MTLSizeMake(gridX, 1, 1) threadsPerThreadgroup:MTLSizeMake(tgX, 1, 1)];
-    [enc endEncoding];
-    [cmd commit];
-    [cmd waitUntilCompleted];
-    memcpy(flat_out.data(), [bout contents], flat_out.size()*sizeof(float));
+            id<MTLBuffer> bin = [device_ newBufferWithBytes:flat_in.data() length:flat_in.size()*sizeof(float) options:MTLResourceStorageModeManaged];
+            id<MTLBuffer> bout = [device_ newBufferWithBytes:flat_out.data() length:flat_out.size()*sizeof(float) options:MTLResourceStorageModeManaged];
+            MPSGraphTensorData *inData = [[MPSGraphTensorData alloc] initWithMTLBuffer:bin shape:shape dataType:MPSDataTypeFloat32];
+            MPSGraphTensorData *outData = [[MPSGraphTensorData alloc] initWithMTLBuffer:bout shape:shape dataType:MPSDataTypeFloat32];
+            NSDictionary *feeds = @{ input : inData };
+            NSDictionary *results = @{ mag : outData };
+            // Execute on command queue (blocking run)
+            [graph runWithMTLCommandQueue:queue_ feeds:(MPSGraphTensorDataDictionary*)feeds targetOperations:nil resultsDictionary:(MPSGraphTensorDataDictionary*)results];
+            // Copy back
+            std::memcpy(flat_out.data(), [bout contents], flat_out.size()*sizeof(float));
+            usedGraph = true;
+        }
+    }
+
+    if (!usedGraph) {
+        // Fallback to optimized compute kernel path
+        id<MTLBuffer> bin = [device_ newBufferWithBytes:flat_in.data() length:flat_in.size()*sizeof(float) options:MTLResourceStorageModeManaged];
+        id<MTLBuffer> bout = [device_ newBufferWithBytes:flat_out.data() length:flat_out.size()*sizeof(float) options:MTLResourceStorageModeManaged];
+        id<MTLBuffer> bbs = [device_ newBufferWithBytes:&batch_size length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+        id<MTLBuffer> bdl = [device_ newBufferWithBytes:&data_length length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+        id<MTLBuffer> bpd = [device_ newBufferWithBytes:&pattern_dimension length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+
+        id<MTLCommandBuffer> cmd = [queue_ commandBuffer];
+        id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
+        [enc setComputePipelineState:pso_batch_store_fft_];
+        [enc setBuffer:bin offset:0 atIndex:0];
+        [enc setBuffer:bout offset:0 atIndex:1];
+        [enc setBuffer:bbs offset:0 atIndex:2];
+        [enc setBuffer:bdl offset:0 atIndex:3];
+        [enc setBuffer:bpd offset:0 atIndex:4];
+        NSUInteger tgX = 256;
+        NSUInteger gridX = ((batch_size + tgX - 1) / tgX) * tgX;
+        [enc dispatchThreads:MTLSizeMake(gridX, 1, 1) threadsPerThreadgroup:MTLSizeMake(tgX, 1, 1)];
+        [enc endEncoding];
+        [cmd commit];
+        [cmd waitUntilCompleted];
+        memcpy(flat_out.data(), [bout contents], flat_out.size()*sizeof(float));
+    }
 
     // Pack 2D result
     std::vector<std::vector<float>> out; out.reserve(batch_size);
