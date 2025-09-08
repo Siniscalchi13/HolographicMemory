@@ -82,6 +82,13 @@ app.add_middleware(
     **cors_kwargs,
 )
 
+# Simple API key guard (placed early for route dependency resolution)
+def require_api_key(x_api_key: str | None = Header(default=None)):
+    expected = os.getenv("HOLO_API_KEY", "")
+    if expected and x_api_key != expected:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return True
+
 # Initialize singleton on startup
 @app.on_event("startup")
 async def _startup():
@@ -111,7 +118,8 @@ def web_index():
 @app.get("/dashboard")
 def dashboard(_: bool = Depends(require_api_key)):
     # Minimal HTML dashboard with inline JS fetching /telemetry
-    html = f"""
+    api_key = os.getenv('HOLO_API_KEY','')
+    html = """
 <!DOCTYPE html>
 <html>
   <head>
@@ -143,21 +151,21 @@ def dashboard(_: bool = Depends(require_api_key)):
       </div>
     </div>
     <script>
-      async function refresh() {{
-        const resp = await fetch('/telemetry', {{ headers: {{ 'x-api-key': '{os.getenv('HOLO_API_KEY','')}' }} }});
-        if (!resp.ok) {{ document.getElementById('overall').innerText = 'Error loading telemetry'; return; }}
+      async function refresh() {
+        const resp = await fetch('/telemetry', { headers: { 'x-api-key': '""" + api_key + """' } });
+        if (!resp.ok) { document.getElementById('overall').innerText = 'Error loading telemetry'; return; }
         const data = await resp.json();
-        const t = data.telemetry || {{}};
-        const o = t.overall || {{}};
+        const t = data.telemetry || {};
+        const o = t.overall || {};
         document.getElementById('overall').innerHTML = `
           <b>Original bytes:</b> ${o.bytes_original||0}<br/>
           <b>Stored bytes:</b> ${o.bytes_stored||0}<br/>
           <b>Compression×:</b> ${o.compression_x||'n/a'}<br/>
           <b>Retrievals:</b> ${o.retrievals||0}<br/>
         `;
-        document.getElementById('dims').innerText = JSON.stringify(data.suggested_dimensions||{{}}, null, 2);
-        document.getElementById('layers').innerText = JSON.stringify(t.per_layer||{{}}, null, 2);
-      }}
+        document.getElementById('dims').innerText = JSON.stringify(data.suggested_dimensions||{}, null, 2);
+        document.getElementById('layers').innerText = JSON.stringify(t.per_layer||{}, null, 2);
+      }
       refresh();
       setInterval(refresh, 4000);
     </script>
@@ -180,13 +188,6 @@ async def log_requests(request: Request, call_next):  # type: ignore[override]
     except Exception:
         logger.exception("request handling error: %s %s", request.method, request.url.path)
         raise
-
-# Simple API key guard
-def require_api_key(x_api_key: str | None = Header(default=None)):
-    expected = os.getenv("HOLO_API_KEY", "")
-    if expected and x_api_key != expected:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    return True
 
 # Metrics
 counter_store = Counter("holo_store_requests_total", "Store requests")

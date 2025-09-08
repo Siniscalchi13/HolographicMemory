@@ -10,12 +10,8 @@ __author__ = "SmartHaus Group"
 __email__ = "dev@smarthaus.ai"
 
 from .memory import HolographicMemory
-from .vault import SecureVault
-from .router import SemanticRouter
 
 __all__ = [
     "HolographicMemory",
-    "SecureVault", 
-    "SemanticRouter",
     "__version__",
 ]
