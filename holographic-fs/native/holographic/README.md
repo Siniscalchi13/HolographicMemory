@@ -1,10 +1,6 @@
-# + 🌊 holographic
+# Holographic Memory C++ Modules
 
-## =============
-
-# PURPOSE & OVERVIEW
-
-## =============
+## Purpose & Overview
 
 **Purpose**: C++ holographic memory modules providing high‑throughput wave‑encoded storage and retrieval with three-tier wave persistence.
 **Domain**: Wave‑based encoding, SIMD vectorization (NEON/Accelerate), FFT‑assisted operations for pattern superposition and recall, and automatic wave persistence.
@@ -13,11 +9,7 @@
 **Integration**: Used by orchestrator as `holographic_wave_simd` (and variants) for stats/memory functions with automatic wave persistence.
 **Wave Persistence**: Three-tier storage system with individual patterns, current field, and timestamped snapshots.
 
-## =============
-
-# DIRECTORY STRUCTURE
-
-## =============
+## Directory Structure
 
 ```
 holographic/
@@ -47,11 +39,7 @@ holographic/
     └── temp.macosx-*/holographic_memory.o
 ```
 
-## =============
-
-# WAVE PERSISTENCE IMPLEMENTATION
-
-## =============
+## Wave Persistence Implementation
 
 ### 🌊 Three-Tier Wave Storage System
 
@@ -101,11 +89,7 @@ Each `.hwp` file contains:
 - **Efficient Storage**: Wave patterns are 90-98% smaller than original files
 - **Fast Access**: Binary format optimized for speed
 
-## =============
-
-# SUBDIRECTORY DETAILS
-
-## =============
+## Subdirectory Details
 
 ### 📁 build/
 
@@ -114,11 +98,7 @@ Each `.hwp` file contains:
 **Integration**: Not imported directly; `.so` modules imported by Python.
 **Status**: Working.
 
-## =============
-
-# FILE DETAILS
-
-## =============
+## File Details
 
 ### 📄 setup.py (3.5 KB)
 
@@ -150,11 +130,7 @@ Each `.hwp` file contains:
 **Function**: Runtime acceleration and wave‑based memory.
 **Status**: Working.
 
-## =============
-
-# ARCHITECTURE & INTEGRATION
-
-## =============
+## Architecture & Integration
 
 **How This Directory Works**: Provides multiple C++ backends (baseline, fast, SIMD) to meet different performance envelopes and platform constraints.
 **Data Flow**: Text → wave pattern encoding → superposition storage → similarity/phase‑aware recall.
@@ -162,11 +138,7 @@ Each `.hwp` file contains:
 **Performance Characteristics**: SIMD‑aligned buffers; vectorized wave generation; optional FFT acceleration; designed for O(1) recall on cached patterns.
 **Integration Points**: `aicp-orchestrator/quantum_orchestrator` expects `holographic_wave_simd` for stats and memory count.
 
-## =============
-
-# DEVELOPMENT & DEPLOYMENT
-
-## =============
+## Development & Deployment
 
 **Build Process**:
 
@@ -195,21 +167,13 @@ Each `.hwp` file contains:
 - OpenMP errors (Linux): `libgomp1` must be present at runtime
 - Apple Silicon: avoid AVX flags; rely on Accelerate/NEON; rebuild when Python minor version changes
 
-## =============
-
-# Cross-Platform Build Detection
-
-## =============
+## Cross-Platform Build Detection
 
 - `build_detect.py` centralizes platform detection and flags
 - Linux: `-fopenmp`, `-march=native` (+ `-mavx2 -mfma` on x86_64)
 - macOS: Accelerate framework, optional OpenMP on Intel Macs
 
-## =============
-
-# Wave Persistence (Three‑Tier)
-
-## =============
+## Wave Persistence (Three-Tier)
 
 - Patterns: `{HLOG_DATA_DIR}/patterns/{original_filename}.hwp` saved during store (when first line begins with `filename:`)
 - Current: `{HLOG_DATA_DIR}/current.hwp` updated after each store/batch

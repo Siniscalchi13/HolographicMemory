@@ -1,4 +1,4 @@
-HolographicMemory (Standalone)
+# HolographicMemory (Standalone)
 
 This repository is the standalone version of TAI's holographic memory: C++ engine with a thin Python orchestration layer (CLI + optional API). It mirrors the architecture and math from TAI without re‑inventing algorithms.
 
@@ -28,15 +28,15 @@ CLI
 API
 
 - Local: `python -m pip install -r services/api/requirements.txt && uvicorn services.api.app:app --reload --port 8000`
-- Docker (dev): `make build-images && make dev` → http://localhost:8000
+- Docker (dev): `make build-images && make dev` → [http://localhost:8000](http://localhost:8000)
 - Docker (prod): `make prod`
 - Endpoints: `/healthz`, `/stats`, `/search`, `/list`, `/store`, `/metrics` (download is 501 until recall is implemented)
- - Auth: `X-API-Key` header (set `HOLO_API_KEY` on server and desktop)
+- Auth: `X-API-Key` header (set `HOLO_API_KEY` on server and desktop)
 
 Web UI
 
 - Prereq: API running locally (`make api` or `make dev`)
-- Open browser: http://localhost:8000
+- Open browser: [http://localhost:8000](http://localhost:8000)
 - Features: drag-and-drop store, search by filename, live stats, file previews
 
 Enterprise Settings

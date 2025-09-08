@@ -1,7 +1,10 @@
+"""End-to-end tests for file upload flow and holographic reconstruction."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
+import concurrent.futures
 import pytest
 import requests
 
@@ -9,6 +12,7 @@ from .utils import upload_file, list_files
 
 
 def test_file_upload_flow(base_url: str, tmp_path: Path):
+    """Test basic file upload flow with holographic reconstruction."""
     # Create sample files
     f1 = tmp_path / "a.txt"
     f2 = tmp_path / "b.txt"
@@ -31,13 +35,13 @@ def test_file_upload_flow(base_url: str, tmp_path: Path):
     for doc_id in [doc1, doc2]:
         response = requests.get(f"{base_url}/content", params={"doc_id": doc_id})
         assert response.status_code == 200, f"Failed to reconstruct file {doc_id}"
-        # For .hwp files, content should be reconstructed as text/plain (may include charset)
+        # For .hwp files, content should be reconstructed as text/plain
         content_type = response.headers.get("content-type", "")
         assert content_type.startswith("text/plain"), f"Unexpected content-type for {doc_id}: {content_type}"
 
 
 def test_concurrent_uploads(base_url: str, tmp_path: Path):
-    import concurrent.futures
+    """Test concurrent file uploads to ensure thread safety."""
     files = []
     for i in range(5):
         p = tmp_path / f"f_{i}.txt"

@@ -46,7 +46,7 @@ We separate concerns into SOA services: Math Core (allocation, thresholds), Rout
 We use a C++ holographic engine (SIMD wave encoder) with Python bindings and a FastAPI service. The router uses heuristics plus thresholds (env-controlled) to choose micro/microK8/v4 and 1--2 layers. Telemetry exposes live metrics at \texttt{/telemetry} and a simple HTML dashboard at \texttt{/dashboard}. CI enforces markdown lint, runs unit/integration tests, proves Coq theorems, and validates invariants.
 
 \section{Experimental Results}
-\subsection{Compression} Tiny files ($\le$256~B) use micro (\textasciitilde16~B); small (\le$1024$~B) use microK8 (\textasciitilde40~B); larger files use v4 sparse, achieving extreme compression (e.g., 1~MB $\rightarrow$ \textasciitilde$10^2$~B). Per-layer routing halves query cost and improves SNR under load.
+\subsection{Compression} Tiny files ($\le$256~B) use micro ($\approx$16~B); small ($\le$1024~B) use microK8 ($\approx$40~B); larger files use v4 sparse, achieving extreme compression (e.g., 1~MB $\rightarrow$ $\approx$10$^2$~B). Per-layer routing halves query cost and improves SNR under load.
 
 \subsection{Reconstruction} All formats reconstruct via the 3D backend (or sidecar fallback in non-Vault dev environments). Tests verify SHA256 equality of originals and reconstructions.
 

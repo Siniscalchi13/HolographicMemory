@@ -14,7 +14,7 @@ import os
 try:
     # Local import for distribution (packaged with include "services*")
     from holographicfs.memory import HoloFS  # type: ignore
-except Exception as exc:  # pragma: no cover
+except ImportError as exc:  # pragma: no cover
     raise ImportError(
         "holographicfs is required but not available. Ensure package is installed with native extensions."
     ) from exc
@@ -52,7 +52,8 @@ class HolographicMemory:
         finally:
             try:
                 tmp_path.unlink(missing_ok=True)  # py>=3.8
-            except Exception:
+            except OSError:
+                # Best-effort cleanup; ignore failure if file already removed
                 pass
         return doc_id
 
@@ -67,7 +68,8 @@ class HolographicMemory:
         data = Path(path).read_bytes()
         try:
             Path(path).unlink(missing_ok=True)
-        except Exception:
+        except OSError:
+            # Best-effort cleanup; ignore when file is in-use or gone
             pass
         return data
 
@@ -79,7 +81,7 @@ class HolographicMemory:
             # results may be (doc_id, score, label)
             try:
                 did, score = str(r[0]), float(r[1])
-            except Exception:
+            except (TypeError, ValueError, IndexError):
                 continue
             out.append((did, score))
         return out
@@ -90,4 +92,3 @@ class HolographicMemory:
 
     def root_dir(self) -> Path:
         return self.root
-

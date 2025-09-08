@@ -1,18 +1,23 @@
+"""Holographic Memory FastAPI application.
+
+FastAPI-based REST API for the Holographic Memory system. Exposes endpoints
+for health, store, download, search, and telemetry, plus a minimal dashboard
+for live telemetry visualization.
+"""
 from __future__ import annotations
 
+import math
 import os
+import zipfile
 from pathlib import Path
+from typing import List
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Query, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, Response, FileResponse, StreamingResponse
-import json
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-from typing import List
-import zipfile
-import math
 from PIL import Image
+from pydantic import BaseModel
 import io
 import base64
 try:
@@ -203,6 +208,7 @@ def healthz():
 
 @app.get("/stats")
 def stats(_: bool = Depends(require_api_key)):
+    """Get holographic memory statistics and performance metrics."""
     counter_stats.inc()
     fs = get_fs()
     return fs.stats()
@@ -210,6 +216,7 @@ def stats(_: bool = Depends(require_api_key)):
 
 @app.get("/search")
 def search(q: str = Query(..., min_length=1), k: int = 5, _: bool = Depends(require_api_key)):
+    """Search holographic memory for files matching the query."""
     counter_search.inc()
     fs = get_fs()
     results = fs.search_index(q)
@@ -218,6 +225,7 @@ def search(q: str = Query(..., min_length=1), k: int = 5, _: bool = Depends(requ
 
 @app.get("/list")
 def list_index(_: bool = Depends(require_api_key)):
+    """List all stored holographic memory files with their metadata."""
     fs = get_fs()
     rows = fs.search_index("") if hasattr(fs, "search_index") else []
     # If search_index requires a query, use all entries
@@ -248,7 +256,7 @@ def list_index(_: bool = Depends(require_api_key)):
                 hwp_data = _json.loads(hwp_path.read_text(encoding="utf-8"))
                 if "original" in hwp_data:
                     original_size = hwp_data["original"].get("size", s)
-            except:
+            except (json.JSONDecodeError, FileNotFoundError, OSError):
                 pass  # fallback to index size
 
         results.append({
@@ -563,6 +571,7 @@ def fileinfo(path: str, _: bool = Depends(require_api_key)):
 
 @app.post("/store")
 async def store(file: UploadFile = File(...), _: bool = Depends(require_api_key)):
+    """Store a file using holographic compression and return its document ID."""
     counter_store.inc()
     fs = get_fs()
     logger.info("/store upload filename=%s content_type=%s", getattr(file, 'filename', ''), getattr(file, 'content_type', ''))
