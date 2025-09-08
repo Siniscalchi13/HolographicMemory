@@ -41,6 +41,7 @@ void MetalBackend::load_shaders() {
     pso_batch_store_ = create_pipeline("batch_holographic_store");
     pso_similarity_ = create_pipeline("holographic_similarity_search");
     pso_fft_ = create_pipeline("holographic_fft_transform");
+    pso_batch_store_fft_ = create_pipeline("batch_holographic_encode_fft");
 }
 
 id<MTLComputePipelineState> MetalBackend::create_pipeline(const std::string& function_name) {
@@ -236,6 +237,46 @@ void MetalBackend::fft_transform(const std::vector<float>& input,
     [cmd waitUntilCompleted];
     memcpy(real_out.data(), [br contents], n*sizeof(float));
     memcpy(imag_out.data(), [bi contents], n*sizeof(float));
+}
+
+std::vector<std::vector<float>> MetalBackend::batch_encode_fft(
+    const std::vector<std::vector<float>>& batch_data,
+    uint32_t pattern_dimension) {
+    if (!available() || batch_data.empty()) return {};
+    uint32_t batch_size = (uint32_t)batch_data.size();
+    uint32_t data_length = (uint32_t)batch_data[0].size();
+    std::vector<float> flat_in; flat_in.reserve((size_t)batch_size * data_length);
+    for (auto &v : batch_data) flat_in.insert(flat_in.end(), v.begin(), v.end());
+    std::vector<float> flat_out((size_t)batch_size * pattern_dimension, 0.0f);
+
+    id<MTLBuffer> bin = [device_ newBufferWithBytes:flat_in.data() length:flat_in.size()*sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bout = [device_ newBufferWithBytes:flat_out.data() length:flat_out.size()*sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bbs = [device_ newBufferWithBytes:&batch_size length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bdl = [device_ newBufferWithBytes:&data_length length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bpd = [device_ newBufferWithBytes:&pattern_dimension length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+
+    id<MTLCommandBuffer> cmd = [queue_ commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
+    [enc setComputePipelineState:pso_batch_store_fft_];
+    [enc setBuffer:bin offset:0 atIndex:0];
+    [enc setBuffer:bout offset:0 atIndex:1];
+    [enc setBuffer:bbs offset:0 atIndex:2];
+    [enc setBuffer:bdl offset:0 atIndex:3];
+    [enc setBuffer:bpd offset:0 atIndex:4];
+    NSUInteger tgX = 256;
+    NSUInteger gridX = ((batch_size + tgX - 1) / tgX) * tgX;
+    [enc dispatchThreads:MTLSizeMake(gridX, 1, 1) threadsPerThreadgroup:MTLSizeMake(tgX, 1, 1)];
+    [enc endEncoding];
+    [cmd commit];
+    [cmd waitUntilCompleted];
+    memcpy(flat_out.data(), [bout contents], flat_out.size()*sizeof(float));
+
+    // Pack 2D result
+    std::vector<std::vector<float>> out; out.reserve(batch_size);
+    for (uint32_t i=0;i<batch_size;i++){
+        out.emplace_back(flat_out.begin()+ (size_t)i*pattern_dimension, flat_out.begin()+ (size_t)(i+1)*pattern_dimension);
+    }
+    return out;
 }
 } // namespace holo
 

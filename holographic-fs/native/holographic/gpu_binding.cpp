@@ -23,9 +23,9 @@ PYBIND11_MODULE(holographic_gpu, m) {
             return py::make_tuple(r,i);
         })
         .def("batch_encode", &holo::MetalHoloCore::batch_encode)
+        .def("batch_encode_fft", &holo::MetalHoloCore::batch_encode_fft)
         .def("similarity_search", &holo::MetalHoloCore::similarity_search)
         .def("metrics", &holo::MetalHoloCore::metrics);
 }
 
 #endif
-

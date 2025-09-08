@@ -35,6 +35,11 @@ public:
     // Similarity search: query (dim) vs stored (pattern_count x dim). Returns similarities per pattern.
     std::vector<float> similarity_search(const std::vector<float>& query,
                                          const std::vector<std::vector<float>>& stored);
+
+    // FFT-based batch encode path (can be backed by MPS FFT or optimized kernel)
+    std::vector<std::vector<float>> batch_encode_fft(
+        const std::vector<std::vector<float>>& batch_data,
+        uint32_t pattern_dimension);
     
     // Performance metrics
     struct PerformanceMetrics {
@@ -61,6 +66,7 @@ private:
     id<MTLComputePipelineState> pso_interference_ = nil;
     id<MTLComputePipelineState> pso_batch_store_ = nil;
     id<MTLComputePipelineState> pso_similarity_ = nil;
+    id<MTLComputePipelineState> pso_batch_store_fft_ = nil;
     
     PerformanceMetrics metrics_;
 };

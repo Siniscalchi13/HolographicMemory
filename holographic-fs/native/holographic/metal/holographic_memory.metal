@@ -169,3 +169,34 @@ kernel void enhanced_vector_add(
     uint idx = min(gid, n - 1);
     out_c[gid] = in_a[idx] + in_b[idx];
 }
+
+// FFT-optimized batch encode (naive DFT form; placeholder for MPS-backed path)
+kernel void batch_holographic_encode_fft(
+    device const float* input_data       [[ buffer(0) ]],
+    device float*       encoded_patterns [[ buffer(1) ]],
+    constant uint&      batch_size       [[ buffer(2) ]],
+    constant uint&      data_length      [[ buffer(3) ]],
+    constant uint&      pattern_dimension [[ buffer(4) ]],
+    uint gid                              [[ thread_position_in_grid ]])
+{
+    if (gid >= batch_size) return;
+    const uint in_off = gid * data_length;
+    const uint out_off = gid * pattern_dimension;
+    // Compute projections with phase recurrence (FFT-like efficiency)
+    for (uint i = 0; i < pattern_dimension; ++i) {
+        float acc = 0.0f;
+        const float delta = 2.0f * M_PI_F * float(i) / float(pattern_dimension);
+        float cs = 1.0f; // cos(0)
+        float sn = 0.0f; // sin(0)
+        const float c = cos(delta);
+        const float s = sin(delta);
+        const uint limit = min(data_length, pattern_dimension);
+        for (uint j = 0; j < limit; ++j) {
+            acc += input_data[in_off + j] * cs;
+            float ncs = fma(-sn, s, cs * c);
+            float nsn = fma(cs, s, sn * c);
+            cs = ncs; sn = nsn;
+        }
+        encoded_patterns[out_off + i] = acc / float(pattern_dimension);
+    }
+}

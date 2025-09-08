@@ -224,6 +224,45 @@ def bench_gpu_batch_store(dim: int, batch: int, repeats: int) -> Tuple[str, List
     return (gpu_name, vals)
 
 
+def bench_gpu_batch_store_fft(dim: int, batch: int, repeats: int) -> Tuple[str, List[float]]:
+    """Benchmark GPU FFT-based batch store performance via holographic_gpu (Metal)."""
+    try:
+        # Prefer local build over site-packages
+        import sys as _sys
+        from pathlib import Path as _Path
+        _root = _Path(__file__).resolve().parents[2]
+        _native = _root / "holographic-fs" / "native" / "holographic"
+        if _native.exists():
+            p = str(_native)
+            if p not in _sys.path:
+                _sys.path.insert(0, p)
+            libp = str(_native / "lib.macosx-metal")
+            if libp not in _sys.path:
+                _sys.path.insert(0, libp)
+        import holographic_gpu as hg  # type: ignore
+    except Exception as e:  # noqa: BLE001
+        print(f"GPU FFT backend unavailable: {e}")
+        return ("gpu_unavailable", [])
+
+    # Prepare test data: batch of 64-float vectors
+    batch_data = [[float(j) for j in range(64)] for _ in range(batch)]
+
+    gpu = hg.MetalHolographicBackend()  # type: ignore[attr-defined]
+    if not gpu.available():
+        return ("gpu_unavailable", [])
+    vals: List[float] = []
+    # Warmup
+    try: _ = gpu.batch_encode_fft(batch_data, int(dim))
+    except Exception: return ("gpu_fft_error", [])
+    for _ in range(repeats):
+        t0 = time.perf_counter()
+        _ = gpu.batch_encode_fft(batch_data, int(dim))
+        dt = time.perf_counter() - t0
+        if dt > 0:
+            vals.append(float(batch) / dt)
+    return ("gpu_metal_fft", vals)
+
+
 def run(params: BenchParams, out_json: Path) -> None:
     hm_pkg = None
     try:
@@ -306,6 +345,26 @@ def run(params: BenchParams, out_json: Path) -> None:
                                 corpus_size=max(1000, N),
                                 metric="ops/s",
                                 values=[round(v, 2) for v in g_vals],
+                                p50=round(mid, 2),
+                                p95=round(p95, 2),
+                            )
+                        )
+                    )
+
+                # GPU FFT batch store (Metal) throughput
+                gf_name, gf_vals = bench_gpu_batch_store_fft(M, max(1000, N), params.repeats)
+                if gf_vals:
+                    sv = sorted(gf_vals)
+                    mid = sv[len(sv)//2]
+                    p95 = sv[min(len(sv)-1, floor(0.95*(len(sv)-1)))]
+                    results.append(
+                        asdict(
+                            BenchResult(
+                                label=f"gpu_batch_store_ops_per_s[{gf_name}]",
+                                dimension=M,
+                                corpus_size=max(1000, N),
+                                metric="ops/s",
+                                values=[round(v, 2) for v in gf_vals],
                                 p50=round(mid, 2),
                                 p95=round(p95, 2),
                             )
