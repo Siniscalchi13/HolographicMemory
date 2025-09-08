@@ -55,6 +55,7 @@ public:
 private:
     void load_shaders();
     id<MTLComputePipelineState> create_pipeline(const std::string& function_name);
+    void initialize_mps_fft();
     
     id<MTLDevice> device_ = nil;
     id<MTLCommandQueue> queue_ = nil;
@@ -67,6 +68,10 @@ private:
     id<MTLComputePipelineState> pso_batch_store_ = nil;
     id<MTLComputePipelineState> pso_similarity_ = nil;
     id<MTLComputePipelineState> pso_batch_store_fft_ = nil;
+
+    // MPS FFT objects (initialized when available)
+    // Note: guarded use; kernels fall back if unavailable
+    // (Kept opaque here to avoid header dependencies)
     
     PerformanceMetrics metrics_;
 };

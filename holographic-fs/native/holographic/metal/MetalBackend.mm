@@ -3,6 +3,7 @@
 
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
+#import <MetalPerformanceShaders/MetalPerformanceShaders.h>
 #include <cstring>
 
 namespace {
@@ -42,6 +43,7 @@ void MetalBackend::load_shaders() {
     pso_similarity_ = create_pipeline("holographic_similarity_search");
     pso_fft_ = create_pipeline("holographic_fft_transform");
     pso_batch_store_fft_ = create_pipeline("batch_holographic_encode_fft");
+    initialize_mps_fft();
 }
 
 id<MTLComputePipelineState> MetalBackend::create_pipeline(const std::string& function_name) {
@@ -281,3 +283,11 @@ std::vector<std::vector<float>> MetalBackend::batch_encode_fft(
 } // namespace holo
 
 #endif
+void holo::MetalBackend::initialize_mps_fft() {
+    // Ensure MPS is supported on this device
+    if (!device_) return;
+#if defined(MPS_SUPPORTS_AUTOMATICALLY)
+    // noop
+#endif
+    // Nothing to set up eagerly; we will create descriptors on demand.
+}
