@@ -24,6 +24,7 @@ PYBIND11_MODULE(holographic_gpu, m) {
         })
         .def("batch_encode", &holo::MetalHoloCore::batch_encode)
         .def("batch_encode_fft", &holo::MetalHoloCore::batch_encode_fft)
+        .def("batch_encode_fft_ultra", &holo::MetalHoloCore::batch_encode_fft_ultra)
         .def("similarity_search", &holo::MetalHoloCore::similarity_search)
         .def("metrics", &holo::MetalHoloCore::metrics);
 }

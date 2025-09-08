@@ -33,6 +33,8 @@ public:
                                                  uint32_t pattern_dim);
     std::vector<std::vector<float>> batch_encode_fft(const std::vector<std::vector<float>>& batch_data,
                                                      uint32_t pattern_dim);
+    std::vector<std::vector<float>> batch_encode_fft_ultra(const std::vector<std::vector<float>>& batch_data,
+                                                           uint32_t pattern_dim);
 
     std::vector<float> similarity_search(const std::vector<float>& query,
                                          const std::vector<std::vector<float>>& stored);

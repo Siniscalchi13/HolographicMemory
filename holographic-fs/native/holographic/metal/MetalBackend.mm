@@ -19,7 +19,11 @@ MetalBackend::MetalBackend() {
     
     queue_ = [device_ newCommandQueue];
     if (!queue_) return;
-    
+    // Initialize buffer pools and lock
+    input_pool_ = [NSMutableArray array];
+    output_pool_ = [NSMutableArray array];
+    pool_lock_ = [[NSLock alloc] init];
+
     load_shaders();
 }
 
@@ -54,6 +58,30 @@ id<MTLComputePipelineState> MetalBackend::create_pipeline(const std::string& fun
     
     id<MTLComputePipelineState> pso = [device_ newComputePipelineStateWithFunction:fn error:&err];
     return pso;
+}
+
+// -------- Buffer pool helpers --------
+static inline id<MTLBuffer> hb_pop_buffer(NSMutableArray* pool, NSLock* lock, id<MTLDevice> device, NSUInteger size) {
+    [lock lock];
+    id<MTLBuffer> picked = nil;
+    for (NSUInteger i = 0; i < [pool count]; ++i) {
+        id<MTLBuffer> buf = (id<MTLBuffer>)[pool objectAtIndex:i];
+        if ([buf length] >= size) {
+            picked = buf;
+            [pool removeObjectAtIndex:i];
+            break;
+        }
+    }
+    [lock unlock];
+    if (!picked) picked = [device newBufferWithLength:size options:MTLResourceStorageModeManaged];
+    return picked;
+}
+
+static inline void hb_push_buffer(NSMutableArray* pool, NSLock* lock, id<MTLBuffer> buf) {
+    if (!buf) return;
+    [lock lock];
+    [pool addObject:buf];
+    [lock unlock];
 }
 
 float MetalBackend::vector_add(const std::vector<float>& a, const std::vector<float>& b) {
@@ -318,6 +346,81 @@ std::vector<std::vector<float>> MetalBackend::batch_encode_fft(
     }
 
     // Pack 2D result
+    std::vector<std::vector<float>> out; out.reserve(batch_size);
+    for (uint32_t i=0;i<batch_size;i++){
+        out.emplace_back(flat_out.begin()+ (size_t)i*pattern_dimension, flat_out.begin()+ (size_t)(i+1)*pattern_dimension);
+    }
+    return out;
+}
+
+// Ultra-optimized FFT path using cached MPSGraph graph + persistent MTLBuffers
+std::vector<std::vector<float>> MetalBackend::batch_encode_fft_ultra(
+    const std::vector<std::vector<float>>& batch_data,
+    uint32_t pattern_dimension) {
+    if (!available() || batch_data.empty()) return {};
+
+    uint32_t batch_size = (uint32_t)batch_data.size();
+
+    bool graph_ok = false;
+    if (NSClassFromString(@"MPSGraph") != nil) {
+        if (mps_graph_fft_ == nil) {
+            @autoreleasepool {
+                MPSGraph *graph = [[MPSGraph alloc] init];
+                MPSGraphTensor *input = [graph placeholderWithShape:nil dataType:MPSDataTypeFloat32 name:nil];
+                MPSGraphFFTDescriptor *fftDesc = [MPSGraphFFTDescriptor descriptor];
+                fftDesc.inverse = NO; fftDesc.scalingMode = MPSGraphFFTScalingModeUnitary;
+                NSArray<NSNumber*> *axes = @[ @1 ];
+                MPSGraphTensor *fftT = [graph fastFourierTransformWithTensor:input axes:axes descriptor:fftDesc name:nil];
+                MPSGraphTensor *re = [graph realPartOfTensor:fftT name:nil];
+                MPSGraphTensor *im = [graph imaginaryPartOfTensor:fftT name:nil];
+                MPSGraphTensor *re2 = [graph squareWithTensor:re name:nil];
+                MPSGraphTensor *im2 = [graph squareWithTensor:im name:nil];
+                MPSGraphTensor *sum = [graph additionWithPrimaryTensor:re2 secondaryTensor:im2 name:nil];
+                MPSGraphTensor *mag = [graph squareRootWithTensor:sum name:nil];
+                mps_graph_fft_ = graph;
+                mps_graph_input_ = input;
+                mps_graph_mag_ = mag;
+            }
+        }
+        graph_ok = (mps_graph_fft_ != nil && mps_graph_input_ != nil && mps_graph_mag_ != nil);
+    }
+
+    // Prepare padded input buffer once
+    std::vector<float> flat_in((size_t)batch_size * pattern_dimension, 0.0f);
+    for (uint32_t b = 0; b < batch_size; ++b) {
+        const auto &src = batch_data[b];
+        uint32_t copyN = std::min(pattern_dimension, (uint32_t)src.size());
+        std::memcpy(&flat_in[(size_t)b * pattern_dimension], src.data(), copyN * sizeof(float));
+    }
+    std::vector<float> flat_out((size_t)batch_size * pattern_dimension, 0.0f);
+
+    if (graph_ok) {
+        NSUInteger inBytes = (NSUInteger)(flat_in.size() * sizeof(float));
+        NSUInteger outBytes = (NSUInteger)(flat_out.size() * sizeof(float));
+        id<MTLBuffer> bin = hb_pop_buffer((NSMutableArray*)input_pool_, (NSLock*)pool_lock_, device_, inBytes);
+        id<MTLBuffer> bout = hb_pop_buffer((NSMutableArray*)output_pool_, (NSLock*)pool_lock_, device_, outBytes);
+        std::memcpy([bin contents], flat_in.data(), inBytes);
+
+        MPSShape *shape = (MPSShape*)@[@(batch_size), @(pattern_dimension)];
+        MPSGraphTensorData *inTD = [[MPSGraphTensorData alloc] initWithMTLBuffer:bin shape:shape dataType:MPSDataTypeFloat32];
+        MPSGraphTensorData *outTD = [[MPSGraphTensorData alloc] initWithMTLBuffer:bout shape:shape dataType:MPSDataTypeFloat32];
+
+        NSDictionary *feeds = @{ (MPSGraphTensor*)mps_graph_input_ : inTD };
+        NSDictionary *results = @{ (MPSGraphTensor*)mps_graph_mag_ : outTD };
+
+        auto t0 = std::chrono::high_resolution_clock::now();
+        [(MPSGraph*)mps_graph_fft_ runWithMTLCommandQueue:queue_ feeds:(MPSGraphTensorDataDictionary*)feeds targetOperations:nil resultsDictionary:(MPSGraphTensorDataDictionary*)results];
+        std::memcpy(flat_out.data(), [bout contents], outBytes);
+        auto ms = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t0).count();
+        metrics_.batch_store_time_ms = ms;
+        metrics_.operations_per_second = (ms>0)? (uint64_t)(batch_size * 1000.0 / ms) : 0;
+
+        hb_push_buffer((NSMutableArray*)input_pool_, (NSLock*)pool_lock_, bin);
+        hb_push_buffer((NSMutableArray*)output_pool_, (NSLock*)pool_lock_, bout);
+    } else {
+        return batch_encode_fft(batch_data, pattern_dimension);
+    }
+
     std::vector<std::vector<float>> out; out.reserve(batch_size);
     for (uint32_t i=0;i<batch_size;i++){
         out.emplace_back(flat_out.begin()+ (size_t)i*pattern_dimension, flat_out.begin()+ (size_t)(i+1)*pattern_dimension);

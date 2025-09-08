@@ -40,6 +40,10 @@ public:
     std::vector<std::vector<float>> batch_encode_fft(
         const std::vector<std::vector<float>>& batch_data,
         uint32_t pattern_dimension);
+    // Ultra-optimized path with MPSGraph caching and persistent buffers
+    std::vector<std::vector<float>> batch_encode_fft_ultra(
+        const std::vector<std::vector<float>>& batch_data,
+        uint32_t pattern_dimension);
     
     // Performance metrics
     struct PerformanceMetrics {
@@ -69,9 +73,15 @@ private:
     id<MTLComputePipelineState> pso_similarity_ = nil;
     id<MTLComputePipelineState> pso_batch_store_fft_ = nil;
 
-    // MPS FFT objects (initialized when available)
-    // Note: guarded use; kernels fall back if unavailable
-    // (Kept opaque here to avoid header dependencies)
+    // MPSGraph caching (Objective-C objects, ARC-managed)
+    id mps_graph_fft_ = nil;   // MPSGraph*
+    id mps_graph_input_ = nil; // MPSGraphTensor*
+    id mps_graph_mag_ = nil;   // MPSGraphTensor*
+
+    // Persistent buffer pools
+    id input_pool_ = nil;   // NSMutableArray<id<MTLBuffer>>*
+    id output_pool_ = nil;  // NSMutableArray<id<MTLBuffer>>*
+    id pool_lock_ = nil;    // NSLock*
     
     PerformanceMetrics metrics_;
 };
