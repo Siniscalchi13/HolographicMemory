@@ -28,29 +28,30 @@ def validate_gpu_accuracy():
     
     print(f"Testing accuracy with {batch_size} samples, {data_length} -> {pattern_dimension}")
     
-    # CPU reference (numpy FFT)
-    print("Computing CPU reference...")
+    # PROPER SOLUTION: Use identical algorithms for validation
+    print("Computing CPU reference (numpy FFT)...")
     cpu_results = []
     for i in range(batch_size):
         # Pad to pattern dimension
         padded = np.zeros(pattern_dimension, dtype=np.float32)
         padded[:data_length] = test_data[i]
         
-        # FFT with unitary scaling
-        fft_result = np.fft.fft(padded)
+        # Use numpy FFT with unitary scaling (same as GPU)
+        fft_result = np.fft.fft(padded, norm='ortho')  # Unitary scaling
         magnitude = np.abs(fft_result)
         
         cpu_results.append(magnitude)
     
     cpu_results = np.array(cpu_results)
     
-    # GPU computation
+    # GPU computation (should use same FFT algorithm)
     print("Computing GPU results...")
     gpu = hg.MetalHolographicBackend()
     if not gpu.available():
         print("❌ GPU not available")
         return False
     
+    # Use the FFT path that should match numpy FFT
     gpu_results = gpu.batch_encode_fft_ultra_numpy(test_data, pattern_dimension)
     gpu_results = np.array(gpu_results)
     

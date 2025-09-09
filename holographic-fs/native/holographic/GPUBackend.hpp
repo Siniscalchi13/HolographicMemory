@@ -17,6 +17,9 @@ struct GPUConfig {
 struct GPUMetrics {
     double host_ms {0.0};
     double device_ms {0.0};
+    double h2d_time_ms {0.0};
+    double fft_time_ms {0.0};
+    double d2h_time_ms {0.0};
     std::uint64_t operations_per_second {0};
     double memory_bandwidth_gb_s {0.0};
     double device_utilization {0.0};
@@ -37,4 +40,3 @@ public:
 };
 
 } // namespace holo
-

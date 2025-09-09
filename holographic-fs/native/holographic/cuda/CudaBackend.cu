@@ -123,9 +123,16 @@ std::vector<std::vector<float>> CudaBackend::batch_encode_fft_ultra(const float*
     cudaEventRecord(end_event_, stream_);
     cudaStreamSynchronize(stream_);
 
-    // Device time
-    float device_ms = 0.0f;
+    // Device time (segmented)
+    float device_ms = 0.0f, h2d_ms = 0.0f, fft_ms = 0.0f, d2h_ms = 0.0f;
     cudaEventElapsedTime(&device_ms, start_event_, end_event_);
+    // Note: these events surround captured regions; if captured segments change,
+    // adjust placements accordingly.
+    cudaEventElapsedTime(&fft_ms, fft_start_event_, fft_end_event_);
+    // For H2D/D2H, we can place events around memcpy calls pre/post capture in rebuild_graph.
+    // Here we report zeros unless events are recorded.
+    h2d_ms = 0.0f;
+    d2h_ms = 0.0f;
 
     auto host_ms = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now()-t0).count();
 
@@ -135,6 +142,10 @@ std::vector<std::vector<float>> CudaBackend::batch_encode_fft_ultra(const float*
     cudaStreamSynchronize(stream_);
 
     // Metrics
+    metrics_.device_ms = device_ms;
+    metrics_.h2d_ms = h2d_ms;
+    metrics_.fft_ms = fft_ms;
+    metrics_.d2h_ms = d2h_ms;
     metrics_.ops_per_s = (device_ms>0.0f) ? (uint64_t)(batch * 1000.0 / device_ms) : 0;
     metrics_.bandwidth_gbs = (device_ms>0.0f) ? ((double)(in_bytes + out_bytes) / (device_ms/1000.0)) / (1024.0*1024.0*1024.0) : 0.0;
 
@@ -165,7 +176,9 @@ void CudaBackend::rebuild_graph(uint32_t batch, uint32_t data_len, uint32_t patt
     cudaStreamBeginCapture(stream_, cudaStreamCaptureModeGlobal);
 
     // H2D copy from pinned host buffer to device input
+    cudaEventRecord(h2d_start_event_, stream_);
     cudaMemcpyAsync(d_input_, h_pinned_, (size_t)batch * data_len * sizeof(float), cudaMemcpyHostToDevice, stream_);
+    cudaEventRecord(h2d_end_event_, stream_);
 
     // Pad/truncate to FFT size
     dim3 block(256,1,1);

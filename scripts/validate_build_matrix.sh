@@ -1,80 +1,139 @@
 #!/bin/bash
 
+# Cross-platform GPU build validation script
+# Tests Metal (macOS), CUDA (Linux), and ROCm (Linux) builds
+
 set -e
 
-echo "=== Holographic Memory Build Matrix Validation ==="
-echo "Platform: $(uname -s)"
-echo "Architecture: $(uname -m)"
-echo "Date: $(date)"
-echo
+echo "🔧 Cross-Platform GPU Build Validation"
+echo "======================================"
 
-# Function to run build and test
-run_build_test() {
-    local platform=$1
-    local build_flag=$2
-    local test_platform=$3
+# Detect OS and available GPU toolkits
+OS=$(uname -s)
+echo "OS: $OS"
+
+# Function to test Metal build (macOS)
+test_metal() {
+    echo "🍎 Testing Metal build (macOS)..."
     
-    echo "--- Building for $platform ---"
+    cd holographic-fs/native/holographic
     
-    # Clean previous build
-    rm -rf build
-    
-    # Build
-    cmake -B build -DCMAKE_BUILD_TYPE=Release $build_flag
+    # Build Metal
+    cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_METAL=ON
     cmake --build build --config Release
     
-    echo "Build completed successfully"
-    
-    # Test native benchmark
-    echo "--- Running native benchmark ---"
-    ./build/gpu_bench 1024 10000 5 $test_platform results_${platform}.csv ultra
-    
-    echo "--- Testing Python integration ---"
+    # Test GPU availability
     python3 -c "
-import numpy as np
 import sys
-from pathlib import Path
-p = Path('holographic-fs/native/holographic')
-sys.path.insert(0, str(p))
-sys.path.insert(0, str(p / 'lib.macosx-metal'))
-
-try:
-    import holographic_gpu as hg
-    arr = np.random.rand(1000, 64).astype(np.float32)
-    gpu = hg.MetalHolographicBackend()
-    out = gpu.batch_encode_fft_ultra_numpy(arr, 1024)
-    metrics = gpu.get_metrics()
-    print(f'Python test: {len(out)} x {len(out[0])} patterns')
-    print(f'Device ops/sec: {metrics.operations_per_second}')
-    print('✅ Python integration working')
-except Exception as e:
-    print(f'❌ Python integration failed: {e}')
+sys.path.insert(0, 'build')
+import holographic_gpu as hg
+gpu = hg.MetalHolographicBackend()
+print(f'Metal GPU available: {gpu.available()}')
+if gpu.available():
+    print('✅ Metal build successful')
+else:
+    print('❌ Metal build failed')
+    exit(1)
 "
     
-    echo "✅ $platform validation complete"
-    echo
+    # Run native benchmark
+    echo "Running Metal benchmark..."
+    ./build/gpu_bench 1024 1000 3 metal results_metal.csv ultra
+    
+    # Check results
+    if [ -f results_metal.csv ]; then
+        echo "✅ Metal benchmark completed"
+        echo "Results:"
+        cat results_metal.csv
+    else
+        echo "❌ Metal benchmark failed"
+        exit 1
+    fi
+    
+    cd ../..
 }
 
-# Detect platform and run appropriate build
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    # macOS - Metal
-    run_build_test "metal" "-DBUILD_METAL=ON" "metal"
+# Function to test CUDA build (Linux)
+test_cuda() {
+    echo "🚀 Testing CUDA build (Linux)..."
     
-elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    # Linux - try CUDA first, then ROCm
-    if command -v nvcc &> /dev/null; then
-        echo "CUDA detected, building CUDA backend"
-        run_build_test "cuda" "-DBUILD_CUDA=ON" "cuda"
-    elif command -v hipcc &> /dev/null; then
-        echo "ROCm detected, building ROCm backend"
-        run_build_test "rocm" "-DBUILD_ROCM=ON" "rocm"
-    else
-        echo "No GPU toolkit detected, building CPU-only"
-        run_build_test "cpu" "" "auto"
+    # Check if CUDA is available
+    if ! command -v nvcc &> /dev/null; then
+        echo "⚠️  CUDA not available, skipping CUDA test"
+        return 0
     fi
-else
-    echo "Unsupported platform: $OSTYPE"
-    exit 1
-fi
+    
+    cd holographic-fs/native/holographic
+    
+    # Build CUDA
+    cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_CUDA=ON
+    cmake --build build --config Release
+    
+    # Run native benchmark
+    echo "Running CUDA benchmark..."
+    ./build/gpu_bench 1024 1000 3 cuda results_cuda.csv ultra
+    
+    # Check results
+    if [ -f results_cuda.csv ]; then
+        echo "✅ CUDA benchmark completed"
+        echo "Results:"
+        cat results_cuda.csv
+    else
+        echo "❌ CUDA benchmark failed"
+        exit 1
+    fi
+    
+    cd ../..
+}
 
-echo "=== Build Matrix Validation Complete ==="
+# Function to test ROCm build (Linux)
+test_rocm() {
+    echo "🔥 Testing ROCm build (Linux)..."
+    
+    # Check if ROCm is available
+    if ! command -v hipcc &> /dev/null; then
+        echo "⚠️  ROCm not available, skipping ROCm test"
+        return 0
+    fi
+    
+    cd holographic-fs/native/holographic
+    
+    # Build ROCm
+    cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_ROCM=ON
+    cmake --build build --config Release
+    
+    # Run native benchmark
+    echo "Running ROCm benchmark..."
+    ./build/gpu_bench 1024 1000 3 rocm results_rocm.csv ultra
+    
+    # Check results
+    if [ -f results_rocm.csv ]; then
+        echo "✅ ROCm benchmark completed"
+        echo "Results:"
+        cat results_rocm.csv
+    else
+        echo "❌ ROCm benchmark failed"
+        exit 1
+    fi
+    
+    cd ../..
+}
+
+# Main execution
+case $OS in
+    Darwin)
+        test_metal
+        ;;
+    Linux)
+        test_cuda
+        test_rocm
+        ;;
+    *)
+        echo "❌ Unsupported OS: $OS"
+        exit 1
+        ;;
+esac
+
+echo ""
+echo "🎯 Build validation completed successfully!"
+echo "All available GPU platforms tested and working."

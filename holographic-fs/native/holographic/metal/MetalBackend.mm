@@ -34,27 +34,51 @@ MetalBackend::~MetalBackend() {
 void MetalBackend::load_shaders() {
     NSError* err = nullptr;
     
-    // Get the current working directory and build absolute paths
-    NSString* cwd = [[NSFileManager defaultManager] currentDirectoryPath];
+    // Get the directory containing the current executable/binary
+    NSString* binaryPath = [[NSBundle mainBundle] executablePath];
+    if (!binaryPath) {
+        // Fallback: get current working directory
+        binaryPath = [[NSFileManager defaultManager] currentDirectoryPath];
+    }
+    NSString* binaryDir = [binaryPath stringByDeletingLastPathComponent];
     
-    // Try to load from build directory first, then fallback to source
-    NSString* buildPath = [cwd stringByAppendingPathComponent:@"holographic-fs/native/holographic/build/metal/holographic_memory.metal"];
-    NSString* file = [NSString stringWithContentsOfFile:buildPath encoding:NSUTF8StringEncoding error:&err];
+    // Try multiple shader locations in order of preference
+    NSArray* shaderPaths = @[
+        // 1. Relative to binary (for installed apps)
+        [binaryDir stringByAppendingPathComponent:@"holographic_memory.metal"],
+        // 2. Build directory (for development)
+        [binaryDir stringByAppendingPathComponent:@"holographic-fs/native/holographic/build/metal/holographic_memory.metal"],
+        // 3. Source directory (for development)
+        [binaryDir stringByAppendingPathComponent:@"holographic-fs/native/holographic/metal/holographic_memory.metal"],
+        // 4. Current working directory fallbacks
+        @"build/metal/holographic_memory.metal",
+        @"metal/holographic_memory.metal",
+        @"holographic-fs/native/holographic/build/metal/holographic_memory.metal",
+        @"holographic-fs/native/holographic/metal/holographic_memory.metal"
+    ];
     
-    if (!file) {
-        // Fallback to source directory
-        NSString* srcPath = [cwd stringByAppendingPathComponent:@"holographic-fs/native/holographic/metal/holographic_memory.metal"];
-        file = [NSString stringWithContentsOfFile:srcPath encoding:NSUTF8StringEncoding error:&err];
+    NSString* file = nil;
+    NSString* usedPath = nil;
+    
+    for (NSString* path in shaderPaths) {
+        file = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:&err];
+        if (file) {
+            usedPath = path;
+            break;
+        }
     }
     
     if (!file) {
-        NSLog(@"Failed to load Metal shader: %@", err.localizedDescription);
+        NSLog(@"Failed to load Metal shader from any location. Tried paths: %@", shaderPaths);
+        NSLog(@"Last error: %@", err.localizedDescription);
         return;
     }
     
+    NSLog(@"Loading Metal shader from: %@", usedPath);
+
     library_ = [device_ newLibraryWithSource:file options:nil error:&err];
     if (!library_) {
-        NSLog(@"Failed to create Metal library: %@", err.localizedDescription);
+        NSLog(@"[MetalBackend] Failed to create Metal library: %@", err.localizedDescription);
         return;
     }
     

@@ -40,6 +40,9 @@ public:
         auto m = core_->metrics();
         metrics_.host_ms = ms;
         metrics_.device_ms = m.batch_time_ms;
+        metrics_.h2d_time_ms = 0.0;
+        metrics_.fft_time_ms = 0.0;
+        metrics_.d2h_time_ms = 0.0;
         metrics_.operations_per_second = m.operations_per_second;
         metrics_.memory_bandwidth_gb_s = m.memory_bandwidth_gb_s;
         metrics_.device_utilization = 0.0; // Not available on Metal path
@@ -74,7 +77,7 @@ public:
         auto out = backend_->batch_encode_fft_ultra(ptr, batch, data_len, pattern_dim);
         auto ms = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now()-t0).count();
         auto m = backend_->metrics();
-        GPUMetrics g; g.host_ms = ms; g.device_ms = m.device_ms; g.operations_per_second = m.ops_per_s; g.memory_bandwidth_gb_s = m.bandwidth_gbs; g.device_utilization = 0.0; metrics_ = g;
+        GPUMetrics g; g.host_ms = ms; g.device_ms = m.device_ms; g.h2d_time_ms = m.h2d_ms; g.fft_time_ms = m.fft_ms; g.d2h_time_ms = m.d2h_ms; g.operations_per_second = m.ops_per_s; g.memory_bandwidth_gb_s = m.bandwidth_gbs; g.device_utilization = 0.0; metrics_ = g;
         return out;
     }
     GPUMetrics get_metrics() const override { return metrics_; }
@@ -142,4 +145,3 @@ std::unique_ptr<IGPUBackend> IGPUBackend::create_backend(GPUPlatform pf) {
 }
 
 } // namespace holo
-

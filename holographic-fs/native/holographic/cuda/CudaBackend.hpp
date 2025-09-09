@@ -26,6 +26,9 @@ public:
     struct Metrics {
         double host_ms{0.0};
         double device_ms{0.0};
+        double h2d_ms{0.0};
+        double fft_ms{0.0};
+        double d2h_ms{0.0};
         uint64_t ops_per_s{0};
         double bandwidth_gbs{0.0};
     };
@@ -56,6 +59,10 @@ private:
     cudaEvent_t end_event_ {nullptr};
     cudaEvent_t fft_start_event_ {nullptr};
     cudaEvent_t fft_end_event_ {nullptr};
+    cudaEvent_t h2d_start_event_ {nullptr};
+    cudaEvent_t h2d_end_event_ {nullptr};
+    cudaEvent_t d2h_start_event_ {nullptr};
+    cudaEvent_t d2h_end_event_ {nullptr};
 
     Metrics metrics_{};
 };
