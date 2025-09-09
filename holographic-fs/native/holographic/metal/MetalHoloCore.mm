@@ -71,6 +71,26 @@ std::vector<std::vector<float>> MetalHoloCore::batch_encode_fft_ultra(const std:
     return out;
 }
 
+std::vector<std::vector<float>> MetalHoloCore::batch_encode_from_ptr(const float* ptr,
+                                                                     uint32_t batch,
+                                                                     uint32_t data_len,
+                                                                     uint32_t pattern_dim,
+                                                                     bool use_ultra) {
+    if (!available() || ptr == nullptr || batch == 0 || data_len == 0) return {};
+    // Flatten from contiguous (batch,data_len) with padding/truncation to pattern_dim
+    std::vector<std::vector<float>> batch_data;
+    batch_data.reserve(batch);
+    for (uint32_t b = 0; b < batch; ++b) {
+        const float* row = ptr + (size_t)b * data_len;
+        std::vector<float> v;
+        v.resize((size_t)data_len);
+        std::memcpy(v.data(), row, (size_t)data_len * sizeof(float));
+        batch_data.emplace_back(std::move(v));
+    }
+    return use_ultra ? batch_encode_fft_ultra(batch_data, pattern_dim)
+                     : batch_encode_fft(batch_data, pattern_dim);
+}
+
 } // namespace holo
 
 #endif

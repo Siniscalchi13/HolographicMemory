@@ -36,6 +36,13 @@ public:
     std::vector<std::vector<float>> batch_encode_fft_ultra(const std::vector<std::vector<float>>& batch_data,
                                                            uint32_t pattern_dim);
 
+    // Zero-copy NumPy path (accepts contiguous CPU array pointer)
+    std::vector<std::vector<float>> batch_encode_from_ptr(const float* ptr,
+                                                          uint32_t batch,
+                                                          uint32_t data_len,
+                                                          uint32_t pattern_dim,
+                                                          bool use_ultra);
+
     std::vector<float> similarity_search(const std::vector<float>& query,
                                          const std::vector<std::vector<float>>& stored);
 
