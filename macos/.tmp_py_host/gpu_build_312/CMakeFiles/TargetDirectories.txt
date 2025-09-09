@@ -1,0 +1,4 @@
+/Users/smarthaus/Projects/GitHub/HolographicMemory/macos/.tmp_py_host/gpu_build_312/CMakeFiles/holographic_gpu.dir
+/Users/smarthaus/Projects/GitHub/HolographicMemory/macos/.tmp_py_host/gpu_build_312/CMakeFiles/gpu_bench.dir
+/Users/smarthaus/Projects/GitHub/HolographicMemory/macos/.tmp_py_host/gpu_build_312/CMakeFiles/edit_cache.dir
+/Users/smarthaus/Projects/GitHub/HolographicMemory/macos/.tmp_py_host/gpu_build_312/CMakeFiles/rebuild_cache.dir

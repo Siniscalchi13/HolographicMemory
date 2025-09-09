@@ -12,19 +12,30 @@ _cpp_loaded = False
 _cpp3d_loaded = False
 try:
     _pkg_root = Path(__file__).resolve().parents[1]
-    _cpp_dir = _pkg_root / "native" / "holographic"
+    _cpp_dir = _pkg_root / "native" / "holographic" / "build"
     if _cpp_dir.exists():
         p = str(_cpp_dir)
         if p not in sys.path:
             sys.path.insert(0, p)
-    import holographic_cpp as _hn  # type: ignore
+    import holographic_gpu as _hn  # type: ignore
     _cpp_loaded = True
 except Exception:
     try:
-        import holographic_cpp as _hn  # type: ignore
+        import holographic_gpu as _hn  # type: ignore
         _cpp_loaded = True
     except Exception:
-        _cpp_loaded = False
+        # Fallback to old backend
+        try:
+            _pkg_root = Path(__file__).resolve().parents[1]
+            _cpp_dir = _pkg_root / "native" / "holographic"
+            if _cpp_dir.exists():
+                p = str(_cpp_dir)
+                if p not in sys.path:
+                    sys.path.insert(0, p)
+            import holographic_cpp as _hn  # type: ignore
+            _cpp_loaded = True
+        except Exception:
+            _cpp_loaded = False
 
 # Optional 3D exact-recall backend
 try:
@@ -68,9 +79,15 @@ class Memory:
     def __init__(self, state_dir: Path, grid_size: int = 32, use_gpu: bool = True) -> None:
         self.state_dir = Path(state_dir)
         self.state_dir.mkdir(parents=True, exist_ok=True)
+        # Persist grid size for GPU helpers
+        self.grid_size = int(grid_size)
         if _cpp_loaded:
             try:
-                self.backend = _hn.HolographicMemory(int(grid_size))  # type: ignore[name-defined, attr-defined]
+                # Try new GPU backend first, then fallback to old
+                if hasattr(_hn, 'HolographicGPU'):
+                    self.backend = _hn.HolographicGPU()  # type: ignore[name-defined, attr-defined]
+                else:
+                    self.backend = _hn.HolographicMemory(int(grid_size))  # type: ignore[name-defined, attr-defined]
             except Exception as exc:
                 raise RuntimeError("C++ backend not available or failed to initialize") from exc
         else:
@@ -83,25 +100,57 @@ class Memory:
             except Exception:
                 self.backend3d = None
 
-        # Optional Metal GPU backend
+        # Prefer new cross-platform GPU backend (holographic_gpu),
+        # else fallback to experimental Metal-only module (holographic_metal).
         self.gpu_backend = None
         self.use_gpu = False
         if use_gpu:
+            # Attempt holographic_gpu first (supports Metal/CUDA/ROCm)
             try:
-                import holographic_metal as _hm  # type: ignore
-                if hasattr(_hm, "MetalHolographicBackend"):
-                    be = _hm.MetalHolographicBackend()  # type: ignore[attr-defined]
+                import holographic_gpu as _hg  # type: ignore
+                be = None
+                # New API
+                if hasattr(_hg, "HolographicGPU"):
+                    be = _hg.HolographicGPU()  # type: ignore[attr-defined]
                     ok = True
                     if hasattr(be, "initialize"):
                         try:
+                            # Let backend auto-select platform
                             ok = bool(be.initialize())  # type: ignore[attr-defined]
                         except Exception:
                             ok = False
                     if ok:
                         self.gpu_backend = be
                         self.use_gpu = True
+                # Legacy class name (Metal-only)
+                if not self.use_gpu and hasattr(_hg, "MetalHolographicBackend"):
+                    be = _hg.MetalHolographicBackend()  # type: ignore[attr-defined]
+                    ok = True
+                    if hasattr(be, "available"):
+                        try:
+                            ok = bool(be.available())  # type: ignore[attr-defined]
+                        except Exception:
+                            ok = False
+                    if ok:
+                        self.gpu_backend = be
+                        self.use_gpu = True
             except Exception:
-                self.gpu_backend = None
+                # Fallback: try older experimental Metal binding module name
+                try:
+                    import holographic_metal as _hm  # type: ignore
+                    if hasattr(_hm, "MetalHolographicBackend"):
+                        be = _hm.MetalHolographicBackend()  # type: ignore[attr-defined]
+                        ok = True
+                        if hasattr(be, "initialize"):
+                            try:
+                                ok = bool(be.initialize())  # type: ignore[attr-defined]
+                            except Exception:
+                                ok = False
+                        if ok:
+                            self.gpu_backend = be
+                            self.use_gpu = True
+                except Exception:
+                    self.gpu_backend = None
 
     def store_file(self, path: Path, stable_id: Optional[str] = None) -> str:
         """Store file bytes using exact-recall 3D backend and record wave meta.
@@ -219,6 +268,12 @@ class Memory:
             # Legacy module-level function via wrapper
             if hasattr(self.gpu_backend, "gpu_batch_store"):
                 return self.gpu_backend.gpu_batch_store(batch_data, int(self.grid_size))  # type: ignore[attr-defined]
+            # Optional NumPy pathway for new backend
+            if hasattr(self.gpu_backend, "batch_encode_numpy"):
+                import numpy as _np
+                arr = _np.array(batch_data, dtype=_np.float32, order="C")
+                out = self.gpu_backend.batch_encode_numpy(arr, int(self.grid_size))  # type: ignore[attr-defined]
+                return [list(map(float, row)) for row in out]
         except Exception:
             return []
         return []
@@ -228,12 +283,25 @@ class Memory:
         metrics: dict = {"cpu": {}}
         if self.use_gpu and self.gpu_backend is not None:
             try:
+                m = None
                 if hasattr(self.gpu_backend, "get_last_metrics"):
                     m = self.gpu_backend.get_last_metrics()  # type: ignore[attr-defined]
+                elif hasattr(self.gpu_backend, "metrics"):
+                    m = self.gpu_backend.metrics()  # type: ignore[attr-defined]
+                if m is not None:
+                    # Support both Metal legacy and new cross-platform structs
+                    ops = getattr(m, "operations_per_second", 0.0)
+                    bw = getattr(m, "memory_bandwidth_gb_s", 0.0)
+                    # Field name differs in legacy vs new; prefer device_ms or batch_time_ms
+                    bt = getattr(m, "batch_encode_time_ms", None)
+                    if bt is None:
+                        bt = getattr(m, "device_ms", None)
+                    if bt is None:
+                        bt = getattr(m, "batch_time_ms", 0.0)
                     metrics["gpu"] = {
-                        "operations_per_second": float(getattr(m, "operations_per_second", 0.0)),
-                        "memory_bandwidth_gb_s": float(getattr(m, "memory_bandwidth_gb_s", 0.0)),
-                        "batch_encode_time_ms": float(getattr(m, "batch_encode_time_ms", 0.0)),
+                        "operations_per_second": float(ops or 0.0),
+                        "memory_bandwidth_gb_s": float(bw or 0.0),
+                        "batch_encode_time_ms": float(bt or 0.0),
                     }
             except Exception:
                 pass

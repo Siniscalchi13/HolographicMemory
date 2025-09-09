@@ -11,6 +11,7 @@ find_package(pybind11 REQUIRED)
 option(BUILD_CUDA "Build CUDA backend" OFF)
 option(BUILD_ROCM "Build ROCm backend" OFF)
 option(BUILD_METAL "Build Metal backend" ON)
+option(BUILD_3D "Build 3D exact-recall backend (holographic_cpp_3d)" ON)
 
 # Platform detection
 if(APPLE)
@@ -45,6 +46,7 @@ endif()
 set(SOURCES
     gpu_binding.cpp
     GPUBackend.cpp
+    hwp_v4_decode.cpp
 )
 
 # Platform-specific sources
@@ -123,4 +125,37 @@ endif()
 # Ensure .metal sources are available at runtime for source-compile
 if(PLATFORM STREQUAL "METAL")
     file(COPY metal/holographic_memory.metal DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/metal)
+endif()
+
+# ------------------------
+# 3D exact-recall backend
+# ------------------------
+if(BUILD_3D)
+    # Try to find FFTW3 for 3D FFT used in visualization paths
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(FFTW3 QUIET fftw3)
+    endif()
+    if(NOT FFTW3_FOUND)
+        # Fallback manual search (Homebrew/MacPorts/common)
+        find_path(FFTW3_INCLUDE_DIR fftw3.h
+            PATHS /opt/homebrew/include /usr/local/include /opt/local/include /usr/include)
+        find_library(FFTW3_LIBRARY NAMES fftw3
+            PATHS /opt/homebrew/lib /usr/local/lib /opt/local/lib /usr/lib)
+        if(FFTW3_INCLUDE_DIR AND FFTW3_LIBRARY)
+            set(FFTW3_FOUND TRUE)
+            set(FFTW3_INCLUDE_DIRS ${FFTW3_INCLUDE_DIR})
+            set(FFTW3_LIBRARIES ${FFTW3_LIBRARY})
+        endif()
+    endif()
+
+    if(FFTW3_FOUND)
+        message(STATUS "Building holographic_cpp_3d with FFTW3")
+        pybind11_add_module(holographic_cpp_3d holographic_native_3d.cpp)
+        target_include_directories(holographic_cpp_3d PRIVATE ${FFTW3_INCLUDE_DIRS})
+        target_link_libraries(holographic_cpp_3d PRIVATE ${FFTW3_LIBRARIES})
+        target_compile_options(holographic_cpp_3d PRIVATE -O3 -DNDEBUG)
+    else()
+        message(WARNING "FFTW3 not found; skipping holographic_cpp_3d build.")
+    endif()
 endif()

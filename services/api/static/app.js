@@ -1,5 +1,13 @@
+console.log('[DEBUG] JavaScript loading...')
+
 const $ = (s) => document.querySelector(s)
 const fmt = (n) => new Intl.NumberFormat().format(n)
+
+// Pagination state
+let currentPage = 1
+let perPage = 50
+let totalPages = 1
+let totalFiles = 0
 
 function apiHeaders(){
   const k = localStorage.getItem('x_api_key')
@@ -19,6 +27,289 @@ async function api(path, opts={}){
 
 function ext(path){ const i = path.lastIndexOf('.'); return i>=0? path.slice(i+1).toLowerCase(): '' }
 
+// Load files with pagination
+async function loadFiles(page = 1, itemsPerPage = 50) {
+  try {
+    console.log(`[DEBUG] Loading files: page=${page}, per_page=${itemsPerPage}`)
+    const response = await api(`/list?page=${page}&per_page=${itemsPerPage}`)
+    window.CURRENT_ROWS = response.results || []
+    currentPage = response.page || 1
+    perPage = response.per_page || 50
+    totalPages = response.pages || 1
+    totalFiles = response.total || 0
+    
+    console.log(`[DEBUG] Loaded ${window.CURRENT_ROWS.length} files, total=${totalFiles}, pages=${totalPages}`)
+    
+    renderRows(window.CURRENT_ROWS)
+    renderPagination()
+    updateStatusBar()
+  } catch (error) {
+    console.error('Failed to load files:', error)
+    $('#status').textContent = 'Failed to load files'
+  }
+}
+
+function renderPagination() {
+  let pagination = $('#pagination')
+  if (!pagination) {
+    console.warn('Pagination container missing; creating dynamically')
+    pagination = createPaginationElement()
+  }
+  // Ensure default styling
+  try { pagination.classList.add('pagination') } catch {}
+  
+  console.log(`[DEBUG] Rendering pagination: page=${currentPage}/${totalPages}, total=${totalFiles}`)
+  
+  // Generate page numbers (show up to 5 pages around current page)
+  let pageNumbers = []
+  const startPage = Math.max(1, currentPage - 2)
+  const endPage = Math.min(totalPages, currentPage + 2)
+  
+  for (let i = startPage; i <= endPage; i++) {
+    pageNumbers.push(i)
+  }
+  
+  let html = `<div class="pagination-controls">
+    <div class="pagination-info">
+      Showing ${((currentPage - 1) * perPage) + 1}-${Math.min(currentPage * perPage, totalFiles)} of ${fmt(totalFiles)} files
+    </div>
+    <div class="pagination-buttons">
+      <button class="btn btn-sm" ${currentPage <= 1 ? 'disabled' : ''} onclick="loadFiles(1, ${perPage})">⏮️ First</button>
+      <button class="btn btn-sm" ${currentPage <= 1 ? 'disabled' : ''} onclick="loadFiles(${currentPage - 1}, ${perPage})">← Previous</button>
+      
+      ${pageNumbers.map(page => 
+        `<button class="btn btn-sm ${page === currentPage ? 'btn-primary' : ''}" onclick="loadFiles(${page}, ${perPage})">${page}</button>`
+      ).join('')}
+      
+      <button class="btn btn-sm" ${currentPage >= totalPages ? 'disabled' : ''} onclick="loadFiles(${currentPage + 1}, ${perPage})">Next →</button>
+      <button class="btn btn-sm" ${currentPage >= totalPages ? 'disabled' : ''} onclick="loadFiles(${totalPages}, ${perPage})">Last ⏭️</button>
+    </div>
+    <div class="per-page-controls">
+      <label>Per page:</label>
+      <select onchange="changePerPage(this.value)">
+        <option value="25" ${perPage === 25 ? 'selected' : ''}>25</option>
+        <option value="50" ${perPage === 50 ? 'selected' : ''}>50</option>
+        <option value="100" ${perPage === 100 ? 'selected' : ''}>100</option>
+        <option value="250" ${perPage === 250 ? 'selected' : ''}>250</option>
+      </select>
+    </div>
+  </div>`
+  
+  pagination.innerHTML = html
+}
+
+function createPaginationElement() {
+  const pagination = document.createElement('div')
+  pagination.id = 'pagination'
+  pagination.className = 'pagination'
+  $('#listview').parentNode.insertBefore(pagination, $('#listview'))
+  return pagination
+}
+
+function changePerPage(newPerPage) {
+  perPage = parseInt(newPerPage)
+  loadFiles(1, perPage) // Reset to page 1
+}
+
+function updateStatusBar() {
+  $('#statusBar').textContent = `${fmt(totalFiles)} items (Page ${currentPage}/${totalPages})`
+}
+
+function updatePaginationForFiltered(filteredRows) {
+  const pagination = $('#pagination')
+  if (!pagination) return
+  
+  const filteredCount = filteredRows.length
+  const filteredPages = Math.ceil(filteredCount / perPage)
+  
+  let html = `<div class="pagination-controls">
+    <div class="pagination-info">
+      Showing ${filteredCount} filtered files (${fmt(totalFiles)} total)
+    </div>
+    <div class="pagination-buttons">
+      <button class="btn btn-sm" onclick="loadFiles(1, ${perPage})">🔄 Show All Files</button>
+    </div>
+  </div>`
+  
+  pagination.innerHTML = html
+}
+
+function toAbsPath(path, rootAbs) {
+  if (!path) return ''
+  if (path.startsWith('/')) return path
+  const r = (rootAbs || '').replace(/\/$/, '')
+  return r ? `${r}/${path}` : path
+}
+
+function relFromRoot(absPath, rootAbs) {
+  const r = (rootAbs || '').replace(/\/$/, '')
+  const a = (absPath || '').replace(/\/$/, '')
+  if (r && a.startsWith(r)) {
+    const rel = a.slice(r.length)
+    return rel.startsWith('/') ? rel.slice(1) : rel
+  }
+  return absPath || ''
+}
+
+function rowMatchesFolder(rowPath, folderAbs, rootAbs) {
+  const rp = toAbsPath(rowPath, rootAbs).replace(/\/$/, '')
+  const fp = (folderAbs || '').replace(/\/$/, '')
+  return rp === fp || rp.startsWith(fp + '/')
+}
+
+function setupFolderClickHandlers() {
+  console.log('[DEBUG] Setting up folder click handlers...')
+  const rootAbs = window.ROOT_PATH || ''
+  document.querySelectorAll('.tree-node').forEach(el=>{
+    el.addEventListener('click', async ()=>{
+      const folderAbs = el.getAttribute('data-path') || ''
+      const folderRel = relFromRoot(folderAbs, rootAbs)
+      console.log(`[DEBUG] Folder clicked: abs=${folderAbs} rel=${folderRel}`)
+
+      // Ensure we have a complete set of rows to filter (fetch all if needed)
+      try {
+        if (Array.isArray(window.CURRENT_ROWS) && window.CURRENT_ROWS.length < (totalFiles || 0)) {
+          console.log('[DEBUG] Fetching all rows for folder filter...')
+          const all = await api(`/list?page=1&per_page=${Math.max(totalFiles||0, 5000)}`)
+          window.CURRENT_ROWS = all.results || []
+        }
+      } catch (e) { console.warn('[DEBUG] Fetch-all failed; filtering current page only', e) }
+
+      $('#cwd').textContent = folderRel || '/'
+
+      const rows = (window.CURRENT_ROWS || []).filter(r => rowMatchesFolder(r.path || '', folderAbs, rootAbs))
+      console.log(`[DEBUG] Filtered ${rows.length} files for folder: ${folderRel}`)
+
+      renderRows(rows)
+      updatePaginationForFiltered(rows)
+    })
+  })
+  console.log(`[DEBUG] Set up ${document.querySelectorAll('.tree-node').length} folder click handlers`)
+}
+
+// 3D Holographic Memory Field Visualization
+let scene, camera, renderer, controls
+let holographicField = null
+
+function init3DVisualization() {
+  const container = $('#preview')
+  if (!container) return
+  
+  // Create Three.js scene
+  scene = new THREE.Scene()
+  scene.background = new THREE.Color(0x0a0a0a)
+  
+  // Camera
+  camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000)
+  camera.position.set(5, 5, 5)
+  
+  // Renderer
+  renderer = new THREE.WebGLRenderer({ antialias: true })
+  renderer.setSize(container.clientWidth, container.clientHeight)
+  renderer.shadowMap.enabled = true
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap
+  
+  // Clear existing content
+  container.innerHTML = ''
+  container.appendChild(renderer.domElement)
+  
+  // Add lighting
+  const ambientLight = new THREE.AmbientLight(0x404040, 0.6)
+  scene.add(ambientLight)
+  
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
+  directionalLight.position.set(10, 10, 5)
+  directionalLight.castShadow = true
+  scene.add(directionalLight)
+  
+  // Add controls for rotation
+  controls = new THREE.OrbitControls(camera, renderer.domElement)
+  controls.enableDamping = true
+  controls.dampingFactor = 0.05
+  
+  // Create holographic field visualization
+  createHolographicField()
+  
+  // Start animation loop
+  animate()
+}
+
+function createHolographicField() {
+  if (holographicField) {
+    scene.remove(holographicField)
+  }
+  
+  // Create a 3D grid representing the holographic memory field
+  const geometry = new THREE.BufferGeometry()
+  const vertices = []
+  const colors = []
+  
+  // Create a 32x32x32 grid (representing the 64³ grid)
+  const gridSize = 32
+  const spacing = 0.1
+  
+  for (let x = 0; x < gridSize; x++) {
+    for (let y = 0; y < gridSize; y++) {
+      for (let z = 0; z < gridSize; z++) {
+        // Add some randomness to make it look like a holographic field
+        const noise = Math.sin(x * 0.1) * Math.cos(y * 0.1) * Math.sin(z * 0.1)
+        const intensity = Math.abs(noise) * 0.5 + 0.5
+        
+        vertices.push(
+          (x - gridSize/2) * spacing,
+          (y - gridSize/2) * spacing,
+          (z - gridSize/2) * spacing
+        )
+        
+        // Color based on intensity (blue to purple to pink)
+        colors.push(
+          intensity * 0.2,      // R
+          intensity * 0.4,      // G
+          intensity * 0.8 + 0.2 // B
+        )
+      }
+    }
+  }
+  
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+  
+  const material = new THREE.PointsMaterial({
+    size: 0.02,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.8
+  })
+  
+  holographicField = new THREE.Points(geometry, material)
+  scene.add(holographicField)
+}
+
+function animate() {
+  requestAnimationFrame(animate)
+  
+  if (controls) {
+    controls.update()
+  }
+  
+  // Rotate the holographic field slowly
+  if (holographicField) {
+    holographicField.rotation.y += 0.005
+    holographicField.rotation.x += 0.002
+  }
+  
+  if (renderer && scene && camera) {
+    renderer.render(scene, camera)
+  }
+}
+
+// Initialize 3D visualization when page loads (with error handling)
+window.addEventListener('load', () => {
+  console.log('[DEBUG] Page loaded, skipping 3D visualization for now')
+  // Temporarily disable 3D visualization to debug pagination
+  // init3DVisualization()
+})
+
 function renderTree(node, base=''){
   const full = base ? `${base}/${node.name}` : node.name
   const children = (node.dirs||[]).map(d=>renderTree(d, full)).join('')
@@ -34,15 +325,16 @@ function renderRows(rows){
   }
   grid.style.display='none'
   $('#rows').innerHTML = sorted.map(r=>{
-    const name = r.path.split('/').pop()
-    const originalSize = r.size || 0
-    const holoSize = r.holo_size || 0
+    const pathName = (r.path || '').split('/').pop() || ''
+    const displayName = r.original_filename || pathName.replace(/\.hwp$/i, '') || pathName
+    const originalSize = Number(r.size || 0)
+    const holoSize = Number(r.holo_size || 0)
     const ratio = holoSize > 0 ? (originalSize / holoSize).toFixed(1) : '—'
     return `<tr data-path="${r.path}" data-doc-id="${r.doc_id}">
-      <td><input type="checkbox" class="file-checkbox" data-doc-id="${r.doc_id}" data-filename="${name}"></td>
+      <td><input type="checkbox" class="file-checkbox" data-doc-id="${r.doc_id}" data-filename="${displayName}"></td>
       <td>📄</td>
-      <td>${name}</td>
-      <td>${ext(name) || '—'}</td>
+      <td>${displayName}</td>
+      <td>${ext(displayName) || '—'}</td>
       <td>${fmt(originalSize)} bytes</td>
       <td>${fmt(holoSize)} bytes</td>
       <td>${ratio}x</td>
@@ -449,7 +741,9 @@ async function refresh(){
       </div>`
 
     const tree = await api('/tree')
+    window.ROOT_PATH = tree?.path || ''
     $('#tree').innerHTML = renderTree(tree)
+    $('#cwd').textContent = 'All Files'
 
     // Add collective holographic memory field visualization
     const memoryFieldDiv = document.createElement('div')
@@ -464,17 +758,12 @@ async function refresh(){
     `
     document.getElementById('tree').appendChild(memoryFieldDiv)
 
-    document.querySelectorAll('.tree-node').forEach(el=>{
-      el.addEventListener('click', ()=>{
-        const p = el.getAttribute('data-path')
-        $('#cwd').textContent = p
-        const rows = window.CURRENT_ROWS.filter(r => r.path.startsWith(p))
-        renderRows(rows)
-      })
-    })
-    const list = await api('/list')
-    window.CURRENT_ROWS = (list.results||[])
-    renderRows(window.CURRENT_ROWS)
+    // Load files with pagination first
+    console.log('[DEBUG] About to load files...')
+    await loadFiles(1, 50)
+    
+    // Set up folder click handlers AFTER files are loaded
+    setupFolderClickHandlers()
 
     // Load collective memory field data AFTER CURRENT_ROWS is populated
     try {
@@ -568,6 +857,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     localStorage.setItem('x_api_key', $('#apiKey').value.trim())
     refresh()
   })
+  
+  // Show All Files button
+  $('#showAllFiles').addEventListener('click', async ()=>{
+    console.log('[DEBUG] Show All Files clicked')
+    $('#cwd').textContent = 'All Files'
+    await loadFiles(1, perPage)
+  })
   setupDnD()
   setupSearch()
   // wait for API readiness
@@ -586,3 +882,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 window.downloadFile = downloadFile
 // eslint-disable-next-line no-undef
 window.deleteOne = deleteOne
+// Expose for inline event handlers used by pagination HTML
+// eslint-disable-next-line no-undef
+window.loadFiles = loadFiles
+// eslint-disable-next-line no-undef
+window.changePerPage = changePerPage

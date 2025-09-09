@@ -1,0 +1,119 @@
+version: '3.9'
+
+services:
+  # HolographicMemory Development Environment
+  holo-dev-api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+      target: api-dev
+    container_name: holo-dev-api
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      - HOLO_ROOT=/data
+      - GRID_SIZE=64
+      - HOLO_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:8000
+      - PYTHONPATH=/app/holographic-fs:/app/services
+    volumes:
+      - ./data:/data
+      - ./services:/app/services
+      - ./holographic-fs:/app/holographic-fs
+      - ./documentation:/app/documentation
+    networks:
+      - holo-dev-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # CUDA-enabled development (for NVIDIA GPU testing)
+  holo-dev-cuda:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+      target: api-gpu-cuda
+    container_name: holo-dev-cuda
+    ports:
+      - "${PORT:-8001}:8000"
+    environment:
+      - HOLO_ROOT=/data
+      - GRID_SIZE=64
+      - HOLO_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:8001
+      - PYTHONPATH=/app/holographic-fs:/app/services
+    volumes:
+      - ./data:/data
+      - ./services:/app/services
+      - ./holographic-fs:/app/holographic-fs
+    networks:
+      - holo-dev-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    profiles:
+      - cuda
+
+  # Development database (optional)
+  holo-dev-db:
+    image: postgres:15-alpine
+    container_name: holo-dev-db
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=holo_dev
+      - POSTGRES_USER=holo
+      - POSTGRES_PASSWORD=dev_password
+    volumes:
+      - holo-dev-db-data:/var/lib/postgresql/data
+    networks:
+      - holo-dev-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U holo -d holo_dev"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    profiles:
+      - database
+
+  # Redis for caching (optional)
+  holo-dev-redis:
+    image: redis:7-alpine
+    container_name: holo-dev-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - holo-dev-redis-data:/data
+    networks:
+      - holo-dev-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    profiles:
+      - cache
+
+networks:
+  holo-dev-network:
+    driver: bridge
+    name: holo-dev-network
+
+volumes:
+  holo-dev-db-data:
+    driver: local
+  holo-dev-redis-data:
+    driver: local

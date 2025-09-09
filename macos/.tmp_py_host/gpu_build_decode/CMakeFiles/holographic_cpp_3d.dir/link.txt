@@ -1,0 +1,1 @@
+/usr/bin/c++  -arch arm64 -Xlinker -undefined -Xlinker dynamic_lookup -flto -bundle -Wl,-headerpad_max_install_names -o holographic_cpp_3d.cpython-312-darwin.so CMakeFiles/holographic_cpp_3d.dir/holographic_native_3d.cpp.o  -lfftw3

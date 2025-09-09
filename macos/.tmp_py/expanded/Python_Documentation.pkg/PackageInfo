@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<pkg-info overwrite-permissions="true" relocatable="false" identifier="org.python.Python.PythonDocumentation-3.12" postinstall-action="none" version="0" format-version="2" generator-version="InstallCmds-834 (23G80)" install-location="/Library/Frameworks/Python.framework/Versions/3.12/Resources/English.lproj/Documentation" auth="root">
+    <payload numberOfFiles="1090" installKBytes="66277"/>
+    <bundle-version/>
+    <upgrade-bundle/>
+    <update-bundle/>
+    <atomic-update-bundle/>
+    <strict-identifier/>
+    <relocate/>
+    <scripts>
+        <postinstall file="./postinstall"/>
+    </scripts>
+</pkg-info>

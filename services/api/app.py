@@ -224,50 +224,68 @@ def search(q: str = Query(..., min_length=1), k: int = 5, _: bool = Depends(requ
 
 
 @app.get("/list")
-def list_index(_: bool = Depends(require_api_key)):
-    """List all stored holographic memory files with their metadata."""
+def list_index(
+    page: int = Query(1, ge=1, description="Page number (1-based)"),
+    per_page: int = Query(50, ge=1, le=1000, description="Items per page"),
+    _: bool = Depends(require_api_key)
+):
+    """List all stored holographic memory files with pagination.
+
+    Returns original file size and holographic (.hwp) size to compute compression.
+    Uses the on-disk index mapping to recover doc_id and original size.
+    """
     fs = get_fs()
-    rows = fs.search_index("") if hasattr(fs, "search_index") else []
-    # If search_index requires a query, use all entries
-    if not rows:
-        entries = fs.index.all()  # type: ignore[attr-defined]
-        rows = [(e.doc_id, e.path, e.size, getattr(e, 'mtime', 0.0)) for e in entries]
-    
-    # Get holographic memory stats for compression info
-    stats = fs.stats()
-    total_original = stats.get("original_total_bytes", 0)
-    total_holo = stats.get("holo_bytes", 0)
-    file_count = len(rows)
-    
-    # Estimate per-file holographic size (rough approximation)
-    avg_holo_per_file = total_holo / file_count if file_count > 0 else 0
-    
+
+    # Scan the actual patterns directory for .hwp files
+    patterns_dir = Path(fs.root) / "holographic_memory" / "patterns"
+    if not patterns_dir.exists():
+        return {"results": [], "total": 0, "page": page, "per_page": per_page, "pages": 0}
+
+    # Get all .hwp files
+    hwp_files = list(patterns_dir.glob("*.hwp"))
+    total_files = len(hwp_files)
+
+    # Calculate pagination
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+    page_files = hwp_files[start_idx:end_idx]
+
     results = []
-    for d, p, s, m in rows:
-        # Get actual .hwp file size and original file size from metadata
-        hwp_path = Path(p)
-        holo_size = hwp_path.stat().st_size if hwp_path.exists() else 0
+    for hwp_path in page_files:
+        try:
+            stat = hwp_path.stat()
+            rel = str(hwp_path.relative_to(fs.root))
+            # Prefer index entry for original size + doc_id
+            ent = fs.index.lookup_by_path(hwp_path)  # type: ignore[attr-defined]
+            original_size = int(getattr(ent, 'size', 0) or 0)
+            doc_id = str(getattr(ent, 'doc_id', '') or '')
+            # Fallbacks
+            if not doc_id:
+                doc_id = hwp_path.stem  # last resort
+            if original_size <= 0:
+                # As a last resort, approximate with .hwp size (will show 1.0x)
+                original_size = int(stat.st_size)
 
-        # Extract original file size from .hwp metadata
-        original_size = s  # fallback to index size
-        if hwp_path.exists() and hwp_path.suffix.lower() == ".hwp":
-            try:
-                import json as _json
-                hwp_data = _json.loads(hwp_path.read_text(encoding="utf-8"))
-                if "original" in hwp_data:
-                    original_size = hwp_data["original"].get("size", s)
-            except (json.JSONDecodeError, FileNotFoundError, OSError):
-                pass  # fallback to index size
+            results.append({
+                "doc_id": doc_id,
+                "path": rel,
+                "original_filename": hwp_path.stem,  # best effort
+                "size": original_size,
+                "holo_size": int(stat.st_size),
+                "mtime": stat.st_mtime,
+            })
+        except (OSError, FileNotFoundError):
+            continue
 
-        results.append({
-            "doc_id": d,
-            "path": p,
-            "size": original_size,
-            "holo_size": holo_size,
-            "mtime": m
-        })
-    
-    return {"results": results}
+    total_pages = (total_files + per_page - 1) // per_page
+
+    return {
+        "results": results,
+        "total": total_files,
+        "page": page,
+        "per_page": per_page,
+        "pages": total_pages,
+    }
 
 
 def _ensure_under_root(fs_root: Path, p: Path) -> Path:
@@ -453,22 +471,43 @@ def rename_file(body: RenamePayload, _: bool = Depends(require_api_key)):
 
 @app.get("/tree")
 def tree(_: bool = Depends(require_api_key)):
+    """Build directory tree from actual filesystem structure."""
     fs = get_fs()
-    entries = fs.index.all()  # type: ignore[attr-defined]
     root = Path(fs.root)
-    tree: dict = {"name": root.name, "path": str(root), "dirs": {}, "files": []}
-    for e in entries:
-        rel = str(Path(e.path).resolve().relative_to(root.resolve()))
-        parts = [p for p in rel.split("/") if p]
-        node = tree
-        for d in parts[:-1]:
-            node = node["dirs"].setdefault(d, {"name": d, "path": str(root / "/".join(parts[: parts.index(d)+1])), "dirs": {}, "files": []})
-        node["files"].append({"name": parts[-1], "path": e.path, "size": e.size, "doc_id": e.doc_id})
-    # Convert dirs dict to list
-    def _conv(n):
-        n["dirs"] = [ _conv(v) for v in n["dirs"].values() ]
-        return n
-    return _conv(tree)
+    
+    # Build tree from actual filesystem
+    def build_tree(path: Path, name: str = None) -> dict:
+        if name is None:
+            name = path.name
+        
+        node = {
+            "name": name,
+            "path": str(path),
+            "dirs": [],
+            "files": []
+        }
+        
+        try:
+            if path.is_dir():
+                # Add subdirectories
+                for item in sorted(path.iterdir()):
+                    if item.is_dir() and not item.name.startswith('.'):
+                        node["dirs"].append(build_tree(item))
+                    elif item.is_file() and item.suffix == '.hwp':
+                        # Only show .hwp files in patterns directory
+                        if 'patterns' in str(item):
+                            node["files"].append({
+                                "name": item.name,
+                                "path": str(item.relative_to(root)),
+                                "size": item.stat().st_size,
+                                "doc_id": item.stem
+                            })
+        except (OSError, PermissionError):
+            pass
+        
+        return node
+    
+    return build_tree(root)
 
 
 @app.get("/thumb")
@@ -645,6 +684,13 @@ async def store(file: UploadFile = File(...), _: bool = Depends(require_api_key)
         # 3) Write .hwp according to router decision
         try:
             fmt = str(routing.get("format", "v4"))
+            # Avoid non-recoverable micro format (K=0) when 3D exact-recall is unavailable
+            try:
+                has3d = bool(getattr(fs.mem, 'backend3d', None))  # type: ignore[attr-defined]
+            except Exception:
+                has3d = False
+            if fmt == "micro" and not has3d:
+                fmt = "microK8"
             if fmt == "micro":
                 # Ultra-compact micro header, no coefficients (K=0)
                 write_hwp_v4_micro(
@@ -789,8 +835,30 @@ def download(doc_id: str, _: bool = Depends(require_api_key)):
         if ent:
             p = _ensure_under_root(fs.root, Path(ent.path))
             if p.exists():
-                # If .hwp, reconstruct from holographic backend; support v3 JSON and v4 binary
+                # If .hwp, reconstruct. Prefer decoding v4 binary via GPU module; support legacy JSON (v3) fallback
                 if p.suffix.lower() == ".hwp":
+                    # Try modern v4 decode first (H4K8/HWP4V001) using holographic_gpu
+                    try:
+                        import holographic_gpu as _hg  # type: ignore
+                        if hasattr(_hg, 'HolographicGPU'):
+                            dec = _hg.HolographicGPU()  # type: ignore[attr-defined]
+                            try:
+                                # initialize is best-effort; decoder is CPU-side
+                                dec.initialize('metal')  # type: ignore[attr-defined]
+                            except Exception:
+                                pass
+                            raw = dec.retrieve_bytes(str(p))  # type: ignore[attr-defined]
+                            # Try derive filename from index or path
+                            fname = Path(ent.path).stem
+                            import mimetypes as _mt
+                            ctype = _mt.guess_type(fname)[0] or 'application/octet-stream'
+                            try:
+                                getattr(app.state, 'telemetry', None) and app.state.telemetry.track_retrieval()
+                            except Exception:
+                                pass
+                            return Response(content=raw, media_type=ctype, headers={"Content-Disposition": f"attachment; filename={Path(fname).name}"})
+                    except Exception:
+                        pass
                     # Try legacy JSON (v3) for inline data and metadata
                     try:
                         import json as _json, base64 as _b64

@@ -1,0 +1,761 @@
+# 🌌 HolographicMemory Development Guide
+# =====================================
+# 
+# 🚀 Revolutionary GPU-Accelerated Wave-Based Storage Engine
+# 
+# This guide provides detailed information about all available
+# development commands and workflows for HolographicMemory.
+
+## 🚀 Getting Started - First Time Setup
+
+**This is how to get started with HolographicMemory development:**
+
+```bash
+# 1. Set up your development environment (includes GPU acceleration)
+make setup
+
+# 2. Start the development server
+make dev
+
+# 3. Open your browser to the web interface
+# (The server will show you the exact URL)
+```
+
+**Optional verification:**
+```bash
+make setup-verify  # Confirms everything is working
+```
+
+**That's it! You're now running HolographicMemory with Metal GPU acceleration.**
+
+## 🎯 Quick Start Guide
+
+### First Time Setup
+```bash
+make setup          # Set up virtual environment and install dependencies
+make dev            # Start development server with Metal GPU
+```
+
+### Daily Development
+```bash
+make dev            # Start server with hot reload
+make test           # Run tests
+make benchmark      # Check performance
+```
+
+### Native macOS App
+```bash
+make app-dev        # Prepare native macOS app
+make app-build      # Build for distribution
+```
+
+## 🚀 Development Commands
+
+### `make dev`
+**Start development server with Metal GPU acceleration**
+
+**When to use:** This is your **primary development command** - use it for daily development work, testing code changes, and building features. Perfect for when you want to quickly start coding and see changes immediately.
+
+**Why use this:** This command gives you the fastest development experience with hot reload, so you can make code changes and see them instantly without restarting the server. It uses Metal GPU acceleration for realistic performance testing.
+
+**Exactly what it does:**
+1. **Checks virtual environment** - Creates `venv/` if it doesn't exist
+2. **Installs dependencies** - Installs FastAPI, uvicorn, holographicfs, and all required packages
+3. **Selects available port** - Automatically finds an unused port (e.g., 8001, 8002, etc.) to avoid conflicts
+4. **Starts FastAPI server** - Launches uvicorn with hot reload enabled
+5. **Enables Metal GPU** - Uses your Mac's GPU for 451K+ ops/sec performance
+6. **Watches for changes** - Automatically restarts when you modify Python files
+7. **Serves web interface** - Makes HoloDesk available at http://localhost:[port]
+
+**Perfect for:** Daily development, testing new features, debugging, and rapid iteration.
+
+**Example output:**
+```
+🚀 Starting HolographicMemory development server...
+📍 Port: 8001
+🌌 GPU: Metal acceleration enabled
+📁 Data: ./data
+
+INFO:     Uvicorn running on http://0.0.0.0:8001
+INFO:     Started reloader process
+```
+
+### `make dev-venv`
+**Start development server in virtual environment**
+
+**When to use:** Use this when you want to be absolutely certain you're using the virtual environment, or when `make dev` isn't working properly and you need to force the virtual environment usage.
+
+**Why use this:** Sometimes the system Python might interfere with development. This command explicitly uses the virtual environment Python executable, ensuring you have a clean, isolated development environment.
+
+**Exactly what it does:**
+1. **Creates virtual environment** - Sets up `venv/` directory with isolated Python
+2. **Installs dependencies** - Installs all packages in the virtual environment only
+3. **Uses venv Python** - Explicitly calls `venv/bin/python` instead of system Python
+4. **Starts server** - Launches FastAPI with the virtual environment Python
+5. **Same features** - Hot reload, Metal GPU, auto port selection
+
+**Perfect for:** Troubleshooting Python environment issues, ensuring clean dependencies, or when you need explicit virtual environment control.
+
+### `make setup`
+**Set up complete development environment**
+
+**When to use:** Run this **once** when you first clone the repository or when you want to completely reset your development environment. Also use this after running `make clean` to rebuild everything from scratch.
+
+**Why use this:** This command prepares everything you need for development in one go. It's much faster than manually setting up Python, installing packages, and building extensions separately.
+
+**Exactly what it does:**
+1. **Creates virtual environment** - Sets up isolated Python environment in `venv/`
+2. **Upgrades pip/setuptools** - Ensures you have the latest build tools
+3. **Installs API dependencies** - Installs FastAPI, uvicorn, and all web server requirements
+4. **Installs holographicfs** - Installs the core holographic memory package in development mode
+5. **Builds native extensions** - Compiles C++ extensions with Metal GPU support
+6. **Verifies installation** - Checks that everything is working correctly
+
+**Perfect for:** First-time setup, after pulling new changes, or when you need a clean development environment.
+
+**Time to complete:** 2-5 minutes depending on your internet connection and CPU speed.
+
+### `make setup-verify`
+**Verify setup is working correctly**
+
+**When to use:** Run this after `make setup` to ensure everything was installed correctly, or when you're experiencing issues and want to validate your development environment. Also use this to troubleshoot import errors or missing dependencies.
+
+**Why use this:** This command performs comprehensive validation of your development environment, ensuring that all components are properly installed and working. It's essential for catching setup issues early before you start development.
+
+**Exactly what it does:**
+1. **Checks Python environment** - Verifies Python version and executable path
+2. **Validates virtual environment** - Confirms virtual environment is active and working
+3. **Tests holographicfs import** - Ensures the core package can be imported
+4. **Tests native extensions** - Verifies C++ extensions are compiled and accessible
+5. **Tests GPU backend** - Confirms Metal GPU backend can be initialized
+6. **Tests API dependencies** - Validates FastAPI and uvicorn are available
+7. **Runs functionality test** - Performs basic holographic memory operations
+8. **Reports results** - Shows detailed status of each validation step
+
+**Perfect for:** Post-setup validation, troubleshooting environment issues, or when you need to confirm everything is working before starting development.
+
+**Expected output:** All tests should pass with ✅ checkmarks. If any fail, you'll see specific error messages to help fix the issues.
+
+**Time to complete:** 30-60 seconds for comprehensive validation.
+
+## 🔧 Build Commands
+
+### `make native`
+**Build native C++ extensions with Metal GPU**
+
+**When to use:** Use this when you've made changes to the C++ code in `holographic-fs/native/holographic/` or when the native extensions aren't working properly. Also use this after pulling changes that modify the C++ backend.
+
+**Why use this:** The C++ extensions provide the core holographic memory engine with Metal GPU acceleration. Without them, you'll get "C++ backend not available" errors. This command compiles the extensions so Python can use them.
+
+**Exactly what it does:**
+1. **Changes to C++ directory** - Navigates to `holographic-fs/native/holographic/`
+2. **Runs setup.py** - Executes the Python build script for C++ extensions
+3. **Compiles C++ code** - Uses g++/clang++ to compile Metal GPU kernels and holographic algorithms
+4. **Creates Python bindings** - Generates `.so` files that Python can import
+5. **Links Metal frameworks** - Connects to Apple's Metal GPU framework
+6. **Enables GPU acceleration** - Makes 451K+ ops/sec performance available
+
+**Perfect for:** After modifying C++ code, when getting import errors, or when you need to rebuild the GPU backend.
+
+**Files created:** `holographic_cpp*.so`, `holographic_gpu*.so`, and other native extension files.
+
+### `make build`
+**Build all components**
+
+**When to use:** Use this when you want to create distributable packages or when you need to ensure all components are properly built. Also use this before creating releases or when preparing for production deployment.
+
+**Why use this:** This command creates the complete build artifacts needed for distribution. It's more comprehensive than `make native` because it also creates Python wheel packages that can be installed on other systems.
+
+**Exactly what it does:**
+1. **Builds native extensions** - Runs `make native` to compile C++ extensions
+2. **Creates Python packages** - Builds wheel and source distribution packages
+3. **Generates build artifacts** - Creates `dist/` directory with installable packages
+4. **Validates build** - Ensures all components are properly compiled and packaged
+5. **Prepares for distribution** - Makes packages ready for pip install or deployment
+
+**Perfect for:** Creating releases, preparing for production, or when you need distributable packages.
+
+**Output:** Creates `holographicfs-*.whl` and `holographicfs-*.tar.gz` files in the `dist/` directory.
+
+### `make install`
+**Install holographicfs package**
+
+**When to use:** Use this when you want to install the holographicfs package in your virtual environment so you can import it from anywhere in your Python code. Also use this after making changes to the package structure.
+
+**Why use this:** This installs the package in "editable" mode, meaning changes to the source code are immediately available without reinstalling. It makes the package available for import in any Python script.
+
+**Exactly what it does:**
+1. **Installs in editable mode** - Uses `pip install -e` so changes are immediately available
+2. **Creates import links** - Makes `holographicfs` importable from anywhere
+3. **Updates package metadata** - Registers the package with pip
+4. **Enables development imports** - Allows `from holographicfs.memory import mount` to work
+
+**Perfect for:** After modifying package structure, when you need to import holographicfs in other scripts, or when setting up the development environment.
+
+**Note:** This is automatically run as part of `make setup`, so you usually don't need to run it separately.
+
+## 🧪 Testing Commands
+
+### `make test`
+**Run all tests**
+
+**When to use:** Use this before committing code, after making changes, or when you want to ensure everything is working correctly. Also use this as part of your development workflow to catch issues early.
+
+**Why use this:** Running tests ensures your code changes don't break existing functionality. It's essential for maintaining code quality and catching regressions before they become problems.
+
+**Exactly what it does:**
+1. **Runs holographicfs tests** - Executes unit tests for the core memory engine
+2. **Runs API tests** - Tests FastAPI endpoints and web interface
+3. **Validates functionality** - Ensures store, search, and recall operations work
+4. **Checks performance** - Verifies that performance targets are met
+5. **Reports results** - Shows which tests passed or failed with detailed output
+
+**Perfect for:** Before committing code, after pulling changes, or when debugging issues.
+
+**Expected output:** All tests should pass. If any fail, you'll see detailed error messages to help fix the issues.
+
+### `make test-gpu`
+**Test GPU acceleration**
+
+**When to use:** Use this when you want to verify that Metal GPU acceleration is working properly, or when you're experiencing performance issues and want to check if the GPU backend is functioning.
+
+**Why use this:** The GPU acceleration is crucial for achieving 451K+ ops/sec performance. This command quickly verifies that the Metal GPU backend is properly compiled and accessible.
+
+**Exactly what it does:**
+1. **Imports GPU module** - Attempts to import the `holographic_gpu` module
+2. **Checks available platforms** - Lists which GPU platforms are available (Metal, CUDA, ROCm)
+3. **Validates Metal access** - Ensures Metal framework is accessible on macOS
+4. **Tests GPU initialization** - Verifies the GPU backend can be initialized
+5. **Reports status** - Shows whether GPU acceleration is working or not
+
+**Perfect for:** Troubleshooting performance issues, verifying GPU setup, or when you need to confirm Metal acceleration is active.
+
+**Expected output:** Should show `GPU platforms: ['metal']` on macOS, indicating Metal GPU is available and working.
+
+### `make validate`
+**Validate system integration**
+
+**When to use:** Use this when you want to perform comprehensive validation of the entire system, including accuracy, performance, and end-to-end functionality. Also use this before releases or when you need to ensure everything is working correctly.
+
+**Why use this:** This command runs comprehensive validation scripts that test the entire system from data storage to retrieval, ensuring that the holographic memory engine is working correctly and meeting performance targets.
+
+**Exactly what it does:**
+1. **Runs accuracy validation** - Tests that stored data can be retrieved correctly
+2. **Validates performance** - Ensures performance targets are met (451K+ ops/sec)
+3. **Tests end-to-end workflow** - Validates the complete store → search → recall pipeline
+4. **Checks compression ratios** - Verifies 9x compression is achieved
+5. **Validates GPU acceleration** - Ensures Metal GPU is providing expected performance
+6. **Reports comprehensive results** - Shows detailed validation results
+
+**Perfect for:** Pre-release validation, system health checks, or when you need comprehensive testing.
+
+**Time to complete:** 5-10 minutes depending on the validation scope and system performance.
+
+## 📊 Performance Commands
+
+### `make benchmark`
+**Run comprehensive performance benchmarks**
+
+**When to use:** Use this when you want to measure and validate the performance of the holographic memory system. Also use this to generate performance reports, compare different configurations, or verify that performance targets are being met.
+
+**Why use this:** Performance benchmarking is crucial for validating that the system meets its 451K+ ops/sec target and 9x compression ratio. This command provides detailed performance metrics and comparisons.
+
+**Exactly what it does:**
+1. **Runs CPU benchmarks** - Tests baseline CPU performance without GPU acceleration
+2. **Runs GPU benchmarks** - Tests Metal GPU acceleration performance
+3. **Measures memory usage** - Analyzes memory consumption and efficiency
+4. **Tests compression ratios** - Validates 9x compression is achieved
+5. **Generates performance reports** - Creates detailed JSON/CSV reports with metrics
+6. **Compares configurations** - Tests different grid sizes and batch configurations
+7. **Validates targets** - Ensures 451K+ ops/sec and sub-millisecond storage times
+
+**Perfect for:** Performance validation, optimization work, generating performance reports, or when you need to prove the system meets its targets.
+
+**Output:** Creates detailed performance reports in JSON and CSV formats with comprehensive metrics.
+
+### `make benchmark-gpu`
+**Test GPU acceleration performance**
+
+**When to use:** Use this when you want to specifically test and measure GPU acceleration performance, or when you need to validate that Metal GPU is providing the expected 451K+ ops/sec performance.
+
+**Why use this:** This command focuses specifically on GPU performance testing, which is essential for validating that the Metal GPU acceleration is working correctly and providing the expected performance boost.
+
+**Exactly what it does:**
+1. **Tests Metal GPU** - Runs benchmarks specifically on Metal GPU (macOS)
+2. **Measures GPU performance** - Tests operations per second with GPU acceleration
+3. **Compares GPU vs CPU** - Shows performance improvement over CPU-only
+4. **Tests CUDA** - Runs CUDA benchmarks if NVIDIA GPU is available
+5. **Tests ROCm** - Runs ROCm benchmarks if AMD GPU is available
+6. **Generates GPU reports** - Creates detailed GPU performance metrics
+7. **Validates targets** - Ensures 451K+ ops/sec target is met
+
+**Perfect for:** GPU performance validation, optimization work, or when you need to prove GPU acceleration is working.
+
+**Expected output:** Should show 451K+ ops/sec on Metal GPU, significantly higher than CPU-only performance.
+
+### `make benchmark-cpu`
+**Test CPU-only performance**
+
+**When to use:** Use this when you want to test baseline CPU performance without GPU acceleration, or when you need to compare CPU vs GPU performance. Also use this when GPU acceleration isn't available or when you want to test CPU optimizations.
+
+**Why use this:** This command provides a baseline for CPU performance, which is useful for understanding the performance improvement that GPU acceleration provides. It also tests CPU-specific optimizations like SIMD.
+
+**Exactly what it does:**
+1. **Tests CPU-only performance** - Runs benchmarks without GPU acceleration
+2. **Measures baseline performance** - Provides CPU performance baseline
+3. **Tests SIMD optimizations** - Validates CPU vectorization and SIMD instructions
+4. **Tests memory bandwidth** - Measures CPU memory access patterns
+5. **Compares configurations** - Tests different CPU optimization settings
+6. **Generates CPU reports** - Creates detailed CPU performance metrics
+7. **Establishes baseline** - Provides reference point for GPU performance comparison
+
+**Perfect for:** Performance comparison, CPU optimization work, or when GPU acceleration isn't available.
+
+**Expected output:** Should show lower ops/sec than GPU benchmarks, providing a baseline for comparison.
+
+## 📱 Native macOS App Commands
+
+### `make app-dev`
+**Prepare native macOS app for development**
+
+**When to use:** Use this when you want to prepare the native macOS app for development or testing. This is the first step before you can build or run the native macOS application.
+
+**Why use this:** The native macOS app provides a professional, one-click launch experience with Metal GPU acceleration. This command prepares all the components needed for the native app to work.
+
+**Exactly what it does:**
+1. **Downloads Python.framework** - Downloads Python 3.12 framework for embedding
+2. **Installs Python packages** - Installs FastAPI, uvicorn, and all dependencies
+3. **Builds Metal GPU module** - Compiles `holographic_gpu` module with Metal acceleration
+4. **Generates Xcode project** - Creates Xcode project files with `xcodegen`
+5. **Sets up app structure** - Prepares the complete native app structure
+6. **Validates components** - Ensures all components are ready for building
+
+**Perfect for:** Preparing for native app development, testing the native app experience, or when you want to create a distributable macOS application.
+
+**Time to complete:** 3-5 minutes for downloading and building components.
+
+**Next step:** Open `macos/HolographicMemoryApp/HolographicMemory.xcodeproj` in Xcode and click Run.
+
+### `make app-build`
+**Build native macOS app for distribution**
+
+**When to use:** Use this when you want to create a distributable macOS application for production use, App Store submission, or distribution to end users.
+
+**Why use this:** This command creates a professional, optimized macOS application that can be distributed to users. It builds the Release configuration with optimizations and proper code signing.
+
+**Exactly what it does:**
+1. **Builds Release configuration** - Compiles with optimizations and without debug symbols
+2. **Creates distributable .app** - Generates a complete macOS application bundle
+3. **Optimizes performance** - Applies Release optimizations for best performance
+4. **Prepares for distribution** - Creates app bundle ready for distribution
+5. **Validates build** - Ensures the app is properly built and functional
+6. **Ready for App Store** - Creates app bundle suitable for App Store submission
+
+**Perfect for:** Creating production releases, App Store submission, or distributing the app to end users.
+
+**Prerequisites:** Must run `make app-dev` first to prepare the components.
+
+**Output:** Creates a distributable `.app` file in the build directory.
+
+### `make app-test`
+**Test native macOS app components**
+
+**When to use:** Use this when you want to test the components that will be used in the native macOS app without actually building the full app. Also use this to validate that the embedded Python runtime and Metal GPU integration are working correctly.
+
+**Why use this:** This command tests the critical components that the native app depends on, ensuring that the embedded Python runtime, Metal GPU module, and FastAPI server are all working correctly before building the full app.
+
+**Exactly what it does:**
+1. **Validates embedded Python** - Tests that the embedded Python.framework is working
+2. **Tests Metal GPU integration** - Verifies that the Metal GPU module is accessible
+3. **Verifies FastAPI server** - Ensures the FastAPI server can start with embedded Python
+4. **Tests component integration** - Validates that all components work together
+5. **Reports component status** - Shows which components are working and which need attention
+6. **Validates app readiness** - Ensures the app is ready for building
+
+**Perfect for:** Testing app components before building, troubleshooting app issues, or validating the embedded runtime.
+
+**Prerequisites:** Must run `make app-dev` first to prepare the components.
+
+## 🐳 Docker Commands
+
+### `make docker-dev`
+**Start development environment in Docker**
+
+**When to use:** Use this when you want to develop in a Linux container environment, test cross-platform compatibility, or when you need CUDA/ROCm support for GPU acceleration on Linux systems.
+
+**Why use this:** Docker provides a consistent, isolated development environment that's identical across different machines. It's perfect for testing Linux compatibility and using CUDA/ROCm GPU acceleration.
+
+**Exactly what it does:**
+1. **Starts Docker containers** - Launches Linux containers with the development environment
+2. **Sets up development environment** - Installs Python, dependencies, and builds native extensions
+3. **Enables CUDA/ROCm** - Provides GPU acceleration support for NVIDIA/AMD GPUs
+4. **Mounts source code** - Makes your source code available in the container for development
+5. **Provides web interface** - Makes the FastAPI server available on localhost
+6. **Enables hot reload** - Code changes are reflected immediately in the container
+
+**Perfect for:** Cross-platform development, testing Linux compatibility, or when you need CUDA/ROCm GPU support.
+
+**Prerequisites:** Docker Desktop must be installed and running.
+
+**Access:** The web interface will be available at http://localhost:8000
+
+### `make docker-prod`
+**Build production Docker image**
+
+**When to use:** Use this when you want to create a production-ready Docker image for deployment to servers, cloud platforms, or production environments.
+
+**Why use this:** This command creates an optimized, secure Docker image that's suitable for production deployment. It's much smaller and more secure than the development image.
+
+**Exactly what it does:**
+1. **Builds production image** - Creates optimized Docker image for production use
+2. **Minimizes dependencies** - Only includes runtime dependencies, not build tools
+3. **Security hardening** - Applies security best practices and runs as non-root user
+4. **Optimizes size** - Creates smaller image for faster deployment
+5. **Production configuration** - Uses production-optimized settings
+6. **Health checks** - Includes health check endpoints for monitoring
+7. **Ready for deployment** - Creates image suitable for production deployment
+
+**Perfect for:** Production deployment, cloud deployment, or when you need a secure, optimized image.
+
+**Output:** Creates a production-ready Docker image tagged as `holo-api:prod`.
+
+### `make docker-cuda`
+**Build CUDA-enabled Docker image**
+
+**When to use:** Use this when you want to create a Docker image with NVIDIA CUDA support for high-performance GPU acceleration on systems with NVIDIA GPUs.
+
+**Why use this:** This command creates a Docker image that can leverage NVIDIA GPUs for maximum performance. It's essential for high-performance computing and when you need the best possible GPU acceleration.
+
+**Exactly what it does:**
+1. **Builds CUDA image** - Creates Docker image with NVIDIA CUDA support
+2. **Includes CUDA runtime** - Provides CUDA libraries and runtime environment
+3. **Enables GPU acceleration** - Allows the container to access NVIDIA GPUs
+4. **Optimizes for performance** - Uses CUDA-optimized build settings
+5. **Includes cuFFT** - Provides CUDA FFT library for high-performance FFT operations
+6. **Stream processing** - Enables CUDA streams for async processing
+7. **High-performance computing** - Optimized for maximum GPU performance
+
+**Perfect for:** High-performance computing, NVIDIA GPU systems, or when you need maximum GPU acceleration.
+
+**Prerequisites:** NVIDIA Docker runtime must be installed and configured.
+
+**Output:** Creates a CUDA-enabled Docker image tagged as `holo-api:cuda`.
+
+## 🔍 Utility Commands
+
+### `make openapi`
+**Generate OpenAPI documentation**
+
+**When to use:** Use this when you want to generate API documentation, create client SDKs, or when you need to share the API specification with other developers or tools.
+
+**Why use this:** OpenAPI documentation provides a complete specification of your API, making it easy for other developers to understand and integrate with your holographic memory system.
+
+**Exactly what it does:**
+1. **Generates OpenAPI spec** - Creates complete OpenAPI 3.0 specification
+2. **Documents all endpoints** - Includes all FastAPI endpoints with parameters and responses
+3. **Creates interactive docs** - Generates Swagger UI for interactive API exploration
+4. **Enables client generation** - Creates client SDKs for various programming languages
+5. **Validates API** - Ensures API specification is complete and valid
+6. **Updates documentation** - Keeps API docs in sync with code changes
+
+**Perfect for:** API documentation, client SDK generation, or when you need to share API specifications.
+
+**Output:** Creates OpenAPI specification files and interactive documentation.
+
+### `make docs`
+**Generate documentation**
+
+**When to use:** Use this when you want to generate comprehensive documentation for the holographic memory system, including API docs, code documentation, and user guides.
+
+**Why use this:** Good documentation is essential for understanding and maintaining the system. This command generates all the documentation you need in one go.
+
+**Exactly what it does:**
+1. **Generates API documentation** - Creates comprehensive API documentation
+2. **Creates code documentation** - Generates documentation from code comments and docstrings
+3. **Builds user guides** - Creates user-friendly documentation and guides
+4. **Formats documentation** - Generates HTML documentation for easy reading
+5. **Updates docs** - Keeps documentation in sync with code changes
+6. **Creates index** - Generates navigation and index for easy browsing
+
+**Perfect for:** Creating comprehensive documentation, maintaining project docs, or when you need to share documentation with others.
+
+**Output:** Creates HTML documentation in the `docs/` directory.
+
+### `make clean`
+**Clean build artifacts and cache**
+
+**When to use:** Use this when you want to completely reset your development environment, remove all build artifacts, or when you're experiencing build issues and need a fresh start.
+
+**Why use this:** Sometimes build artifacts can cause issues or take up unnecessary space. This command gives you a completely clean slate to start fresh.
+
+**Exactly what it does:**
+1. **Removes build files** - Deletes all compiled C++ extensions and build artifacts
+2. **Clears Python cache** - Removes `__pycache__` directories and `.pyc` files
+3. **Removes virtual environment** - Deletes the entire `venv/` directory
+4. **Cleans distribution files** - Removes `dist/` and `build/` directories
+5. **Removes egg info** - Cleans up package metadata files
+6. **Resets environment** - Gives you a completely clean development environment
+
+**Perfect for:** Troubleshooting build issues, freeing up disk space, or when you need a completely fresh start.
+
+**Warning:** This will remove your virtual environment and all installed packages. You'll need to run `make setup` afterward to rebuild everything.
+
+### `make config`
+**Show current configuration**
+
+**When to use:** Use this when you want to see the current configuration settings, check which Python version is being used, or when you need to verify your development environment setup.
+
+**Why use this:** This command shows you exactly how your development environment is configured, which is helpful for troubleshooting or when you need to share your configuration with others.
+
+**Exactly what it does:**
+1. **Shows Python version** - Displays which Python executable is being used
+2. **Shows virtual environment** - Displays the virtual environment directory path
+3. **Shows port selection** - Displays the current port configuration
+4. **Shows data directory** - Displays where holographic memory data is stored
+5. **Shows grid size** - Displays the current grid size configuration
+6. **Shows all settings** - Provides a complete overview of your configuration
+
+**Perfect for:** Checking your setup, troubleshooting configuration issues, or when you need to verify your environment.
+
+**Example output:**
+```
+⚙️ Current Configuration:
+  Python: python3
+  Virtual Environment: venv
+  Port: 8001
+  Data Directory: ./data
+  Grid Size: 64
+```
+
+## ⚙️ Configuration
+
+### Environment Variables
+```bash
+# Python executable
+PY=python3
+
+# Virtual environment directory
+VENV_DIR=venv
+
+# Data directory
+HOLO_ROOT=./data
+
+# Grid size for holographic memory
+GRID_SIZE=64
+
+# Port (auto-selected if not set)
+PORT=8000
+```
+
+### Port Selection
+The Makefile automatically selects an available port to avoid conflicts:
+```bash
+# Auto-select port
+make dev
+
+# Use specific port
+PORT=9000 make dev
+```
+
+### Virtual Environment
+All development commands use a virtual environment by default:
+```bash
+# Virtual environment location
+venv/
+
+# Python executable
+venv/bin/python
+
+# Pip executable
+venv/bin/python -m pip
+```
+
+## 🎨 Customization
+
+### Custom Port
+```bash
+PORT=9000 make dev
+```
+
+### Custom Data Directory
+```bash
+HOLO_ROOT=/path/to/data make dev
+```
+
+### Custom Python
+```bash
+PY=python3.11 make dev
+```
+
+### Custom Virtual Environment
+```bash
+VENV_DIR=myenv make setup
+```
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+#### Port Already in Use
+```bash
+# Auto-select available port
+make dev
+
+# Or specify different port
+PORT=9000 make dev
+```
+
+#### Virtual Environment Issues
+```bash
+# Clean and recreate
+make clean
+make setup
+```
+
+#### GPU Not Working
+```bash
+# Test GPU
+make test-gpu
+
+# Check Metal availability
+python3 -c "import Metal; print('Metal available')"
+```
+
+#### Native Extensions Not Building
+```bash
+# Clean and rebuild
+make clean
+make native
+```
+
+### Debug Mode
+```bash
+# Verbose output
+make dev V=1
+
+# Debug Python
+PYTHONPATH=. python3 -m uvicorn services.api.app:app --reload --port 8000
+```
+
+## 📚 Advanced Usage
+
+### Development Workflow
+1. **Setup**: `make setup`
+2. **Develop**: `make dev`
+3. **Test**: `make test`
+4. **Benchmark**: `make benchmark`
+5. **Build**: `make build`
+
+### Native App Workflow
+1. **Prepare**: `make app-dev`
+2. **Develop**: Open Xcode project
+3. **Test**: `make app-test`
+4. **Build**: `make app-build`
+
+### Docker Workflow
+1. **Development**: `make docker-dev`
+2. **Production**: `make docker-prod`
+3. **CUDA**: `make docker-cuda`
+
+## 🎯 Performance Targets
+
+### Metal GPU (macOS)
+- **Target**: 451K+ ops/sec
+- **Achieved**: 1,029,232 ops/sec
+- **Memory**: 9x compression ratio
+
+### CUDA (NVIDIA)
+- **Target**: 200K+ ops/sec
+- **Memory**: Pinned host memory
+- **Streams**: Async processing
+
+### ROCm (AMD)
+- **Target**: 200K+ ops/sec
+- **Memory**: HIP memory management
+- **Streams**: Async processing
+
+## 🔗 Related Commands
+
+### Quick Commands
+```bash
+make help           # Show this help
+make dev            # Start development
+make test           # Run tests
+make clean          # Clean up
+```
+
+### Development Commands
+```bash
+make setup          # Initial setup
+make native         # Build extensions
+make benchmark      # Performance test
+make validate       # System validation
+```
+
+### App Commands
+```bash
+make app-dev        # Prepare app
+make app-build      # Build app
+make app-test       # Test app
+```
+
+## 💡 Tips and Tricks
+
+### Hot Reload
+- Code changes automatically reload
+- No need to restart server
+- Fast development iteration
+
+### Port Management
+- Auto-selects available ports
+- Avoids conflicts with other projects
+- Easy to override with PORT=9000
+
+### Virtual Environment
+- Isolated Python environment
+- Clean dependency management
+- Easy to reset with `make clean`
+
+### GPU Acceleration
+- Metal on macOS
+- CUDA on NVIDIA
+- ROCm on AMD
+- Automatic platform detection
+
+## 🎉 Success Indicators
+
+### Development Server
+```
+✅ Server running on http://localhost:8000
+✅ Metal GPU acceleration active
+✅ Hot reload enabled
+✅ Virtual environment active
+```
+
+### Native App
+```
+✅ Xcode project generated
+✅ Python.framework embedded
+✅ Metal GPU module built
+✅ FastAPI server bundled
+```
+
+### Performance
+```
+✅ 451K+ ops/sec (Metal)
+✅ 9x compression ratio
+✅ Sub-millisecond storage
+✅ Real-time metrics
+```
+
+---
+
+## 🚀 Ready to Start?
+
+```bash
+make setup          # First time setup
+make dev            # Start developing
+make help           # Show all commands
+```
+
+**Happy coding! 🌌✨**

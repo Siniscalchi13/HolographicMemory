@@ -385,9 +385,11 @@ public:
         ).count();
 
         auto end = std::chrono::high_resolution_clock::now();
-        total_store_time_us.fetch_add(
-            std::chrono::duration<double, std::micro>(end - start).count()
-        );
+        double elapsed = std::chrono::duration<double, std::micro>(end - start).count();
+        double current = total_store_time_us.load();
+        while (!total_store_time_us.compare_exchange_weak(current, current + elapsed)) {
+            // Retry if compare_exchange_weak failed
+        }
 
         return "mem_" + std::to_string(idx);
     }
@@ -493,9 +495,11 @@ public:
         }
 
         auto end = std::chrono::high_resolution_clock::now();
-        total_store_time_us.fetch_add(
-            std::chrono::duration<double, std::micro>(end - start).count()
-        );
+        double elapsed = std::chrono::duration<double, std::micro>(end - start).count();
+        double current = total_store_time_us.load();
+        while (!total_store_time_us.compare_exchange_weak(current, current + elapsed)) {
+            // Retry if compare_exchange_weak failed
+        }
 
         return ids;
     }
@@ -565,9 +569,11 @@ public:
         }
 
         auto end = std::chrono::high_resolution_clock::now();
-        total_query_time_us.fetch_add(
-            std::chrono::duration<double, std::micro>(end - start).count()
-        );
+        double elapsed = std::chrono::duration<double, std::micro>(end - start).count();
+        double current = total_query_time_us.load();
+        while (!total_query_time_us.compare_exchange_weak(current, current + elapsed)) {
+            // Retry if compare_exchange_weak failed
+        }
 
         return results;
     }
