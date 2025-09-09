@@ -4,6 +4,8 @@
 #include <vector>
 #include <string>
 #include <cstdint>
+#include "../GPUBackend.hpp"
+#include <cufft.h>
 
 namespace holo {
 
@@ -12,6 +14,7 @@ public:
     CudaBackend();
     ~CudaBackend();
     bool available() const noexcept;
+    bool initialize(const GPUConfig& cfg);
 
     // FFT-based batch encode (cuFFT)
     std::vector<std::vector<float>> batch_encode_fft_ultra(const float* ptr,
@@ -28,16 +31,20 @@ public:
     Metrics metrics() const { return metrics_; }
 
 private:
-    void ensure_buffers(size_t in_bytes, size_t out_bytes);
-    void capture_graph(uint32_t batch, uint32_t data_len, uint32_t pattern_dim);
+    void ensure_buffers(size_t in_bytes, size_t out_bytes, size_t fft_bytes);
+    void destroy_plan();
 
     void* d_input_{nullptr};
     void* d_output_{nullptr};
+    void* d_fft_in_{nullptr};
     void* h_pinned_{nullptr};
-    size_t in_bytes_{0}, out_bytes_{0};
-    void* stream_{nullptr};
-    void* graph_{nullptr};
-    void* graph_exec_{nullptr};
+    size_t in_bytes_{0}, out_bytes_{0}, fft_bytes_{0};
+    cudaStream_t stream_ {nullptr};
+    cudaGraph_t graph_ {nullptr};
+    cudaGraphExec_t graph_exec_ {nullptr};
+    cufftHandle fft_plan_ {0};
+    bool initialized_ {false};
+    GPUConfig config_ {};
     Metrics metrics_{};
 };
 
@@ -48,4 +55,3 @@ private:
 namespace holo { class CudaBackend { public: bool available() const noexcept { return false; } }; }
 
 #endif
-

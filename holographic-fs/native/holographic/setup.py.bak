@@ -14,7 +14,7 @@ common = ext_kwargs_common()
 ext_modules = [
     Pybind11Extension(
         "holographic_cpp",
-        ["holographic_memory_optimized.cpp"],
+        ["holographic_memory.cpp"],
         include_dirs=[pybind11.get_include()] + common["include_dirs"],
         library_dirs=common["library_dirs"],
         libraries=common["libraries"],

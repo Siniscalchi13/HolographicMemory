@@ -1,0 +1,82 @@
+{
+  "env": {
+    "python": "3.9.6",
+    "platform": "macOS-15.3.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "processor": "arm",
+    "timestamp_ms": 1757375546843
+  },
+  "params": {
+    "dimensions": [
+      1024
+    ],
+    "sizes": [
+      50000
+    ],
+    "repeats": 10,
+    "warmup": 2,
+    "file_bytes": 4096
+  },
+  "results": [
+    {
+      "label": "gpu_batch_store_ops_per_s[gpu_metal_legacy]",
+      "dimension": 1024,
+      "corpus_size": 50000,
+      "metric": "ops/s",
+      "values": [
+        51816.5,
+        44629.54,
+        51864.61,
+        48591.35,
+        51997.69,
+        50392.67,
+        44592.09,
+        51627.69,
+        44146.4,
+        49243.45
+      ],
+      "p50": 50392.67,
+      "p95": 51864.61
+    },
+    {
+      "label": "gpu_batch_store_ops_per_s[gpu_metal_fft]",
+      "dimension": 1024,
+      "corpus_size": 50000,
+      "metric": "ops/s",
+      "values": [
+        45380.26,
+        51035.28,
+        46800.76,
+        50248.25,
+        47856.97,
+        49935.16,
+        48489.04,
+        50532.66,
+        50595.77,
+        43223.15
+      ],
+      "p50": 49935.16,
+      "p95": 50595.77
+    },
+    {
+      "label": "gpu_batch_store_fft_ultra_ops_per_s[gpu_metal_fft_ultra]",
+      "dimension": 1024,
+      "corpus_size": 50000,
+      "metric": "ops/s",
+      "values": [
+        52340.66,
+        44458.31,
+        51254.65,
+        47395.7,
+        52462.51,
+        46937.09,
+        50336.67,
+        49415.39,
+        51864.99,
+        50874.27
+      ],
+      "p50": 50874.27,
+      "p95": 52340.66
+    }
+  ]
+}

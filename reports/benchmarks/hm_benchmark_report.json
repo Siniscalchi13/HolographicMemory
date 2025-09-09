@@ -1,0 +1,61 @@
+{
+  "env": {
+    "python": "3.12.11",
+    "platform": "macOS-15.3.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "processor": "arm",
+    "timestamp_ms": 1757351418957
+  },
+  "params": {
+    "dimensions": [
+      1024
+    ],
+    "sizes": [
+      1000
+    ],
+    "repeats": 3,
+    "warmup": 1,
+    "file_bytes": 4096
+  },
+  "results": [
+    {
+      "label": "store_throughput_ops_per_s",
+      "dimension": 1024,
+      "corpus_size": 1000,
+      "metric": "ops/s",
+      "values": [
+        240.43,
+        107.28,
+        68.08
+      ],
+      "p50": 107.28,
+      "p95": 107.28
+    },
+    {
+      "label": "doc_id_recall_latency_ms",
+      "dimension": 1024,
+      "corpus_size": 100,
+      "metric": "ms",
+      "values": [
+        0.3133,
+        0.2276,
+        0.219
+      ],
+      "p50": 0.2276,
+      "p95": 0.2276
+    },
+    {
+      "label": "search_latency_ms",
+      "dimension": 1024,
+      "corpus_size": 100,
+      "metric": "ms",
+      "values": [
+        0.1815,
+        0.0543,
+        0.0504
+      ],
+      "p50": 0.0543,
+      "p95": 0.0543
+    }
+  ]
+}

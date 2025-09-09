@@ -1,0 +1,104 @@
+{
+  "env": {
+    "python": "3.9.6",
+    "platform": "macOS-15.3.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "processor": "arm",
+    "timestamp_ms": 1757358186486
+  },
+  "params": {
+    "dimensions": [
+      1024,
+      4096
+    ],
+    "sizes": [
+      10000,
+      50000
+    ],
+    "repeats": 10,
+    "warmup": 2,
+    "file_bytes": 4096
+  },
+  "results": [
+    {
+      "label": "gpu_batch_store_ops_per_s[gpu_metal_legacy]",
+      "dimension": 1024,
+      "corpus_size": 10000,
+      "metric": "ops/s",
+      "values": [
+        49872.02,
+        54077.91,
+        54703.04,
+        59178.05,
+        57712.67,
+        59071.69,
+        52899.1,
+        52978.35,
+        51852.98,
+        53895.14
+      ],
+      "p50": 54077.91,
+      "p95": 59071.69
+    },
+    {
+      "label": "gpu_batch_store_ops_per_s[gpu_metal_legacy]",
+      "dimension": 1024,
+      "corpus_size": 50000,
+      "metric": "ops/s",
+      "values": [
+        44014.89,
+        51506.0,
+        45963.1,
+        48789.16,
+        40599.93,
+        52660.38,
+        49246.46,
+        55503.75,
+        48825.85,
+        51367.57
+      ],
+      "p50": 49246.46,
+      "p95": 52660.38
+    },
+    {
+      "label": "gpu_batch_store_ops_per_s[gpu_metal_legacy]",
+      "dimension": 4096,
+      "corpus_size": 10000,
+      "metric": "ops/s",
+      "values": [
+        15942.86,
+        16892.19,
+        14897.05,
+        14666.64,
+        14960.96,
+        15163.18,
+        15719.71,
+        16124.12,
+        15664.67,
+        16528.0
+      ],
+      "p50": 15719.71,
+      "p95": 16528.0
+    },
+    {
+      "label": "gpu_batch_store_ops_per_s[gpu_metal_legacy]",
+      "dimension": 4096,
+      "corpus_size": 50000,
+      "metric": "ops/s",
+      "values": [
+        14601.22,
+        13539.96,
+        13930.6,
+        10954.64,
+        11273.25,
+        11206.66,
+        12836.01,
+        10431.51,
+        4618.32,
+        11922.82
+      ],
+      "p50": 11922.82,
+      "p95": 13930.6
+    }
+  ]
+}

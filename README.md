@@ -17,6 +17,17 @@ Install & Build
 - Install library: `cd holographic-fs && python -m pip install -e .`
 - Run tests: `make test`
 
+Performance & Benchmarks
+
+- Reproducible benchmarking: see `documentation/benchmarks/REPRODUCIBLE_BENCHMARKS.md`
+- Report ranges with conditions (hardware, flags, dimension, corpus):
+  - On Mac Studio M2 Max (this repo, package API, conservative harness):
+    - Store (looped writes via Python): P50 typically ~100–250 ops/s for 4KB payloads
+    - doc_id recall: ~0.2–0.5 ms P50 (O(1) in corpus size)
+    - Search (semantic): grows with corpus size (O(n))
+  - Native batch peak throughput (hitting store_batch directly) and GPU acceleration (Metal) can raise these significantly; see the benchmark harness JSON outputs and experimental GPU notes.
+  - Historical peak numbers (e.g., ~140k–155k ops/s) were measured under specific native-only, SIMD-optimized conditions; treat as best-case and verify via the harness.
+
 CLI
 
 - Initialize: `holo init ./data --grid-size 64`
@@ -61,3 +72,4 @@ Notes
 - This repo does not modify TAI; it references the same math/algorithms and hosts a standalone build + API surface.
 - Current engine API is string‑based; binary files are indexed by `filename:..` headers to enable wave persistence.
 - If you need byte‑level recall, the C++ engine requires an explicit method; tracked for a later update.
+ - Experimental GPU (Metal) scaffolding is included for Apple Silicon; see `holographic-fs/native/holographic/metal` and the benchmarking guide for usage and caveats.
