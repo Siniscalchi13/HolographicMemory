@@ -56,6 +56,7 @@ bool CudaBackend::initialize(const GPUConfig& cfg) {
     int dev = cfg.device_id;
     if (cudaSetDevice(dev) != cudaSuccess) return false;
     if (!stream_) cudaStreamCreate(&stream_);
+    create_events();
     initialized_ = true;
     return true;
 }
@@ -85,6 +86,13 @@ void CudaBackend::ensure_buffers(size_t in_bytes, size_t out_bytes, size_t fft_b
     }
 }
 
+void CudaBackend::create_events() {
+    if (!start_event_) cudaEventCreate(&start_event_);
+    if (!end_event_) cudaEventCreate(&end_event_);
+    if (!fft_start_event_) cudaEventCreate(&fft_start_event_);
+    if (!fft_end_event_) cudaEventCreate(&fft_end_event_);
+}
+
 std::vector<std::vector<float>> CudaBackend::batch_encode_fft_ultra(const float* ptr,
                                                                     uint32_t batch,
                                                                     uint32_t data_len,
@@ -95,16 +103,53 @@ std::vector<std::vector<float>> CudaBackend::batch_encode_fft_ultra(const float*
     const size_t out_bytes = (size_t)batch * pattern_dim * sizeof(float);
     ensure_buffers(in_bytes, out_bytes, fft_bytes);
 
-    // H2D copy using pinned host buffer
+    // Rebuild graph if needed
+    if (!graph_captured_ || current_pattern_dim_ != pattern_dim) {
+        rebuild_graph(batch, data_len, pattern_dim);
+    }
+
+    // Host timing
+    auto t0 = std::chrono::high_resolution_clock::now();
+
+    // Record overall start event
+    cudaEventRecord(start_event_, stream_);
+
+    // Copy input to pinned host buffer; graph reads from pinned buffer to device
     std::memcpy(h_pinned_, ptr, in_bytes);
-    cudaMemcpyAsync(d_input_, h_pinned_, in_bytes, cudaMemcpyHostToDevice, stream_);
 
-    // Pad/truncate rows to pattern_dim
-    dim3 block(256,1,1);
-    dim3 grid((pattern_dim + block.x - 1)/block.x, batch, 1);
-    pad_rows_kernel<<<grid, block, 0, stream_>>>((const float*)d_input_, (float*)d_fft_in_, batch, data_len, pattern_dim);
+    // Launch captured graph
+    cudaGraphLaunch(graph_exec_, stream_);
+    // Record overall end event
+    cudaEventRecord(end_event_, stream_);
+    cudaStreamSynchronize(stream_);
 
-    // cuFFT plan (batched)
+    // Device time
+    float device_ms = 0.0f;
+    cudaEventElapsedTime(&device_ms, start_event_, end_event_);
+
+    auto host_ms = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now()-t0).count();
+
+    // Copy back from device (captured graph already includes D2H into d_output_? we copy now)
+    std::vector<float> host_out((size_t)batch * pattern_dim, 0.0f);
+    cudaMemcpyAsync(host_out.data(), d_output_, out_bytes, cudaMemcpyDeviceToHost, stream_);
+    cudaStreamSynchronize(stream_);
+
+    // Metrics
+    metrics_.ops_per_s = (device_ms>0.0f) ? (uint64_t)(batch * 1000.0 / device_ms) : 0;
+    metrics_.bandwidth_gbs = (device_ms>0.0f) ? ((double)(in_bytes + out_bytes) / (device_ms/1000.0)) / (1024.0*1024.0*1024.0) : 0.0;
+
+    std::vector<std::vector<float>> out; out.reserve(batch);
+    for (uint32_t i=0;i<batch;i++) out.emplace_back(host_out.begin()+ (size_t)i*pattern_dim, host_out.begin()+ (size_t)(i+1)*pattern_dim);
+    // Populate device metrics crudely (to be refined with events)
+    return out;
+}
+
+void CudaBackend::rebuild_graph(uint32_t batch, uint32_t data_len, uint32_t pattern_dim) {
+    // Destroy previous
+    if (graph_exec_) { cudaGraphExecDestroy(graph_exec_); graph_exec_ = nullptr; }
+    if (graph_) { cudaGraphDestroy(graph_); graph_ = nullptr; }
+
+    // Plan FFT for (batch, pattern_dim)
     destroy_plan();
     int n[1] = {(int)pattern_dim};
     int istride = 1, ostride = 1;
@@ -112,35 +157,36 @@ std::vector<std::vector<float>> CudaBackend::batch_encode_fft_ultra(const float*
     int onembed[1] = {(int)pattern_dim};
     int idist = (int)pattern_dim, odist = (int)pattern_dim;
     if (cufftPlanMany(&fft_plan_, 1, n, inembed, istride, idist, onembed, ostride, odist, CUFFT_R2C, (int)batch) != CUFFT_SUCCESS) {
-        throw std::runtime_error("cufftPlanMany failed");
+        throw std::runtime_error("cufftPlanMany failed in rebuild_graph");
     }
     cufftSetStream(fft_plan_, stream_);
 
-    // Execute FFT batched
-    if (cufftExecR2C(fft_plan_, (cufftReal*)d_fft_in_, (cufftComplex*)d_output_) != CUFFT_SUCCESS) {
-        throw std::runtime_error("cufftExecR2C failed");
-    }
+    // Begin capture
+    cudaStreamBeginCapture(stream_, cudaStreamCaptureModeGlobal);
+
+    // H2D copy from pinned host buffer to device input
+    cudaMemcpyAsync(d_input_, h_pinned_, (size_t)batch * data_len * sizeof(float), cudaMemcpyHostToDevice, stream_);
+
+    // Pad/truncate to FFT size
+    dim3 block(256,1,1);
+    dim3 grid((pattern_dim + block.x - 1)/block.x, batch, 1);
+    pad_rows_kernel<<<grid, block, 0, stream_>>>((const float*)d_input_, (float*)d_fft_in_, batch, data_len, pattern_dim);
+
+    // FFT
+    cudaEventRecord(fft_start_event_, stream_);
+    cufftExecR2C(fft_plan_, (cufftReal*)d_fft_in_, (cufftComplex*)d_output_);
+    cudaEventRecord(fft_end_event_, stream_);
 
     // Magnitude
     const uint32_t total = batch * pattern_dim;
     dim3 mgrid((total + 255)/256, 1, 1);
     magnitude_kernel<<<mgrid, 256, 0, stream_>>>((const cufftComplex*)d_output_, (float*)d_output_, total);
 
-    // D2H
-    std::vector<float> host_out((size_t)total, 0.0f);
-    cudaMemcpyAsync(host_out.data(), d_output_, out_bytes, cudaMemcpyDeviceToHost, stream_);
-    cudaStreamSynchronize(stream_);
-
-    // Metrics: host elapsed only; device timing could be added with cudaEvents
-    // For now, estimate ops/s as batch per host time when called via adapter
-    std::vector<std::vector<float>> out; out.reserve(batch);
-    for (uint32_t i=0;i<batch;i++) {
-        out.emplace_back(host_out.begin()+ (size_t)i*pattern_dim, host_out.begin()+ (size_t)(i+1)*pattern_dim);
-    }
-    // Populate device metrics crudely (to be refined with events)
-    metrics_.ops_per_s = 0;
-    metrics_.bandwidth_gbs = 0.0;
-    return out;
+    // End capture
+    cudaStreamEndCapture(stream_, &graph_);
+    cudaGraphInstantiate(&graph_exec_, graph_, nullptr, nullptr, 0);
+    graph_captured_ = true;
+    current_pattern_dim_ = pattern_dim;
 }
 
 } // namespace holo

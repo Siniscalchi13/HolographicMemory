@@ -1,15 +1,15 @@
 #include "GPUBackend.hpp"
 #include <chrono>
 
-#ifdef __APPLE__
+#ifdef PLATFORM_METAL
 #include "metal/MetalHoloCore.hpp"
 #endif
 
-#ifdef USE_CUDA_BACKEND
+#ifdef PLATFORM_CUDA
 #include "cuda/CudaBackend.hpp"
 #endif
 
-#ifdef USE_HIP_BACKEND
+#ifdef PLATFORM_ROCM
 #include "rocm/HipBackend.hpp"
 #endif
 
@@ -20,7 +20,7 @@ namespace {
 class MetalAdapter : public IGPUBackend {
 public:
     bool initialize(const GPUConfig& cfg) override {
-#ifdef __APPLE__
+#ifdef PLATFORM_METAL
         (void)cfg;
         core_ = std::make_unique<MetalHoloCore>();
         return core_->available();
@@ -33,7 +33,7 @@ public:
                                                                std::uint32_t batch,
                                                                std::uint32_t data_len,
                                                                std::uint32_t pattern_dim) override {
-#ifdef __APPLE__
+#ifdef PLATFORM_METAL
         auto t0 = std::chrono::high_resolution_clock::now();
         auto out = core_->batch_encode_from_ptr(ptr, batch, data_len, pattern_dim, /*use_ultra=*/true);
         auto ms = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now()-t0).count();
@@ -52,13 +52,13 @@ public:
     GPUMetrics get_metrics() const override { return metrics_; }
 
 private:
-#ifdef __APPLE__
+#ifdef PLATFORM_METAL
     std::unique_ptr<MetalHoloCore> core_;
 #endif
     GPUMetrics metrics_{};
 };
 
-#ifdef USE_CUDA_BACKEND
+#ifdef PLATFORM_CUDA
 class CudaAdapter : public IGPUBackend {
 public:
     bool initialize(const GPUConfig& cfg) override {
@@ -84,7 +84,7 @@ private:
 };
 #endif
 
-#ifdef USE_HIP_BACKEND
+#ifdef PLATFORM_ROCM
 class HipAdapter : public IGPUBackend {
 public:
     bool initialize(const GPUConfig& cfg) override {
@@ -110,17 +110,17 @@ private:
 
 std::vector<GPUPlatform> IGPUBackend::get_available_platforms() {
     std::vector<GPUPlatform> v;
-#ifdef __APPLE__
+#ifdef PLATFORM_METAL
     {
         MetalHoloCore c; if (c.available()) v.push_back(GPUPlatform::METAL);
     }
 #endif
-#ifdef USE_CUDA_BACKEND
+#ifdef PLATFORM_CUDA
     {
         CudaBackend b; if (b.available()) v.push_back(GPUPlatform::CUDA);
     }
 #endif
-#ifdef USE_HIP_BACKEND
+#ifdef PLATFORM_ROCM
     {
         HipBackend b; if (b.available()) v.push_back(GPUPlatform::ROCM);
     }
@@ -131,10 +131,10 @@ std::vector<GPUPlatform> IGPUBackend::get_available_platforms() {
 std::unique_ptr<IGPUBackend> IGPUBackend::create_backend(GPUPlatform pf) {
     switch (pf) {
         case GPUPlatform::METAL: return std::unique_ptr<IGPUBackend>(new MetalAdapter());
-#ifdef USE_CUDA_BACKEND
+#ifdef PLATFORM_CUDA
         case GPUPlatform::CUDA: return std::unique_ptr<IGPUBackend>(new CudaAdapter());
 #endif
-#ifdef USE_HIP_BACKEND
+#ifdef PLATFORM_ROCM
         case GPUPlatform::ROCM: return std::unique_ptr<IGPUBackend>(new HipAdapter());
 #endif
         default: return nullptr;

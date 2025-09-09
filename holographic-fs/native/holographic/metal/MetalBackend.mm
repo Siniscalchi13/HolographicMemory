@@ -34,13 +34,29 @@ MetalBackend::~MetalBackend() {
 void MetalBackend::load_shaders() {
     NSError* err = nullptr;
     
-    // Load embedded shader source
-    NSString* srcPath = str("holographic-fs/native/holographic/metal/holographic_memory.metal");
-    NSString* file = [NSString stringWithContentsOfFile:srcPath encoding:NSUTF8StringEncoding error:&err];
-    if (!file) return;
+    // Get the current working directory and build absolute paths
+    NSString* cwd = [[NSFileManager defaultManager] currentDirectoryPath];
+    
+    // Try to load from build directory first, then fallback to source
+    NSString* buildPath = [cwd stringByAppendingPathComponent:@"holographic-fs/native/holographic/build/metal/holographic_memory.metal"];
+    NSString* file = [NSString stringWithContentsOfFile:buildPath encoding:NSUTF8StringEncoding error:&err];
+    
+    if (!file) {
+        // Fallback to source directory
+        NSString* srcPath = [cwd stringByAppendingPathComponent:@"holographic-fs/native/holographic/metal/holographic_memory.metal"];
+        file = [NSString stringWithContentsOfFile:srcPath encoding:NSUTF8StringEncoding error:&err];
+    }
+    
+    if (!file) {
+        NSLog(@"Failed to load Metal shader: %@", err.localizedDescription);
+        return;
+    }
     
     library_ = [device_ newLibraryWithSource:file options:nil error:&err];
-    if (!library_) return;
+    if (!library_) {
+        NSLog(@"Failed to create Metal library: %@", err.localizedDescription);
+        return;
+    }
     
     // Create pipeline states
     pso_vector_add_ = create_pipeline("enhanced_vector_add");

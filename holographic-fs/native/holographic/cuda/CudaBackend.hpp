@@ -5,6 +5,7 @@
 #include <string>
 #include <cstdint>
 #include "../GPUBackend.hpp"
+#include <cuda_runtime.h>
 #include <cufft.h>
 
 namespace holo {
@@ -33,6 +34,9 @@ public:
 private:
     void ensure_buffers(size_t in_bytes, size_t out_bytes, size_t fft_bytes);
     void destroy_plan();
+    void create_events();
+    void rebuild_graph(uint32_t batch_size, uint32_t data_len, uint32_t pattern_dim);
+    void cleanup() {};
 
     void* d_input_{nullptr};
     void* d_output_{nullptr};
@@ -44,7 +48,15 @@ private:
     cudaGraphExec_t graph_exec_ {nullptr};
     cufftHandle fft_plan_ {0};
     bool initialized_ {false};
+    bool graph_captured_ {false};
+    uint32_t current_pattern_dim_ {0};
     GPUConfig config_ {};
+    // Timing events
+    cudaEvent_t start_event_ {nullptr};
+    cudaEvent_t end_event_ {nullptr};
+    cudaEvent_t fft_start_event_ {nullptr};
+    cudaEvent_t fft_end_event_ {nullptr};
+
     Metrics metrics_{};
 };
 
