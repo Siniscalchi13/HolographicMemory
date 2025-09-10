@@ -4,6 +4,9 @@
 
 PY?=python3
 PIP?=$(PY) -m pip
+VENV_DIR?=venv
+VENV_PY?=$(VENV_DIR)/bin/python
+VENV_PIP?=$(VENV_PY) -m pip
 
 .PHONY: setup test build native api soa clean help
 
@@ -24,9 +27,11 @@ help:
 
 # Set up dependencies and build
 setup:
-	$(PIP) install --upgrade pip wheel setuptools
-	$(PIP) install -r services/api/requirements.txt
-	$(PIP) install -e services/core
+	@echo "🔧 Setting up virtual environment..."
+	$(PY) -m venv $(VENV_DIR)
+	$(VENV_PIP) install --upgrade pip wheel setuptools
+	$(VENV_PIP) install -r services/api/requirements.txt
+	$(VENV_PIP) install -e services/core
 	$(MAKE) native
 
 # Build native C++ extensions with Metal GPU
@@ -50,26 +55,26 @@ build: native
 # Install core service
 install:
 	@echo "📦 Installing core service..."
-	@$(PIP) install -e services/core
+	@$(VENV_PIP) install -e services/core
 	@echo "✅ Core service installed"
 
 # Run all tests
 test:
 	@echo "🧪 Running all tests..."
-	@cd services/core && $(PY) -m pytest -v
-	@cd services/api && $(PY) -m pytest -v
+	@cd services/core && $(VENV_PY) -m pytest -v
+	@cd services/api && $(VENV_PY) -m pytest -v
 	@echo "✅ All tests passed"
 
 # Test GPU acceleration
 test-gpu:
 	@echo "🌌 Testing GPU acceleration..."
-	@$(PY) -c "import sys; sys.path.append('services/core/native/holographic'); import holographic_gpu; print('GPU platforms:', holographic_gpu.available_platforms())"
+	@$(VENV_PY) -c "import sys; sys.path.append('services/core/native/holographic'); import holographic_gpu; print('GPU platforms:', holographic_gpu.available_platforms())"
 	@echo "✅ GPU acceleration working"
 
 # Start API server
 api:
 	@echo "🚀 Starting API server..."
-	@$(PY) -m uvicorn services.api.app:app --reload --port 8000 --host 0.0.0.0
+	@$(VENV_PY) -m uvicorn services.api.app:app --reload --port 8000 --host 0.0.0.0
 
 # Start SOA system
 soa:
@@ -77,18 +82,18 @@ soa:
 	@echo "🏗️  GPU-First Architecture with Service Orchestration"
 	@echo "🌐 Open: http://localhost:8000"
 	@echo ""
-	@$(PY) main.py
+	@$(VENV_PY) main.py
 
 # Generate OpenAPI documentation
 openapi:
 	@echo "📚 Generating OpenAPI documentation..."
-	@$(PY) -c "import json; from services.api.app_soa import app; print(json.dumps(app.openapi(), indent=2))" > openapi.json
+	@$(VENV_PY) -c "import json; from services.api.app_soa import app; print(json.dumps(app.openapi(), indent=2))" > openapi.json
 	@echo "✅ OpenAPI documentation generated"
 
 # Generate documentation
 docs:
 	@echo "📚 Generating documentation..."
-	@$(PY) -m pdoc --html services/core/holographicfs --output-dir docs/api
+	@$(VENV_PY) -m pdoc --html services/core/holographicfs --output-dir docs/api
 	@echo "✅ Documentation generated"
 
 # Clean build artifacts and cache
@@ -98,6 +103,7 @@ clean:
 	@rm -rf services/core/*.egg-info
 	@rm -rf services/core/native/holographic/build
 	@rm -rf services/core/native/holographic/*.so
+	@rm -rf $(VENV_DIR)
 	@echo "✅ Cleanup completed"
 
 # Show current configuration
