@@ -54,6 +54,26 @@ public:
 
     GPUMetrics get_metrics() const override { return metrics_; }
 
+    bool analyze_device_metrics(const float* vec1,
+                                const float* vec2,
+                                std::uint32_t dimension,
+                                DeviceAnalysisResult& out) override {
+#ifdef PLATFORM_METAL
+        if (!core_) return false;
+        // Delegate to Metal core helper; fall back to simple host calc if necessary
+        try {
+            auto r = core_->analyze_metrics_hostback(vec1, vec2, dimension);
+            out.visibility = r.visibility;
+            out.coherence = r.coherence;
+            out.bell_violation = r.bell_violation;
+            out.orthogonality = r.orthogonality;
+            return true;
+        } catch (...) { return false; }
+#else
+        (void)vec1; (void)vec2; (void)dimension; (void)out; return false;
+#endif
+    }
+
 private:
 #ifdef PLATFORM_METAL
     std::unique_ptr<MetalHoloCore> core_;

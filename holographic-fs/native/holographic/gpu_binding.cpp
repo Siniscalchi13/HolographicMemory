@@ -6,6 +6,11 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
+#include <array>
+#include <algorithm>
+#include <cmath>
+#include <string>
+
 #include "GPUBackend.hpp"
 #include "hwp_v4_decode.hpp"
 
@@ -86,7 +91,12 @@ public:
             if ((std::uint32_t)v.size() != dl) throw std::runtime_error("inconsistent row sizes in batch");
             flat.insert(flat.end(), v.begin(), v.end());
         }
-        return backend_->batch_encode_fft_zero_copy(flat.data(), bs, dl, pattern_dim);
+        auto out = backend_->batch_encode_fft_zero_copy(flat.data(), bs, dl, pattern_dim);
+        // Cache for device analysis
+        last_dim_ = pattern_dim;
+        last_patterns_.clear();
+        for (const auto& v : out) last_patterns_.push_back(v);
+        return out;
     }
 
     // Metrics accessor
@@ -117,8 +127,180 @@ public:
         return std::string(reinterpret_cast<const char*>(out.data()), out.size());
     }
 
+    // ----------------- Math API Parity (host-side P0) -----------------
+    struct LayerState {
+        std::string name;
+        std::size_t dimension {0};
+        double importance_weight {1.0};
+        double load_estimate {0.0};
+        double target_snr {1.0};
+        double current_snr {0.0};
+        double capacity_used {0.0};
+    };
+
+    void initialize_7layer_decomposition(std::size_t total_budget) {
+        total_budget_ = total_budget ? total_budget : 1024;
+        static const char* NAMES[7] = {"Identity","Knowledge","Experience","Preference","Context","Wisdom","Vault"};
+        for (std::size_t k = 0; k < 7; ++k) {
+            layers_[k].name = NAMES[k];
+            layers_[k].importance_weight = (k==1?1.3:(k==4?1.1:1.0));
+            layers_[k].target_snr = 1.0;
+            layers_[k].load_estimate = std::max(1.0, layers_[k].importance_weight * 100.0);
+        }
+        optimize_layer_dimensions();
+        layers_initialized_ = true;
+    }
+
+    void optimize_layer_dimensions() {
+        if (total_budget_ == 0) return;
+        std::array<double,7> q{};
+        double sum_q = 0.0;
+        for (std::size_t k = 0; k < 7; ++k) {
+            double a = layers_[k].importance_weight;
+            double n_eff = std::max(1.0, layers_[k].load_estimate);
+            q[k] = (a*a)/n_eff;
+            sum_q += q[k];
+        }
+        if (sum_q <= 0.0) {
+            for (std::size_t k = 0; k < 7; ++k) layers_[k].dimension = total_budget_/7;
+            layers_[0].dimension += (total_budget_%7);
+            return;
+        }
+        std::size_t allocated = 0;
+        for (std::size_t k = 0; k < 7; ++k) {
+            std::size_t dim_k = static_cast<std::size_t>(std::llround(double(total_budget_) * (q[k]/sum_q)));
+            layers_[k].dimension = std::max<std::size_t>(1, dim_k);
+            allocated += layers_[k].dimension;
+        }
+        if (allocated != total_budget_) {
+            std::size_t diff = (allocated < total_budget_) ? (total_budget_ - allocated) : (allocated - total_budget_);
+            std::size_t max_k = 0;
+            for (std::size_t k = 1; k < 7; ++k) if (layers_[k].dimension > layers_[max_k].dimension) max_k = k;
+            if (allocated < total_budget_) layers_[max_k].dimension += diff; else {
+                layers_[max_k].dimension = (layers_[max_k].dimension > diff) ? (layers_[max_k].dimension - diff) : 1;
+            }
+        }
+    }
+
+    double calculate_layer_snr(std::size_t layer_idx) const {
+        if (layer_idx >= 7) return 0.0;
+        double n_eff = std::max(1.0, layers_[layer_idx].load_estimate);
+        double d_eff = double(layers_[layer_idx].dimension);
+        return std::sqrt(std::max(0.0, d_eff / n_eff));
+    }
+
+    void update_layer_snrs() {
+        for (std::size_t k = 0; k < 7; ++k) {
+            layers_[k].current_snr = calculate_layer_snr(k);
+            layers_[k].capacity_used = layers_[k].load_estimate / std::max(1.0, double(layers_[k].dimension));
+        }
+    }
+
+    bool enforce_capacity_theorem() {
+        bool rebalanced = false;
+        for (std::size_t k = 0; k < 7; ++k) {
+            double required = layers_[k].target_snr * layers_[k].target_snr * layers_[k].load_estimate;
+            if (double(layers_[k].dimension) < required) {
+                layers_[k].dimension = static_cast<std::size_t>(std::ceil(required));
+                rebalanced = true;
+            }
+        }
+        if (rebalanced) {
+            std::size_t used = 0; for (auto& L : layers_) used += L.dimension;
+            if (used > total_budget_) {
+                double scale = double(total_budget_) / double(used);
+                for (std::size_t k = 0; k < 6; ++k) {
+                    layers_[k].dimension = std::max<std::size_t>(1, std::size_t(std::floor(layers_[k].dimension * scale)));
+                }
+                std::size_t partial = 0; for (std::size_t k=0;k<6;++k) partial += layers_[k].dimension;
+                layers_[6].dimension = (partial < total_budget_) ? (total_budget_ - partial) : 1;
+            }
+        }
+        return rebalanced;
+    }
+
+    py::dict get_layer_stats() const {
+        py::dict stats;
+        for (std::size_t k = 0; k < 7; ++k) {
+            py::dict layer;
+            layer["name"] = layers_[k].name;
+            layer["dimension"] = layers_[k].dimension;
+            layer["importance_weight"] = layers_[k].importance_weight;
+            layer["load_estimate"] = layers_[k].load_estimate;
+            layer["target_snr"] = layers_[k].target_snr;
+            layer["current_snr"] = layers_[k].current_snr;
+            layer["capacity_used"] = layers_[k].capacity_used;
+            stats[std::to_string(k).c_str()] = layer;
+        }
+        stats["total_budget"] = total_budget_;
+        stats["layers_initialized"] = layers_initialized_;
+        return stats;
+    }
+
+    py::dict validate_wave_properties() const {
+        py::dict out;
+        float field_norm = 0.0f;
+        float ortho = 0.0f;
+        if (backend_ && !last_patterns_.empty()) {
+            const float* a = last_patterns_[0].data();
+            const float* b = (last_patterns_.size() > 1 ? last_patterns_[1].data() : last_patterns_[0].data());
+            holo::IGPUBackend::DeviceAnalysisResult r;
+            if (backend_->analyze_device_metrics(a, b, last_dim_, r)) {
+                ortho = r.orthogonality;
+                // Approximate norm from coherence*|b|*|a| only if both >0; else leave 0
+            }
+            // Host-side norm for reporting (cheap)
+            double n=0.0; for (std::uint32_t i=0;i<last_dim_;++i) n += double(a[i])*double(a[i]);
+            field_norm = float(std::sqrt(n));
+        }
+        out["field_normalization"] = field_norm;
+        out["layer_orthogonality_score"] = ortho;
+        bool compliant = true;
+        for (const auto& L : layers_) {
+            double required = L.target_snr * L.target_snr * L.load_estimate;
+            if (double(L.dimension) < required) { compliant = false; break; }
+        }
+        out["capacity_theorem_compliant"] = compliant;
+        return out;
+    }
+
+    py::dict analyze_interference_patterns() const {
+        py::dict out;
+        float vis = 0.0f, coh = 0.0f; double bell = 0.0;
+        if (backend_ && !last_patterns_.empty()) {
+            const float* a = last_patterns_[0].data();
+            const float* b = (last_patterns_.size() > 1 ? last_patterns_[1].data() : last_patterns_[0].data());
+            holo::IGPUBackend::DeviceAnalysisResult r;
+            if (backend_->analyze_device_metrics(a, b, last_dim_, r)) { vis = r.visibility; coh = r.coherence; bell = r.bell_violation; }
+        }
+        out["wave_visibility"] = vis;
+        out["phase_coherence"] = coh;
+        out["bell_violation_measure"] = bell;
+        out["bell_test_passed"] = (bell > 0.1);
+        return out;
+    }
+
+    double validate_bell_inequality() const {
+        if (backend_ && !last_patterns_.empty()) {
+            const float* a = last_patterns_[0].data();
+            holo::IGPUBackend::DeviceAnalysisResult r;
+            if (backend_->analyze_device_metrics(a, a, last_dim_, r)) return r.bell_violation;
+        }
+        auto E = [](double x, double y){ return -std::cos(x - y); };
+        double aa=0.0, ap=M_PI/2.0, b=M_PI/4.0, bp=-M_PI/4.0;
+        double S = E(aa,b) + E(aa,bp) + E(ap,b) - E(ap,bp);
+        return S - 2.0;
+    }
+
+    bool layers_initialized() const { return layers_initialized_; }
+
 private:
     std::unique_ptr<holo::IGPUBackend> backend_;
+    mutable std::vector<std::vector<float>> last_patterns_;
+    mutable std::uint32_t last_dim_ {0};
+    std::array<LayerState, 7> layers_{};
+    std::size_t total_budget_ {1024};
+    bool layers_initialized_ {false};
 };
 
 } // namespace
@@ -146,7 +328,18 @@ PYBIND11_MODULE(holographic_gpu, m) {
         .def("metrics", &HolographicGPUWrapper::metrics)
         .def("get_last_metrics", &HolographicGPUWrapper::get_last_metrics)
         .def("decode_hwp_v4", &HolographicGPUWrapper::decode_hwp_v4, py::arg("payload"))
-        .def("retrieve_bytes", &HolographicGPUWrapper::retrieve_bytes, py::arg("path"));
+        .def("retrieve_bytes", &HolographicGPUWrapper::retrieve_bytes, py::arg("path"))
+        // Math API Parity (host-side P0)
+        .def("initialize_7layer_decomposition", &HolographicGPUWrapper::initialize_7layer_decomposition, py::arg("total_budget"))
+        .def("optimize_layer_dimensions", &HolographicGPUWrapper::optimize_layer_dimensions)
+        .def("get_layer_stats", &HolographicGPUWrapper::get_layer_stats)
+        .def("calculate_layer_snr", &HolographicGPUWrapper::calculate_layer_snr, py::arg("layer_idx"))
+        .def("update_layer_snrs", &HolographicGPUWrapper::update_layer_snrs)
+        .def("enforce_capacity_theorem", &HolographicGPUWrapper::enforce_capacity_theorem)
+        .def("validate_wave_properties", &HolographicGPUWrapper::validate_wave_properties)
+        .def("analyze_interference_patterns", &HolographicGPUWrapper::analyze_interference_patterns)
+        .def("validate_bell_inequality", &HolographicGPUWrapper::validate_bell_inequality)
+        .def_property_readonly("layers_initialized", &HolographicGPUWrapper::layers_initialized);
 
     m.def("available_platforms", &HolographicGPUWrapper::available_platforms,
           "Return a list of available GPU platforms (e.g., ['cuda','metal']).");

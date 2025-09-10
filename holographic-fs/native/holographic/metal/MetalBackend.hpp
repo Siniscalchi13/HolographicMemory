@@ -55,6 +55,10 @@ public:
     };
     
     PerformanceMetrics get_last_metrics() const { return metrics_; }
+
+    // Compute basic device-side metrics for two real vectors of length dim.
+    // Returns {visibility, coherence, bell_violation, orthogonality}
+    std::tuple<float,float,double,float> analyze_metrics(const float* v1, const float* v2, uint32_t dim);
     
 private:
     void load_shaders();
@@ -69,6 +73,8 @@ private:
     id<MTLComputePipelineState> pso_vector_add_ = nil;
     id<MTLComputePipelineState> pso_fft_ = nil;
     id<MTLComputePipelineState> pso_interference_ = nil;
+    id<MTLComputePipelineState> pso_dot_norm_ = nil;
+    id<MTLComputePipelineState> pso_corr_off_ = nil;
     id<MTLComputePipelineState> pso_batch_store_ = nil;
     id<MTLComputePipelineState> pso_similarity_ = nil;
     id<MTLComputePipelineState> pso_batch_store_fft_ = nil;

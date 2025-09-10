@@ -329,15 +329,31 @@ function renderRows(rows){
     const displayName = r.original_filename || pathName.replace(/\.hwp$/i, '') || pathName
     const originalSize = Number(r.size || 0)
     const holoSize = Number(r.holo_size || 0)
-    const ratio = holoSize > 0 ? (originalSize / holoSize).toFixed(1) : '—'
+    const fmtMagic = r.format || ''
+    const recoverable = !!r.recoverable
+    // Compute readable ratio; mark expansion and header-only cases
+    let ratioTxt = '—'
+    if (fmtMagic === 'H4M1' && !recoverable) {
+      ratioTxt = 'header-only'
+    } else if (holoSize > 0) {
+      const rn = originalSize / holoSize
+      ratioTxt = rn >= 1 ? `${rn.toFixed(1)}x` : `${rn.toFixed(1)}x (expansion)`
+    }
+    const typeStr = (()=>{
+      const e = ext(displayName) || '—'
+      if (!fmtMagic) return e
+      if (fmtMagic === 'H4M1' && !recoverable) return `${e} / H4M1`
+      if (fmtMagic === 'v3json') return `${e} / v3json`
+      return `${e} / ${fmtMagic}`
+    })()
     return `<tr data-path="${r.path}" data-doc-id="${r.doc_id}">
       <td><input type="checkbox" class="file-checkbox" data-doc-id="${r.doc_id}" data-filename="${displayName}"></td>
       <td>📄</td>
       <td>${displayName}</td>
-      <td>${ext(displayName) || '—'}</td>
+      <td>${typeStr}</td>
       <td>${fmt(originalSize)} bytes</td>
       <td>${fmt(holoSize)} bytes</td>
-      <td>${ratio}x</td>
+      <td>${ratioTxt}</td>
       <td>${r.mtime? new Date(r.mtime*1000).toLocaleString(): '—'}</td>
       <td>
         <button onclick="downloadFile('${r.doc_id}', '${name}')" class="btn small">⬇️</button>

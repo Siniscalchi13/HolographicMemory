@@ -94,6 +94,13 @@ dev:
 	@echo ""
 	@PYTHONPATH="holographic-fs/native/holographic/build:$$PYTHONPATH" $(VENV_PY) -m uvicorn services.api.app:app --reload --port $(PORT) --host 0.0.0.0
 
+soa:
+	@echo "$(BLUE)🚀 Starting HolographicMemory SOA system...$(NC)"
+	@echo "$(GREEN)🏗️  GPU-First Architecture with Service Orchestration$(NC)"
+	@echo "$(GREEN)🌐 Open: http://localhost:8000$(NC)"
+	@echo ""
+	$(VENV_PY) main.py
+
 # Development server using embedded Python runtime (same as native app)
 dev-embedded:
 	@echo "$(BLUE)🚀 Starting HolographicMemory development server (embedded runtime)...$(NC)"

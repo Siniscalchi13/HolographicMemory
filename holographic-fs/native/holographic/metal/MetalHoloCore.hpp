@@ -48,6 +48,11 @@ public:
 
     PerformanceMetrics metrics() const { return metrics_; }
 
+    // Host-backed device analysis: uploads two vectors and runs device-side kernels
+    // to compute interference visibility, phase coherence, CHSH violation, and orthogonality.
+    struct DeviceAnalysisResult { float visibility; float coherence; double bell_violation; float orthogonality; };
+    DeviceAnalysisResult analyze_metrics_hostback(const float* v1, const float* v2, std::uint32_t dim);
+
 private:
     std::unique_ptr<MetalBackend> backend_;
     PerformanceMetrics metrics_{};

@@ -10,6 +10,8 @@ import time as _time
 # Prefer C++ backend (prefer local build over site-packages)
 _cpp_loaded = False
 _cpp3d_loaded = False
+_cpu_loaded = False
+_hn_cpu = None  # CPU/HRR engine module (holographic_cpp)
 try:
     _pkg_root = Path(__file__).resolve().parents[1]
     _cpp_dir = _pkg_root / "native" / "holographic" / "build"
@@ -24,18 +26,26 @@ except Exception:
         import holographic_gpu as _hn  # type: ignore
         _cpp_loaded = True
     except Exception:
-        # Fallback to old backend
-        try:
-            _pkg_root = Path(__file__).resolve().parents[1]
-            _cpp_dir = _pkg_root / "native" / "holographic"
-            if _cpp_dir.exists():
-                p = str(_cpp_dir)
-                if p not in sys.path:
-                    sys.path.insert(0, p)
-            import holographic_cpp as _hn  # type: ignore
-            _cpp_loaded = True
-        except Exception:
-            _cpp_loaded = False
+        _cpp_loaded = False
+
+# Try to load CPU/HRR engine independently (prefer from build path)
+try:
+    # Ensure build dir is in path (already added above if exists)
+    import holographic_cpp as _hn_cpu  # type: ignore
+    _cpu_loaded = True
+except Exception:
+    try:
+        # Fallback to non-build path
+        _pkg_root = Path(__file__).resolve().parents[1]
+        _cpp_dir = _pkg_root / "native" / "holographic"
+        if _cpp_dir.exists():
+            p = str(_cpp_dir)
+            if p not in sys.path:
+                sys.path.insert(0, p)
+        import holographic_cpp as _hn_cpu  # type: ignore
+        _cpu_loaded = True
+    except Exception:
+        _cpu_loaded = False
 
 # Optional 3D exact-recall backend
 try:
@@ -81,17 +91,42 @@ class Memory:
         self.state_dir.mkdir(parents=True, exist_ok=True)
         # Persist grid size for GPU helpers
         self.grid_size = int(grid_size)
-        if _cpp_loaded:
+        # GPU-first selection: prefer GPU backend as the primary engine, CPU as fallback
+        self.gpu_backend = None
+        self.use_gpu = False
+        if use_gpu and _cpp_loaded and hasattr(_hn, 'HolographicGPU'):
             try:
-                # Try new GPU backend first, then fallback to old
-                if hasattr(_hn, 'HolographicGPU'):
-                    self.backend = _hn.HolographicGPU()  # type: ignore[name-defined, attr-defined]
+                be = _hn.HolographicGPU()  # type: ignore[name-defined, attr-defined]
+                ok = True
+                if hasattr(be, 'initialize'):
+                    try:
+                        ok = bool(be.initialize())  # type: ignore[attr-defined]
+                    except Exception:
+                        ok = False
+                if ok:
+                    self.backend = be
+                    self.gpu_backend = be
+                    self.use_gpu = True
                 else:
+                    raise RuntimeError('GPU initialize returned False')
+            except Exception:
+                # GPU unavailable; fall back to CPU engines
+                self.backend = None  # type: ignore[assignment]
+
+        if not hasattr(self, 'backend') or self.backend is None:  # type: ignore[attr-defined]
+            if _cpu_loaded and _hn_cpu is not None and hasattr(_hn_cpu, 'HolographicMemory'):
+                try:
+                    self.backend = _hn_cpu.HolographicMemory(int(grid_size))  # type: ignore[name-defined, attr-defined]
+                except Exception as exc:
+                    raise RuntimeError("CPU backend failed to initialize") from exc
+            elif _cpp_loaded and hasattr(_hn, 'HolographicMemory'):
+                # Fallback to legacy CPU backend if present under holographic_gpu namespace
+                try:
                     self.backend = _hn.HolographicMemory(int(grid_size))  # type: ignore[name-defined, attr-defined]
-            except Exception as exc:
-                raise RuntimeError("C++ backend not available or failed to initialize") from exc
-        else:
-            raise RuntimeError("C++ backend not available. Build the extensions (make cpp)")
+                except Exception as exc:
+                    raise RuntimeError("Legacy CPU backend failed to initialize") from exc
+            else:
+                raise RuntimeError("C++ backend not available. Build the extensions (make native)")
         # 3D exact-recall engine is optional; used for byte-perfect storage/recall
         self.backend3d = None
         if _cpp3d_loaded:
@@ -100,57 +135,47 @@ class Memory:
             except Exception:
                 self.backend3d = None
 
-        # Prefer new cross-platform GPU backend (holographic_gpu),
-        # else fallback to experimental Metal-only module (holographic_metal).
-        self.gpu_backend = None
-        self.use_gpu = False
-        if use_gpu:
-            # Attempt holographic_gpu first (supports Metal/CUDA/ROCm)
+        # If CPU backend is primary, still attempt to attach a GPU accelerator if available
+        if not self.use_gpu and use_gpu:
             try:
                 import holographic_gpu as _hg  # type: ignore
-                be = None
-                # New API
-                if hasattr(_hg, "HolographicGPU"):
-                    be = _hg.HolographicGPU()  # type: ignore[attr-defined]
-                    ok = True
-                    if hasattr(be, "initialize"):
+                if hasattr(_hg, 'HolographicGPU'):
+                    be2 = _hg.HolographicGPU()  # type: ignore[attr-defined]
+                    ok2 = True
+                    if hasattr(be2, 'initialize'):
                         try:
-                            # Let backend auto-select platform
-                            ok = bool(be.initialize())  # type: ignore[attr-defined]
+                            ok2 = bool(be2.initialize())  # type: ignore[attr-defined]
                         except Exception:
-                            ok = False
-                    if ok:
-                        self.gpu_backend = be
-                        self.use_gpu = True
-                # Legacy class name (Metal-only)
-                if not self.use_gpu and hasattr(_hg, "MetalHolographicBackend"):
-                    be = _hg.MetalHolographicBackend()  # type: ignore[attr-defined]
-                    ok = True
-                    if hasattr(be, "available"):
-                        try:
-                            ok = bool(be.available())  # type: ignore[attr-defined]
-                        except Exception:
-                            ok = False
-                    if ok:
-                        self.gpu_backend = be
+                            ok2 = False
+                    if ok2:
+                        self.gpu_backend = be2
                         self.use_gpu = True
             except Exception:
-                # Fallback: try older experimental Metal binding module name
                 try:
                     import holographic_metal as _hm  # type: ignore
-                    if hasattr(_hm, "MetalHolographicBackend"):
-                        be = _hm.MetalHolographicBackend()  # type: ignore[attr-defined]
-                        ok = True
-                        if hasattr(be, "initialize"):
+                    if hasattr(_hm, 'MetalHolographicBackend'):
+                        be2 = _hm.MetalHolographicBackend()  # type: ignore[attr-defined]
+                        ok2 = True
+                        if hasattr(be2, 'initialize'):
                             try:
-                                ok = bool(be.initialize())  # type: ignore[attr-defined]
+                                ok2 = bool(be2.initialize())  # type: ignore[attr-defined]
                             except Exception:
-                                ok = False
-                        if ok:
-                            self.gpu_backend = be
+                                ok2 = False
+                        if ok2:
+                            self.gpu_backend = be2
                             self.use_gpu = True
                 except Exception:
                     self.gpu_backend = None
+
+        # Initialize math-layer state on the active backend, if supported
+        try:
+            if hasattr(self.backend, "initialize_7layer_decomposition"):
+                self.backend.initialize_7layer_decomposition(int(self.grid_size))  # type: ignore[attr-defined]
+                if hasattr(self.backend, "update_layer_snrs"):
+                    self.backend.update_layer_snrs()  # type: ignore[attr-defined]
+        except Exception:
+            # Non-fatal: capabilities will reflect initialization status
+            pass
 
     def store_file(self, path: Path, stable_id: Optional[str] = None) -> str:
         """Store file bytes using exact-recall 3D backend and record wave meta.
@@ -227,11 +252,47 @@ class Memory:
         try:
             data = self.retrieve_bytes(doc_id)
         except Exception:  # pylint: disable=broad-except
-            # Fallback: if engine exposes direct retrieve (future), try it
-            if _cpp_loaded and hasattr(self.backend, "retrieve"):
-                data = self.backend.retrieve(doc_id)  # type: ignore[attr-defined]
+            # Fallback A: decode .hwp from index using holographic_gpu decoder (H4K8/HWP4V001)
+            try:
+                ent = next((e for e in self.index.all() if e.doc_id == doc_id), None)  # type: ignore[attr-defined]
+            except Exception:
+                ent = None
+            if ent is not None:
+                try:
+                    p = Path(ent.path)
+                    if p.suffix.lower() == ".hwp" and p.exists():
+                        import holographic_gpu as _hg  # type: ignore
+                        dec = _hg.HolographicGPU() if hasattr(_hg, 'HolographicGPU') else None  # type: ignore[attr-defined]
+                        if dec is not None and hasattr(dec, 'retrieve_bytes'):
+                            try:
+                                # initialize is best-effort; decoder runs CPU-side
+                                if hasattr(dec, 'initialize'):
+                                    try:
+                                        dec.initialize('metal')  # type: ignore[attr-defined]
+                                    except Exception:
+                                        pass
+                                raw = dec.retrieve_bytes(str(p))  # type: ignore[attr-defined]
+                                if isinstance(raw, str):
+                                    data = raw.encode('latin-1', errors='ignore')
+                                else:
+                                    data = bytes(raw)
+                            except Exception:
+                                data = None  # type: ignore[assignment]
+                        else:
+                            data = None  # type: ignore[assignment]
+                    else:
+                        data = None  # type: ignore[assignment]
+                except Exception:
+                    data = None  # type: ignore[assignment]
             else:
-                raise RuntimeError("Holographic retrieve not available for this document") from None
+                data = None  # type: ignore[assignment]
+
+            if data is None:
+                # Fallback B: if engine exposes direct retrieve (legacy CPU backend), try it
+                if hasattr(self.backend, "retrieve"):
+                    data = self.backend.retrieve(doc_id)  # type: ignore[attr-defined]
+                else:
+                    raise RuntimeError("Holographic retrieve not available for this document") from None
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_bytes(data)
         return out_path
@@ -454,6 +515,53 @@ class Memory:
             "dimension": int(N),
             "source": "adaptive_holographic_engine",
             "doc_id": doc_id,
+        }
+
+    def get_wave_data_from_bytes(self, raw: bytes, doc_id: Optional[str] = None) -> Dict[str, Any]:
+        """Compute holographic wave (amp/phase) directly from raw bytes.
+
+        This avoids any dependency on retrieval backends during the store path
+        and ensures we always produce spectral data for .hwp writing.
+        """
+        import numpy as _np
+        data = bytes(raw or b"")
+        size = len(data)
+        # Choose dimension from mapping if available; else derive from size
+        if doc_id:
+            dim = self._get_mapped_dimension(doc_id, fallback_size=size)
+        else:
+            dim = calculate_optimal_dimension(size)
+        if dim <= 0:
+            dim = 64
+        # Normalize bytes -> float32 in [0,1]
+        x = _np.frombuffer(data, dtype=_np.uint8).astype(_np.float32)
+        if x.size == 0:
+            return {"amplitudes": [], "phases": [], "dimension": 0, "source": "adaptive_holographic_engine", "doc_id": doc_id or ""}
+        x = x / 255.0
+        N = int(dim)
+        if x.size == N:
+            s = x
+        elif x.size < N:
+            s = _np.zeros(N, dtype=_np.float32)
+            s[:x.size] = x
+        else:
+            idx = _np.linspace(0, x.size - 1, N, dtype=_np.float64)
+            s = _np.interp(idx, _np.arange(x.size, dtype=_np.float64), x).astype(_np.float32)
+        v = _np.fft.fft(s)
+        amps = _np.abs(v).astype(_np.float64).tolist()
+        phases = _np.angle(v).astype(_np.float64).tolist()
+        # Persist dimension mapping if doc_id provided
+        if doc_id:
+            try:
+                self._store_dimension_mapping(doc_id, N)
+            except Exception:
+                pass
+        return {
+            "amplitudes": amps,
+            "phases": phases,
+            "dimension": int(N),
+            "source": "adaptive_holographic_engine",
+            "doc_id": doc_id or "",
         }
 
     def get_collective_interference(self, doc_ids: List[str]) -> Dict[str, Any]:

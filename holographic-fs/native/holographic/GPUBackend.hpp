@@ -35,6 +35,20 @@ public:
                                                                        std::uint32_t pattern_dim) = 0;
     virtual GPUMetrics get_metrics() const = 0;
 
+    struct DeviceAnalysisResult {
+        float visibility {0.0f};
+        float coherence {0.0f};
+        double bell_violation {0.0};
+        float orthogonality {0.0f};
+    };
+
+    // Optional: analyze two real-valued vectors on device to compute metrics.
+    // Default implementations may fall back to host or return false if unsupported.
+    virtual bool analyze_device_metrics(const float* vec1,
+                                        const float* vec2,
+                                        std::uint32_t dimension,
+                                        DeviceAnalysisResult& out) { (void)vec1; (void)vec2; (void)dimension; (void)out; return false; }
+
     static std::vector<GPUPlatform> get_available_platforms();
     static std::unique_ptr<IGPUBackend> create_backend(GPUPlatform pf);
 };

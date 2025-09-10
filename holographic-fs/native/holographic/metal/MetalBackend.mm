@@ -88,6 +88,8 @@ void MetalBackend::load_shaders() {
     pso_similarity_ = create_pipeline("holographic_similarity_search");
     pso_fft_ = create_pipeline("holographic_fft_transform");
     pso_batch_store_fft_ = create_pipeline("batch_holographic_encode_fft");
+    pso_dot_norm_ = create_pipeline("dot_norm_kernel");
+    pso_corr_off_ = create_pipeline("correlation_offset_kernel");
     initialize_mps_fft();
 }
 
@@ -279,6 +281,109 @@ std::vector<float> MetalBackend::similarity_search(const std::vector<float>& que
     memcpy(sims.data(), [bo contents], sims.size() * sizeof(float));
     // ARC cleanup
     return sims;
+}
+
+std::tuple<float,float,double,float> MetalBackend::analyze_metrics(const float* v1, const float* v2, uint32_t dim) {
+    if (!available() || dim == 0) return {0.0f, 0.0f, 0.0, 0.0f};
+    id<MTLBuffer> b1 = [device_ newBufferWithBytes:v1 length:dim*sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b2 = [device_ newBufferWithBytes:v2 length:dim*sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bdot = [device_ newBufferWithLength:sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bn1  = [device_ newBufferWithLength:sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bn2  = [device_ newBufferWithLength:sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> blen = [device_ newBufferWithBytes:&dim length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+
+    id<MTLCommandBuffer> cmd = [queue_ commandBuffer];
+    {
+        id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
+        [enc setComputePipelineState:pso_dot_norm_];
+        [enc setBuffer:b1 offset:0 atIndex:0];
+        [enc setBuffer:b2 offset:0 atIndex:1];
+        [enc setBuffer:bdot offset:0 atIndex:2];
+        [enc setBuffer:bn1 offset:0 atIndex:3];
+        [enc setBuffer:bn2 offset:0 atIndex:4];
+        [enc setBuffer:blen offset:0 atIndex:5];
+        // Configure threadgroup size dynamically: prefer 512 for larger dims
+        uint32_t tg_size = (dim >= 2048u ? 512u : 256u);
+        id<MTLBuffer> btg = [device_ newBufferWithBytes:&tg_size length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+        [enc setBuffer:btg offset:0 atIndex:6];
+        [enc dispatchThreads:MTLSizeMake(tg_size,1,1) threadsPerThreadgroup:MTLSizeMake(tg_size,1,1)];
+        [enc endEncoding];
+    }
+    // Correlations with offsets 0,1,2
+    id<MTLBuffer> bc00 = [device_ newBufferWithLength:sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bc01 = [device_ newBufferWithLength:sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bc20 = [device_ newBufferWithLength:sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bc21 = [device_ newBufferWithLength:sizeof(float) options:MTLResourceStorageModeManaged];
+    uint32_t z=0, o1=1, o2=2;
+    id<MTLBuffer> bz = [device_ newBufferWithBytes:&z length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b1off = [device_ newBufferWithBytes:&o1 length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b2off = [device_ newBufferWithBytes:&o2 length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+    {
+        id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
+        [enc setComputePipelineState:pso_corr_off_];
+        [enc setBuffer:b1 offset:0 atIndex:0]; [enc setBuffer:b2 offset:0 atIndex:1];
+        [enc setBuffer:bc00 offset:0 atIndex:2]; [enc setBuffer:blen offset:0 atIndex:3]; [enc setBuffer:bz offset:0 atIndex:4]; [enc setBuffer:bz offset:0 atIndex:5];
+        uint32_t tg_size = (dim >= 2048u ? 512u : 256u);
+        id<MTLBuffer> btg = [device_ newBufferWithBytes:&tg_size length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+        [enc setBuffer:btg offset:0 atIndex:6];
+        [enc dispatchThreads:MTLSizeMake(tg_size,1,1) threadsPerThreadgroup:MTLSizeMake(tg_size,1,1)];
+        [enc endEncoding];
+    }
+    {
+        id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
+        [enc setComputePipelineState:pso_corr_off_];
+        [enc setBuffer:b1 offset:0 atIndex:0]; [enc setBuffer:b2 offset:0 atIndex:1];
+        [enc setBuffer:bc01 offset:0 atIndex:2]; [enc setBuffer:blen offset:0 atIndex:3]; [enc setBuffer:bz offset:0 atIndex:4]; [enc setBuffer:b1off offset:0 atIndex:5];
+        uint32_t tg_size = (dim >= 2048u ? 512u : 256u);
+        id<MTLBuffer> btg = [device_ newBufferWithBytes:&tg_size length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+        [enc setBuffer:btg offset:0 atIndex:6];
+        [enc dispatchThreads:MTLSizeMake(tg_size,1,1) threadsPerThreadgroup:MTLSizeMake(tg_size,1,1)];
+        [enc endEncoding];
+    }
+    {
+        id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
+        [enc setComputePipelineState:pso_corr_off_];
+        [enc setBuffer:b1 offset:0 atIndex:0]; [enc setBuffer:b2 offset:0 atIndex:1];
+        [enc setBuffer:bc20 offset:0 atIndex:2]; [enc setBuffer:blen offset:0 atIndex:3]; [enc setBuffer:b2off offset:0 atIndex:4]; [enc setBuffer:bz offset:0 atIndex:5];
+        uint32_t tg_size = (dim >= 2048u ? 512u : 256u);
+        id<MTLBuffer> btg = [device_ newBufferWithBytes:&tg_size length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+        [enc setBuffer:btg offset:0 atIndex:6];
+        [enc dispatchThreads:MTLSizeMake(tg_size,1,1) threadsPerThreadgroup:MTLSizeMake(tg_size,1,1)];
+        [enc endEncoding];
+    }
+    {
+        id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
+        [enc setComputePipelineState:pso_corr_off_];
+        [enc setBuffer:b1 offset:0 atIndex:0]; [enc setBuffer:b2 offset:0 atIndex:1];
+        [enc setBuffer:bc21 offset:0 atIndex:2]; [enc setBuffer:blen offset:0 atIndex:3]; [enc setBuffer:b2off offset:0 atIndex:4]; [enc setBuffer:b1off offset:0 atIndex:5];
+        uint32_t tg_size = (dim >= 2048u ? 512u : 256u);
+        id<MTLBuffer> btg = [device_ newBufferWithBytes:&tg_size length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+        [enc setBuffer:btg offset:0 atIndex:6];
+        [enc dispatchThreads:MTLSizeMake(tg_size,1,1) threadsPerThreadgroup:MTLSizeMake(tg_size,1,1)];
+        [enc endEncoding];
+    }
+    [cmd commit];
+    [cmd waitUntilCompleted];
+
+    float fdot=0.0f, fn1=0.0f, fn2=0.0f, f00=0.0f, f01=0.0f, f20=0.0f, f21=0.0f;
+    memcpy(&fdot, [bdot contents], sizeof(float));
+    memcpy(&fn1, [bn1 contents], sizeof(float));
+    memcpy(&fn2, [bn2 contents], sizeof(float));
+    memcpy(&f00, [bc00 contents], sizeof(float));
+    memcpy(&f01, [bc01 contents], sizeof(float));
+    memcpy(&f20, [bc20 contents], sizeof(float));
+    memcpy(&f21, [bc21 contents], sizeof(float));
+
+    float vis = 0.0f, coh = 0.0f, ortho = std::fabs(fdot);
+    if (fn1 > 0.0f && fn2 > 0.0f) {
+        float n1 = std::sqrt(fn1), n2 = std::sqrt(fn2);
+        float num = std::fabs(fdot);
+        coh = num / (n1 * n2);
+        vis = (num*num) / ((n1*n1) * (n2*n2));
+    }
+    double S = double(f00) + double(f01) + double(f20) - double(f21);
+    double bell_violation = S - 2.0;
+    return {vis, coh, bell_violation, ortho};
 }
 
 void MetalBackend::fft_transform(const std::vector<float>& input,

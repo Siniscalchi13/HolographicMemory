@@ -200,3 +200,100 @@ kernel void batch_holographic_encode_fft(
         encoded_patterns[out_off + i] = acc / float(pattern_dimension);
     }
 }
+
+// Device-side scalar reductions (naive single-thread kernels)
+kernel void dot_norm_kernel(
+    device const float* a [[ buffer(0) ]],
+    device const float* b [[ buffer(1) ]],
+    device float* out_dot [[ buffer(2) ]],
+    device float* out_n1  [[ buffer(3) ]],
+    device float* out_n2  [[ buffer(4) ]],
+    constant uint& n      [[ buffer(5) ]],
+    constant uint& tg_sz  [[ buffer(6) ]],
+    uint tid              [[ thread_index_in_threadgroup ]])
+{
+    const uint tg = tg_sz; // actual threads per threadgroup
+    const uint SIMD = simdgroup_size; // lanes per simdgroup (typically 32)
+    const uint sidx = tid / SIMD;     // simdgroup index within threadgroup
+    const uint sg_max = (tg + SIMD - 1u) / SIMD;
+    threadgroup float sg_dot[16];
+    threadgroup float sg_n1[16];
+    threadgroup float sg_n2[16];
+
+    float local_dot = 0.0f;
+    float local_n1  = 0.0f;
+    float local_n2  = 0.0f;
+
+    // Strided accumulation across full threadgroup
+    for (uint i = tid; i < n; i += tg) {
+        float x = a[i];
+        float y = b[i];
+        local_dot += x * y;
+        local_n1  += x * x;
+        local_n2  += y * y;
+    }
+
+    // Reduce within simdgroup
+    float sum_dot = simd_sum(local_dot);
+    float sum_n1  = simd_sum(local_n1);
+    float sum_n2  = simd_sum(local_n2);
+
+    if (simd_is_first()) {
+        if (sidx < 16) {
+            sg_dot[sidx] = sum_dot;
+            sg_n1[sidx]  = sum_n1;
+            sg_n2[sidx]  = sum_n2;
+        }
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    // First simdgroup aggregates across simdgroups
+    if (sidx == 0) {
+        float acc_dot = 0.0f, acc_n1 = 0.0f, acc_n2 = 0.0f;
+        for (uint k = 0; k < min(sg_max, 16u); ++k) {
+            acc_dot += sg_dot[k];
+            acc_n1  += sg_n1[k];
+            acc_n2  += sg_n2[k];
+        }
+        // Broadcast via shared memory slot 0
+        if (tid == 0) {
+            out_dot[0] = acc_dot;
+            out_n1[0]  = acc_n1;
+            out_n2[0]  = acc_n2;
+        }
+    }
+}
+
+kernel void correlation_offset_kernel(
+    device const float* a [[ buffer(0) ]],
+    device const float* b [[ buffer(1) ]],
+    device float* out_val [[ buffer(2) ]],
+    constant uint& n      [[ buffer(3) ]],
+    constant uint& o1     [[ buffer(4) ]],
+    constant uint& o2     [[ buffer(5) ]],
+    constant uint& tg_sz  [[ buffer(6) ]],
+    uint tid              [[ thread_index_in_threadgroup ]])
+{
+    const uint tg = tg_sz;
+    const uint SIMD = simdgroup_size;
+    const uint sidx = tid / SIMD;
+    const uint sg_max = (tg + SIMD - 1u) / SIMD;
+    threadgroup float sg_sum[16];
+
+    float local = 0.0f;
+    for (uint i = tid; i < n; i += tg) {
+        float x = a[(i + o1) % n];
+        float y = b[(i + o2) % n];
+        local += x * y;
+    }
+    float ssum = simd_sum(local);
+    if (simd_is_first()) {
+        if (sidx < 16) sg_sum[sidx] = ssum;
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    if (sidx == 0 && tid == 0) {
+        float acc = 0.0f;
+        for (uint k = 0; k < min(sg_max, 16u); ++k) acc += sg_sum[k];
+        out_val[0] = acc / (float)n;
+    }
+}

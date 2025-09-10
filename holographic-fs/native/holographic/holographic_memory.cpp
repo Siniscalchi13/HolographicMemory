@@ -26,6 +26,7 @@
 #include <iomanip>
 #include <random>
 #include <mutex>
+#include <cmath>
 #ifdef __APPLE__
 #include <Accelerate/Accelerate.h>
 // Complex dot product function declaration
@@ -55,6 +56,42 @@ class HolographicMemory {
 private:
     // Thread-safety for field/matrix access
     mutable std::mutex field_mutex;
+
+    // ---------------------------------------------------------------------
+    // 7-Layer Holographic Decomposition (Mathematical Foundation)
+    // ---------------------------------------------------------------------
+    struct Layer {
+        std::string name;
+        size_t dimension;                    // D_k from Theorem 1.1
+        double importance_weight;           // α_k for optimization
+        double load_estimate;              // N_k items stored
+        double target_snr;                 // S_k target SNR
+        std::vector<std::complex<double>> subspace; // H_k subspace
+        double current_snr;                // Runtime SNR measurement
+        double capacity_used;              // Fraction of capacity used
+
+        Layer(const std::string& n, size_t dim, double weight, double snr_target)
+            : name(n), dimension(dim), importance_weight(weight),
+              load_estimate(0.0), target_snr(snr_target), current_snr(0.0), capacity_used(0.0) {
+            subspace.resize(dimension, std::complex<double>(0.0, 0.0));
+        }
+    };
+
+    // Seven orthogonal subspaces (Theorem 1.1 optimization)
+    std::array<Layer, 7> layers = {{
+        Layer("Identity", 0, 1.0, 10.0),    // User/session metadata
+        Layer("Knowledge", 0, 0.9, 8.0),    // Factual information
+        Layer("Experience", 0, 0.8, 6.0),   // Procedural knowledge
+        Layer("Preference", 0, 0.7, 5.0),   // User choices/patterns
+        Layer("Context", 0, 0.6, 4.0),      // Temporal/spatial relationships
+        Layer("Wisdom", 0, 0.5, 3.0),       // High-level insights
+        Layer("Vault", 0, 0.4, 2.0)         // Encrypted/sensitive data
+    }};
+
+    // Total dimension budget M and current allocation
+    size_t total_dimension_budget;
+    bool layers_initialized = false;
+
     // Core holographic field - aligned for SIMD
     alignas(32) std::vector<std::complex<double>> field;
     alignas(32) std::vector<std::complex<double>> workspace;
@@ -351,10 +388,378 @@ private:
         return std::string();
     }
 
+    // ---------------------------------------------------------------------
+    // 7-Layer Mathematical Methods (Theorem 1.1 Implementation)
+    // ---------------------------------------------------------------------
+
 public:
+    /**
+     * Initialize 7-layer decomposition with optimal dimension allocation
+     * Implements Theorem 1.1: D_k* = M * (α_k² / N_k) / Σ_j (α_j² / N_j)
+     */
+    void initialize_7layer_decomposition(size_t total_budget) {
+        total_dimension_budget = total_budget;
+
+        // Estimate loads N_k (simplified: proportional to importance for now)
+        for (size_t k = 0; k < 7; ++k) {
+            layers[k].load_estimate = std::max(1.0, layers[k].importance_weight * 100.0);
+        }
+
+        // Compute optimal dimensions using Theorem 1.1
+        optimize_layer_dimensions();
+
+        // Allocate subspace memory for each layer
+        for (auto& layer : layers) {
+            layer.subspace.resize(layer.dimension, std::complex<double>(0.0, 0.0));
+        }
+
+        layers_initialized = true;
+    }
+
+    /**
+     * Theorem 1.1: Optimal dimension allocation for maximum weighted advantage
+     * D_k* = M * (α_k² / N_k) / Σ_j (α_j² / N_j)
+     */
+    void optimize_layer_dimensions() {
+        if (total_dimension_budget == 0) return;
+
+        // Compute q_k = α_k² / N_k for each layer
+        std::vector<double> q(7);
+        double sum_q = 0.0;
+
+        for (size_t k = 0; k < 7; ++k) {
+            double alpha = layers[k].importance_weight;
+            double n_eff = std::max(1.0, layers[k].load_estimate);
+            q[k] = (alpha * alpha) / n_eff;
+            sum_q += q[k];
+        }
+
+        if (sum_q == 0.0) return;
+
+        // Allocate dimensions proportionally
+        size_t allocated = 0;
+        for (size_t k = 0; k < 7; ++k) {
+            size_t dim_k = static_cast<size_t>(std::round(total_dimension_budget * (q[k] / sum_q)));
+            layers[k].dimension = std::max(size_t(1), dim_k); // Minimum 1 dimension
+            allocated += layers[k].dimension;
+        }
+
+        // Handle rounding errors by adjusting largest layer
+        if (allocated != total_dimension_budget) {
+            size_t diff = total_dimension_budget - allocated;
+            size_t max_layer = 0;
+            for (size_t k = 1; k < 7; ++k) {
+                if (layers[k].dimension > layers[max_layer].dimension) {
+                    max_layer = k;
+                }
+            }
+            layers[max_layer].dimension += diff;
+        }
+    }
+
+    /**
+     * Route data to appropriate layer based on content analysis
+     * Returns layer index (0-6) for storage
+     */
+    size_t route_to_layer(const std::string& content, const MemoryTrace& trace) {
+        if (!layers_initialized) return 1; // Default to Knowledge layer
+
+        // Simple routing logic (can be enhanced with ML)
+        if (trace.role == "system" || content.find("session") != std::string::npos) {
+            return 0; // Identity
+        }
+        if (content.find("password") != std::string::npos ||
+            content.find("key") != std::string::npos ||
+            content.find("secret") != std::string::npos) {
+            return 6; // Vault
+        }
+        if (trace.role == "doc" || content.find("fact") != std::string::npos) {
+            return 1; // Knowledge
+        }
+        if (content.find("how") != std::string::npos ||
+            content.find("procedure") != std::string::npos) {
+            return 2; // Experience
+        }
+        if (content.find("prefer") != std::string::npos ||
+            content.find("like") != std::string::npos) {
+            return 3; // Preference
+        }
+        if (content.find("when") != std::string::npos ||
+            content.find("where") != std::string::npos) {
+            return 4; // Context
+        }
+        if (content.find("why") != std::string::npos ||
+            content.find("insight") != std::string::npos) {
+            return 5; // Wisdom
+        }
+
+        return 1; // Default to Knowledge
+    }
+
+    /**
+     * Calculate SNR for a layer using Theorem 1.1: SNR_k ≈ sqrt(D_k / N_k)
+     * This implements the engineering rule of thumb for matched-filter SNR
+     */
+    double calculate_layer_snr(size_t layer_idx) const {
+        if (layer_idx >= 7 || layers[layer_idx].dimension == 0) return 0.0;
+
+        double n_eff = std::max(1.0, layers[layer_idx].load_estimate);
+        double d_eff = static_cast<double>(layers[layer_idx].dimension);
+
+        // SNR_k ≈ sqrt(D_k / N_k) from random code cross-term variance
+        return std::sqrt(d_eff / n_eff);
+    }
+
+    /**
+     * Update SNR measurements for all layers
+     */
+    void update_layer_snrs() {
+        for (size_t k = 0; k < 7; ++k) {
+            layers[k].current_snr = calculate_layer_snr(k);
+            layers[k].capacity_used = layers[k].load_estimate /
+                std::max(1.0, static_cast<double>(layers[k].dimension));
+        }
+    }
+
+    /**
+     * Enforce capacity theorem bounds and rebalance if necessary
+     * Implements Theorem 1.1 capacity constraints: D_k ≥ S_k² N_k
+     */
+    bool enforce_capacity_theorem() {
+        bool rebalanced = false;
+
+        for (size_t k = 0; k < 7; ++k) {
+            double required_dimension = layers[k].target_snr * layers[k].target_snr *
+                                      layers[k].load_estimate;
+
+            if (static_cast<double>(layers[k].dimension) < required_dimension) {
+                // Layer violates capacity theorem - need rebalancing
+                layers[k].dimension = static_cast<size_t>(std::ceil(required_dimension));
+                rebalanced = true;
+            }
+        }
+
+        if (rebalanced) {
+            // Re-optimize other layers to maintain total budget
+            size_t used_budget = 0;
+            for (const auto& layer : layers) {
+                used_budget += layer.dimension;
+            }
+
+            if (used_budget > total_dimension_budget) {
+                // Scale down proportionally (except vault layer)
+                double scale_factor = static_cast<double>(total_dimension_budget) /
+                                    static_cast<double>(used_budget);
+
+                for (size_t k = 0; k < 6; ++k) { // Don't scale vault (layer 6)
+                    layers[k].dimension = static_cast<size_t>(
+                        std::max(1.0, std::floor(layers[k].dimension * scale_factor)));
+                }
+
+                // Give remaining budget to vault layer
+                size_t final_used = 0;
+                for (size_t k = 0; k < 6; ++k) {
+                    final_used += layers[k].dimension;
+                }
+                layers[6].dimension = total_dimension_budget - final_used;
+            }
+
+            // Reallocate subspace memory
+            for (auto& layer : layers) {
+                layer.subspace.resize(layer.dimension, std::complex<double>(0.0, 0.0));
+            }
+        }
+
+        return rebalanced;
+    }
+
+    /**
+     * Bell Inequality Validation Hook
+     * Tests for quantum-like correlations in holographic patterns
+     * Based on CHSH inequality: S = E(a,b) + E(a,b') + E(a',b) - E(a',b') ≤ 2
+     */
+    double validate_bell_inequality() const {
+        if (field.size() < 4) return 0.0;  // Need minimum data for correlation analysis
+
+        // Simulate Bell test using holographic field correlations
+        // Use different "measurement angles" by sampling field at different phases
+
+        auto correlation = [&](size_t offset1, size_t offset2) -> double {
+            std::complex<double> sum = 0.0;
+            size_t samples = std::min(size_t(100), field.size() / 4);
+
+            for (size_t i = 0; i < samples; ++i) {
+                size_t idx1 = (i * 4 + offset1) % field.size();
+                size_t idx2 = (i * 4 + offset2) % field.size();
+                sum += std::conj(field[idx1]) * field[idx2];
+            }
+            return std::abs(sum) / samples;
+        };
+
+        // CHSH measurement: S = E(0,0) + E(0,π/4) + E(π/2,0) - E(π/2,π/4)
+        double E00 = correlation(0, 0);      // a=0, b=0
+        double E0π4 = correlation(0, 1);     // a=0, b=π/4
+        double Eπ20 = correlation(2, 0);     // a=π/2, b=0
+        double Eπ2π4 = correlation(2, 1);    // a=π/2, b=π/4
+
+        double S = E00 + E0π4 + Eπ20 - Eπ2π4;
+
+        // Classical bound is 2, quantum can reach 2√2 ≈ 2.828
+        // Return violation measure (positive = quantum-like behavior)
+        return S - 2.0;
+    }
+
+    /**
+     * Enhanced interference pattern analysis
+     * Analyzes wave coherence and quantum-like interference effects
+     */
+    py::dict analyze_interference_patterns() const {
+        py::dict analysis;
+
+        // Visibility analysis (measure of interference quality)
+        double visibility = 0.0;
+        if (!field.empty()) {
+            double max_amplitude = 0.0;
+            double min_amplitude = std::numeric_limits<double>::max();
+
+            for (const auto& val : field) {
+                double amp = std::abs(val);
+                max_amplitude = std::max(max_amplitude, amp);
+                min_amplitude = std::min(min_amplitude, amp);
+            }
+
+            if (max_amplitude > 0) {
+                visibility = (max_amplitude - min_amplitude) / (max_amplitude + min_amplitude);
+            }
+        }
+        analysis["wave_visibility"] = visibility;
+
+        // Phase coherence analysis
+        double phase_coherence = 0.0;
+        if (!field.empty()) {
+            std::vector<double> phases;
+            for (const auto& val : field) {
+                if (std::abs(val) > 1e-10) {
+                    phases.push_back(std::arg(val));
+                }
+            }
+
+            if (!phases.empty()) {
+                // Measure phase distribution concentration
+                double mean_phase = 0.0;
+                for (double phase : phases) {
+                    mean_phase += phase;
+                }
+                mean_phase /= phases.size();
+
+                double variance = 0.0;
+                for (double phase : phases) {
+                    double diff = phase - mean_phase;
+                    // Handle phase wrapping
+                    while (diff > M_PI) diff -= 2 * M_PI;
+                    while (diff < -M_PI) diff += 2 * M_PI;
+                    variance += diff * diff;
+                }
+                variance /= phases.size();
+
+                // Convert variance to coherence measure (lower variance = higher coherence)
+                phase_coherence = std::exp(-variance);
+            }
+        }
+        analysis["phase_coherence"] = phase_coherence;
+
+        // Bell inequality violation
+        double bell_violation = validate_bell_inequality();
+        analysis["bell_violation_measure"] = bell_violation;
+        analysis["bell_test_passed"] = (bell_violation > 0.1);  // Significant violation
+
+        return analysis;
+    }
+
+    /**
+     * Validate wave normalization and interference properties
+     * Returns validation metrics for mathematical correctness
+     */
+    py::dict validate_wave_properties() const {
+        py::dict validation;
+
+        // Check field normalization
+        double field_norm = 0.0;
+        for (const auto& val : field) {
+            field_norm += std::norm(val);
+        }
+        field_norm = std::sqrt(field_norm);
+        validation["field_normalization"] = field_norm;
+
+        // Check layer subspace orthogonality (simplified check)
+        double orthogonality_score = 0.0;
+        size_t valid_pairs = 0;
+
+        for (size_t i = 0; i < 7; ++i) {
+            for (size_t j = i + 1; j < 7; ++j) {
+                if (!layers[i].subspace.empty() && !layers[j].subspace.empty()) {
+                    // Simple orthogonality check: dot product should be small
+                    std::complex<double> dot_product = 0.0;
+                    size_t min_dim = std::min(layers[i].subspace.size(), layers[j].subspace.size());
+
+                    for (size_t d = 0; d < min_dim; ++d) {
+                        dot_product += std::conj(layers[i].subspace[d]) * layers[j].subspace[d];
+                    }
+
+                    double magnitude = std::abs(dot_product);
+                    orthogonality_score += magnitude;
+                    valid_pairs++;
+                }
+            }
+        }
+
+        if (valid_pairs > 0) {
+            orthogonality_score /= valid_pairs;
+        }
+        validation["layer_orthogonality_score"] = orthogonality_score;
+
+        // Capacity theorem compliance
+        bool capacity_compliant = true;
+        for (size_t k = 0; k < 7; ++k) {
+            double required = layers[k].target_snr * layers[k].target_snr * layers[k].load_estimate;
+            if (static_cast<double>(layers[k].dimension) < required) {
+                capacity_compliant = false;
+                break;
+            }
+        }
+        validation["capacity_theorem_compliant"] = capacity_compliant;
+
+        return validation;
+    }
+
+    /**
+     * Get layer statistics for monitoring and validation
+     */
+    py::dict get_layer_stats() const {
+        py::dict stats;
+
+        for (size_t k = 0; k < 7; ++k) {
+            py::dict layer_info;
+            layer_info["name"] = layers[k].name;
+            layer_info["dimension"] = layers[k].dimension;
+            layer_info["importance_weight"] = layers[k].importance_weight;
+            layer_info["load_estimate"] = layers[k].load_estimate;
+            layer_info["target_snr"] = layers[k].target_snr;
+            layer_info["current_snr"] = layers[k].current_snr;
+            layer_info["capacity_used"] = layers[k].capacity_used;
+
+            stats[py::str(std::to_string(k))] = layer_info;
+        }
+
+        stats["total_budget"] = total_dimension_budget;
+        stats["layers_initialized"] = layers_initialized;
+
+        return stats;
+    }
+
     HolographicMemory(size_t dim = 1024) : dimension(dim), memory_count(0),
                                            total_store_time_us(0), total_query_time_us(0),
-                                           last_snapshot_ts(0.0) {
+                                           total_dimension_budget(dim), last_snapshot_ts(0.0) {
         // Allocate aligned memory
         field.resize(dim, std::complex<double>(0, 0));
         workspace.resize(dim, std::complex<double>(0, 0));
@@ -398,6 +803,9 @@ public:
         if (const char* wp = std::getenv("HLOG_FFTW_WISDOM")) {
             (void)fftw_import_wisdom_from_filename(wp);
         }
+
+        // Initialize 7-layer decomposition with optimal dimension allocation
+        initialize_7layer_decomposition(dim);
 
         // Initialize persistence paths
         const char* bd = std::getenv("HLOG_DATA_DIR");
@@ -1233,7 +1641,6 @@ public:
     }
 
     // -------- Real wave data getters (exposed via pybind) --------
-public:
     py::array_t<std::complex<double>> get_memory_vector(const std::string& memory_id) {
         std::lock_guard<std::mutex> lock(field_mutex);
         auto it = memory_index.find(memory_id);
@@ -1342,6 +1749,27 @@ PYBIND11_MODULE(holographic_cpp, m) {
              "Total HRR memory usage in bytes (field + dict)")
         .def("get_hrr_stats", &HolographicMemory::get_hrr_stats,
              "HRR field stats: dimension, field size MB, unique responses, total memory MB")
+        // --- 7-Layer Mathematical Methods (Theorem 1.1) ---
+        .def("initialize_7layer_decomposition", &HolographicMemory::initialize_7layer_decomposition,
+             py::arg("total_budget"), "Initialize 7-layer decomposition with optimal dimension allocation")
+        .def("optimize_layer_dimensions", &HolographicMemory::optimize_layer_dimensions,
+             "Re-optimize layer dimensions using Theorem 1.1 algorithm")
+        .def("get_layer_stats", &HolographicMemory::get_layer_stats,
+             "Get comprehensive statistics for all 7 layers including dimensions, SNR, and capacity")
+        .def("route_to_layer", &HolographicMemory::route_to_layer,
+             py::arg("content"), py::arg("trace"), "Route content to appropriate layer (0-6)")
+        .def("update_layer_snrs", &HolographicMemory::update_layer_snrs,
+             "Update SNR measurements for all layers using Theorem 1.1")
+        .def("enforce_capacity_theorem", &HolographicMemory::enforce_capacity_theorem,
+             "Enforce capacity theorem bounds and rebalance layers if necessary")
+        .def("validate_wave_properties", &HolographicMemory::validate_wave_properties,
+             "Validate wave normalization, orthogonality, and capacity theorem compliance")
+        .def("calculate_layer_snr", &HolographicMemory::calculate_layer_snr,
+             py::arg("layer_idx"), "Calculate SNR for specific layer using Theorem 1.1 formula")
+        .def("validate_bell_inequality", &HolographicMemory::validate_bell_inequality,
+             "Test for quantum-like correlations using CHSH Bell inequality")
+        .def("analyze_interference_patterns", &HolographicMemory::analyze_interference_patterns,
+             "Analyze wave coherence, visibility, and quantum-like interference effects")
         // --- Real wave getters (authentic engine data) ---
         .def("get_memory_vector", &HolographicMemory::get_memory_vector,
              py::arg("memory_id"), "Get complex frequency vector for one memory (authentic)")

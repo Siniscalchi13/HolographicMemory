@@ -205,6 +205,76 @@ counter_watch_events = Counter("holo_watch_events_total", "Watch events processe
 def healthz():
     return {"status": "ok"}
 
+@app.get("/capabilities")
+def get_capabilities():
+    """Get system capabilities and feature availability (accurate, runtime-based)."""
+    fs = get_fs()
+    mem = getattr(fs, "mem", None)
+    backend = getattr(mem, "backend", None)
+
+    # GPU availability
+    gpu_available = False
+    if hasattr(mem, "gpu_backend") and mem.gpu_backend is not None:  # type: ignore[attr-defined]
+        try:
+            if hasattr(mem.gpu_backend, "available"):
+                gpu_available = bool(mem.gpu_backend.available())  # type: ignore[attr-defined]
+            else:
+                gpu_available = True
+        except Exception:
+            gpu_available = True
+
+    # 3D exact recall availability
+    exact_recall = bool(getattr(mem, "backend3d", None))
+
+    # 7-layer status via backend stats (if exposed)
+    layers_initialized = False
+    try:
+        if backend is not None and hasattr(backend, "get_layer_stats"):
+            stats = backend.get_layer_stats()  # type: ignore[attr-defined]
+            layers_initialized = bool(stats.get("layers_initialized", False))  # type: ignore[index]
+    except Exception:
+        layers_initialized = False
+
+    # Math feature support via method presence
+    has_bell = bool(backend is not None and hasattr(backend, "validate_bell_inequality"))
+    has_interf = bool(backend is not None and hasattr(backend, "analyze_interference_patterns"))
+    has_capacity = bool(backend is not None and hasattr(backend, "enforce_capacity_theorem"))
+    has_wave = bool(backend is not None and hasattr(backend, "validate_wave_properties"))
+    has_snr = bool(backend is not None and (hasattr(backend, "calculate_layer_snr") or hasattr(backend, "get_layer_stats")))
+
+    # Dimension and memory count (best-effort)
+    max_dimension = None
+    current_memory_count = None
+    try:
+        s = fs.stats()
+        max_dimension = s.get("dimension")
+        current_memory_count = s.get("memory_count")
+    except Exception:
+        pass
+
+    capabilities = {
+        "gpu_acceleration": gpu_available,
+        "3d_exact_recall": exact_recall,
+        "7layer_decomposition": layers_initialized,
+        "bell_inequality_validation": has_bell,
+        "interference_analysis": has_interf,
+        "capacity_theorem_enforcement": has_capacity,
+        "wave_validation": has_wave,
+        "snr_monitoring": has_snr,
+        "max_dimension": max_dimension,
+        "current_memory_count": current_memory_count,
+    }
+
+    # Guidance messages for conditional features
+    if not layers_initialized:
+        capabilities["guidance"] = "7-layer not initialized. Use backend.initialize_7layer_decomposition(total_budget)."
+    if not gpu_available:
+        capabilities["gpu_guidance"] = "GPU backend unavailable. Install/enable Metal/CUDA/ROCm drivers."
+    if not exact_recall:
+        capabilities["recall_guidance"] = "3D exact recall backend not loaded. Byte-perfect recall may be limited."
+
+    return capabilities
+
 
 @app.get("/stats")
 def stats(_: bool = Depends(require_api_key)):
@@ -265,6 +335,27 @@ def list_index(
             if original_size <= 0:
                 # As a last resort, approximate with .hwp size (will show 1.0x)
                 original_size = int(stat.st_size)
+            # Detect .hwp format (H4M1/H4K8/HWP4V001/legacy JSON)
+            fmt_magic = "unknown"
+            recoverable = False
+            try:
+                with open(hwp_path, 'rb') as _f:
+                    head = _f.read(8)
+                if head.startswith(b'H4M1'):
+                    fmt_magic = 'H4M1'
+                    recoverable = (hwp_path.with_suffix(hwp_path.suffix + ".json").exists())
+                elif head.startswith(b'H4K8'):
+                    fmt_magic = 'H4K8'
+                    recoverable = True
+                elif head.startswith(b'HWP4V001'):
+                    fmt_magic = 'HWP4V001'
+                    recoverable = True
+                elif head[:1] == b'{':
+                    fmt_magic = 'v3json'
+                    recoverable = True
+            except Exception:
+                fmt_magic = 'unknown'
+                recoverable = False
 
             results.append({
                 "doc_id": doc_id,
@@ -273,6 +364,8 @@ def list_index(
                 "size": original_size,
                 "holo_size": int(stat.st_size),
                 "mtime": stat.st_mtime,
+                "format": fmt_magic,
+                "recoverable": recoverable,
             })
         except (OSError, FileNotFoundError):
             continue
@@ -399,7 +492,7 @@ def watch_start(body: WatchPayload, _: bool = Depends(require_api_key)):
     try:
         w.start()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=503, detail=f"File watcher service unavailable: {str(e)}")
     return w.status()
 
 
@@ -440,8 +533,12 @@ def delete_file(body: PathPayload, _: bool = Depends(require_api_key)):
         # Update index
         fs.index.remove(p)  # type: ignore[attr-defined]
         return {"status": "ok"}
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"File not found: {body.path}")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=f"Permission denied: {body.path}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"File deletion failed: {str(e)}")
 
 
 @app.post("/rename")
@@ -465,8 +562,12 @@ def rename_file(body: RenamePayload, _: bool = Depends(require_api_key)):
             except Exception:
                 pass
         return {"status": "ok"}
+    except FileExistsError:
+        raise HTTPException(status_code=409, detail=f"Destination already exists: {body.new_path}")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Source file not found: {body.path}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"File rename failed: {str(e)}")
 
 
 @app.get("/tree")
@@ -644,18 +745,20 @@ async def store(file: UploadFile = File(...), _: bool = Depends(require_api_key)
         # Build .hwp payload: store holographic wave pattern ONLY (no original data)
         import json as _json
         # 1) Store original bytes into 3D engine for exact recall (no base64 persistence)
+        exact_recall_ok = False
         try:
             if hasattr(fs.mem, "backend3d") and fs.mem.backend3d is not None:  # type: ignore[attr-defined]
                 fs.mem.backend3d.store_bytes(data, doc_id)  # type: ignore[attr-defined]
+                exact_recall_ok = True
             else:
-                # Fallback to high-level API if exposed
+                # Fallback to high-level API if exposed (not exact recall)
                 try:
                     fs.mem.store_file(Path(file.filename), stable_id=doc_id)  # type: ignore[attr-defined]
                 except Exception:
                     pass
         except Exception:
             # Continue; download will fail if exact recall backend is missing
-            pass
+            exact_recall_ok = False
         # 2) For non-vault, store lightweight meta in wave engine for mapping (optional)
         if not routing.get("vault"):
             try:
@@ -684,11 +787,8 @@ async def store(file: UploadFile = File(...), _: bool = Depends(require_api_key)
         # 3) Write .hwp according to router decision
         try:
             fmt = str(routing.get("format", "v4"))
-            # Avoid non-recoverable micro format (K=0) when 3D exact-recall is unavailable
-            try:
-                has3d = bool(getattr(fs.mem, 'backend3d', None))  # type: ignore[attr-defined]
-            except Exception:
-                has3d = False
+            # Avoid non-recoverable micro format (K=0) when exact-recall storage failed
+            has3d = bool(exact_recall_ok)
             if fmt == "micro" and not has3d:
                 fmt = "microK8"
             if fmt == "micro":
@@ -702,7 +802,8 @@ async def store(file: UploadFile = File(...), _: bool = Depends(require_api_key)
                 )
             elif fmt == "microK8":
                 # Small semantic sketch with K=8 for tiny files
-                wave_data = fs.mem.get_real_wave_data(doc_id)
+                # Compute wave directly from uploaded bytes (no retrieval dependency)
+                wave_data = fs.mem.get_wave_data_from_bytes(data, doc_id)
                 amps = wave_data.get("amplitudes", []) or []
                 phs = wave_data.get("phases", []) or []
                 dim = int(wave_data.get("dimension", 0) or len(amps))
@@ -719,7 +820,8 @@ async def store(file: UploadFile = File(...), _: bool = Depends(require_api_key)
                     amp_scale=float(layer.get("amp_scale", 1.0)),
                 )
             else:
-                wave_data = fs.mem.get_real_wave_data(doc_id)
+                # v4 path with router-defined layers/K; compute wave from bytes
+                wave_data = fs.mem.get_wave_data_from_bytes(data, doc_id)
                 amps = wave_data.get("amplitudes", []) or []
                 phs = wave_data.get("phases", []) or []
                 dim = int(wave_data.get("dimension", 0) or len(amps))
@@ -758,8 +860,8 @@ async def store(file: UploadFile = File(...), _: bool = Depends(require_api_key)
         # 4) Optional fallback: write sidecar JSON with base64 if requested or 3D backend missing (disabled for Vault)
         try:
             fallback = os.getenv("HOLO_FALLBACK_BASE64", "false").lower() in ("1", "true", "yes")
-            no3d = not (hasattr(fs.mem, "backend3d") and fs.mem.backend3d is not None)  # type: ignore[attr-defined]
-            if (fallback or no3d) and not routing.get("vault"):
+            # Use exact_recall_ok determined above to decide on sidecar persistence
+            if (fallback or not exact_recall_ok) and not routing.get("vault"):
                 sidecar = hwp_path.with_suffix(hwp_path.suffix + ".json")
                 import base64 as _b64
                 payload = {
@@ -774,7 +876,8 @@ async def store(file: UploadFile = File(...), _: bool = Depends(require_api_key)
                     "encoding": "base64",
                     "data": _b64.b64encode(data).decode("ascii"),
                 }
-                sidecar.write_text(json.dumps(payload), encoding="utf-8")
+                # Use the same JSON alias used above to avoid NameError
+                sidecar.write_text(_json.dumps(payload), encoding="utf-8")
         except Exception:
             pass
 
@@ -796,7 +899,15 @@ async def store(file: UploadFile = File(...), _: bool = Depends(require_api_key)
             pass
     except Exception as e:
         logger.exception("/store failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = str(e)
+        if "disk" in error_msg.lower() or "space" in error_msg.lower():
+            raise HTTPException(status_code=507, detail="Insufficient storage space")
+        elif "format" in error_msg.lower() or "invalid" in error_msg.lower():
+            raise HTTPException(status_code=400, detail=f"Invalid file format: {error_msg}")
+        elif "size" in error_msg.lower() or len(data) > 100*1024*1024:  # 100MB
+            raise HTTPException(status_code=413, detail="File too large")
+        else:
+            raise HTTPException(status_code=500, detail=f"Storage failed: {error_msg}")
     # Store HM-based thumbnail (base64) for images and PDFs
     thumb_png: bytes | None = None
     # Try raster image
@@ -837,6 +948,33 @@ def download(doc_id: str, _: bool = Depends(require_api_key)):
             if p.exists():
                 # If .hwp, reconstruct. Prefer decoding v4 binary via GPU module; support legacy JSON (v3) fallback
                 if p.suffix.lower() == ".hwp":
+                    # Inspect header for micro/header-only case to provide a clear error early
+                    try:
+                        with open(p, 'rb') as _f:
+                            magic8 = _f.read(8)
+                        magic4 = magic8[:4]
+                    except Exception:
+                        magic4 = b""
+                    if magic4 == b'H4M1':
+                        # Try legacy sidecar JSON (v3) for inline data and metadata
+                        sidecar = p.with_suffix(p.suffix + ".json")
+                        if sidecar.exists():
+                            try:
+                                import json as _json, base64 as _b64
+                                sj = _json.loads(sidecar.read_text(encoding="utf-8"))
+                                if sj.get("data"):
+                                    raw = _b64.b64decode((sj.get("data") or "").encode("ascii"), validate=False)
+                                    original = sj.get("original", {})
+                                    fname2 = original.get("filename") or f"{doc_id}.bin"
+                                    ctype2 = original.get("content_type") or "application/octet-stream"
+                                    try:
+                                        getattr(app.state, 'telemetry', None) and app.state.telemetry.track_retrieval()
+                                    except Exception:
+                                        pass
+                                    return Response(content=raw, media_type=ctype2, headers={"Content-Disposition": f"attachment; filename={Path(fname2).name}"})
+                            except Exception:
+                                pass
+                        raise HTTPException(status_code=409, detail="Stored as header-only (H4M1); no reconstructible data available")
                     # Try modern v4 decode first (H4K8/HWP4V001) using holographic_gpu
                     try:
                         import holographic_gpu as _hg  # type: ignore
@@ -906,7 +1044,7 @@ def download(doc_id: str, _: bool = Depends(require_api_key)):
                                     return Response(content=raw, media_type=ctype2, headers={"Content-Disposition": f"attachment; filename={Path(fname2).name}"})
                             except Exception:
                                 pass
-                        raise HTTPException(status_code=500, detail=f"Reconstruction failed: {_e}")
+                        raise HTTPException(status_code=422, detail=f"Data reconstruction failed - 3D backend unavailable or data corrupted: {_e}")
                 # Legacy managed files
                 try:
                     getattr(app.state, 'telemetry', None) and app.state.telemetry.track_retrieval()
@@ -1006,9 +1144,9 @@ def content(path: str | None = None, doc_id: str | None = None, _: bool = Depend
                     else:
                         raise e
                 except Exception:
-                    raise HTTPException(status_code=500, detail=f"Reconstruction failed: {e}")
+                    raise HTTPException(status_code=422, detail=f"Base64 reconstruction failed: {e}")
             else:
-                raise HTTPException(status_code=500, detail=f"Reconstruction failed: {e}")
+                raise HTTPException(status_code=422, detail=f"No reconstruction method available for this data format: {e}")
         if not content_type:
             import mimetypes
             content_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'

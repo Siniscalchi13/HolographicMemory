@@ -91,6 +91,20 @@ std::vector<std::vector<float>> MetalHoloCore::batch_encode_from_ptr(const float
                      : batch_encode_fft(batch_data, pattern_dim);
 }
 
+MetalHoloCore::DeviceAnalysisResult MetalHoloCore::analyze_metrics_hostback(const float* v1, const float* v2, std::uint32_t dim) {
+    DeviceAnalysisResult r{0.0f, 0.0f, 0.0, 0.0f};
+    if (!available() || v1 == nullptr || v2 == nullptr || dim == 0) return r;
+    auto t0 = high_resolution_clock::now();
+    auto tup = backend_->analyze_metrics(v1, v2, dim);
+    auto dt = duration_cast<duration<double, std::milli>>(high_resolution_clock::now() - t0).count();
+    metrics_.search_time_ms = dt;
+    r.visibility = std::get<0>(tup);
+    r.coherence = std::get<1>(tup);
+    r.bell_violation = std::get<2>(tup);
+    r.orthogonality = std::get<3>(tup);
+    return r;
+}
+
 } // namespace holo
 
 #endif

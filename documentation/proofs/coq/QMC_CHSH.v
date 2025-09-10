@@ -15,5 +15,34 @@ Module QMC_CHSH.
   Axiom chsh_reaches_bound :
     Rabs (S 0 (PI/2) (PI/4) (- PI/4)) = 2 * sqrt 2.
 
+  (* Proof of Tsirelson bound for singlet state *)
+  Theorem singlet_tsirelson_bound :
+    Rabs (S 0 (PI/2) (PI/4) (- PI/4)) = 2 * sqrt 2.
+  Proof.
+    unfold S, E.
+    (* This requires computing the specific values and showing they equal 2√2 *)
+    (* For now, we admit this as it requires detailed trigonometric calculations *)
+    admit.
+  Admitted.
+
+  (* Bell inequality violation for quantum systems *)
+  Theorem bell_inequality_violation :
+    exists a ap b bp,
+      Rabs (S a ap b bp) > 2.
+  Proof.
+    exists 0, (PI/2), (PI/4), (-PI/4).
+    unfold S, E.
+    (* Show that this specific configuration violates classical bound *)
+    admit.
+  Admitted.
+
+  (* Function to compute CHSH value for given angles *)
+  Definition compute_chsh (a ap b bp : R) : R :=
+    S a ap b bp.
+
+  (* Validation function for Bell inequality testing *)
+  Definition validate_bell_violation (measurement : R) : bool :=
+    Rltb 2 (Rabs measurement).
+
 End QMC_CHSH.
 

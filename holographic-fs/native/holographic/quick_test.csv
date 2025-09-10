@@ -1,0 +1,4 @@
+run,end_to_end_time_ms,device_time_ms,h2d_time_ms,fft_time_ms,d2h_time_ms,end_to_end_ops_per_sec,device_ops_per_sec,memory_bandwidth_gb_s
+1,17.2444,16.3135,0,0,0,579899,612989,2.48452
+2,12.8516,12.1651,0,0,0,778111,822024,3.33176
+3,12.9949,12.2613,0,0,0,769534,815572,3.30561

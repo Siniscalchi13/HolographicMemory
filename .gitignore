@@ -30,3 +30,20 @@ holographic-fs/native/holographic/lib.macosx-metal/
 # Large generated holographic patterns/snapshots
 data/holographic_memory/
 */data/holographic_memory/
+
+# Test outputs
+test_*.txt
+test_*.html
+test_*.docx
+test_*.bin
+*_reconstructed.txt
+
+# Demo directories (keep only demo/)
+demo_*/
+!demo/
+
+# macOS embedded runtime (should not be in repo)
+macos/HolographicMemoryApp/Runtime/
+
+# Backup directories
+backup_*/
