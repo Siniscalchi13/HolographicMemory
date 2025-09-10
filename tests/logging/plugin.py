@@ -57,8 +57,10 @@ def pytest_runtest_logreport(report: pytest.TestReport) -> None:  # type: ignore
     # Only act on call phase for outcome
     if report.when != "call":
         return
-    # Fetch state from session
-    session = report._session
+    # Fetch state from session - use getattr to safely access session
+    session = getattr(report, 'session', None)
+    if not session:
+        return
     state: _SessionState = getattr(session, "_enterprise_state", None)  # type: ignore[attr-defined]
     if not state:
         return
