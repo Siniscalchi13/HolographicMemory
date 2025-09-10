@@ -147,8 +147,8 @@ make soa
 # Build C++ engine with GPU support
 make cpp
 
-# Install holographic-fs library
-cd holographic-fs && python -m pip install -e .
+# Install core service library
+cd services/core && python -m pip install -e .
 
 # Run tests
 make test
@@ -243,7 +243,7 @@ python main.py
 ### SOA (Service-Oriented Architecture) with GPU-First Core
 
 ```text
-holographic-fs/                  # GPU-first core engine
+services/core/                   # GPU-first holographic memory engine
 ├── native/holographic/          # C++ core with Metal/CUDA/ROCm
 │   ├── holographic_memory.cpp   # FFT-based wave operations
 │   ├── holographic_native_3d.cpp # 3D exact recall

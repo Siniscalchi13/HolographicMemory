@@ -13,11 +13,11 @@ from typing import Dict, List, Optional, Any, Tuple
 import json
 import time
 
-# Add holographic-fs to path
-_pkg_root = Path(__file__).resolve().parents[1]
-_holographic_fs_path = _pkg_root / "holographic-fs"
-if _holographic_fs_path.exists():
-    sys.path.insert(0, str(_holographic_fs_path))
+# Add core service to path
+_pkg_root = Path(__file__).resolve().parent
+_core_path = _pkg_root / "core"
+if _core_path.exists():
+    sys.path.insert(0, str(_core_path))
 
 from holographicfs.memory import Memory as HolographicMemory
 from services.math_core.optimizer import DimensionOptimizer

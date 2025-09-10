@@ -92,7 +92,7 @@ dev:
 	@echo "$(YELLOW)🌌 GPU: Metal acceleration enabled$(NC)"
 	@echo "$(YELLOW)📁 Data: $(HOLO_ROOT)$(NC)"
 	@echo ""
-	@PYTHONPATH="holographic-fs/native/holographic/build:$$PYTHONPATH" $(VENV_PY) -m uvicorn services.api.app:app --reload --port $(PORT) --host 0.0.0.0
+	@PYTHONPATH="services/core/native/holographic/build:$$PYTHONPATH" $(VENV_PY) -m uvicorn services.api.app:app --reload --port $(PORT) --host 0.0.0.0
 
 soa:
 	@echo "$(BLUE)🚀 Starting HolographicMemory SOA system...$(NC)"
@@ -136,7 +136,7 @@ install-deps:
 	@echo "$(BLUE)📦 Installing dependencies...$(NC)"
 	@$(VENV_PIP) install --upgrade pip wheel setuptools
 	@$(VENV_PIP) install -r services/api/requirements.txt
-	@$(VENV_PIP) install -e holographic-fs
+	@$(VENV_PIP) install -e services/core
 	@echo "$(GREEN)✅ Dependencies installed$(NC)"
 
 # Verify setup is working correctly
@@ -184,7 +184,7 @@ native:
 	@which clang++ > /dev/null || (echo "$(RED)❌ clang++ not found. Install Xcode Command Line Tools: xcode-select --install$(NC)" && exit 1)
 	@which cmake > /dev/null || (echo "$(RED)❌ cmake not found. Install with: brew install cmake$(NC)" && exit 1)
 	@echo "$(YELLOW)🔧 Building GPU backend with CMake...$(NC)"
-	@cd holographic-fs/native/holographic && \
+	@cd services/core/native/holographic && \
 		mkdir -p build && \
 		cd build && \
 		cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_METAL=ON && \
@@ -194,13 +194,13 @@ native:
 # Build all components
 build: native
 	@echo "$(BLUE)🔨 Building all components...$(NC)"
-	@cd holographic-fs && $(VENV_PY) -m build
+	@cd services/core && $(VENV_PY) -m build
 	@echo "$(GREEN)✅ All components built$(NC)"
 
 # Install holographicfs package
 install:
 	@echo "$(BLUE)📦 Installing holographicfs package...$(NC)"
-	@$(VENV_PIP) install -e holographic-fs
+	@$(VENV_PIP) install -e services/core
 	@echo "$(GREEN)✅ Package installed$(NC)"
 
 # Uninstall holographicfs package
@@ -212,14 +212,14 @@ uninstall:
 # Run all tests
 test:
 	@echo "$(BLUE)🧪 Running all tests...$(NC)"
-	@cd holographic-fs && $(VENV_PY) -m pytest -v
+	@cd services/core && $(VENV_PY) -m pytest -v
 	@cd services/api && $(VENV_PY) -m pytest -v
 	@echo "$(GREEN)✅ All tests passed$(NC)"
 
 # Test GPU acceleration
 test-gpu:
 	@echo "$(BLUE)🌌 Testing GPU acceleration...$(NC)"
-	@$(VENV_PY) -c "import sys; sys.path.append('holographic-fs/native/holographic'); import holographic_gpu; print('GPU platforms:', holographic_gpu.available_platforms())"
+	@$(VENV_PY) -c "import sys; sys.path.append('services/core/native/holographic'); import holographic_gpu; print('GPU platforms:', holographic_gpu.available_platforms())"
 	@echo "$(GREEN)✅ GPU acceleration working$(NC)"
 
 # Run performance benchmarks
@@ -231,7 +231,7 @@ benchmark:
 # Test GPU performance
 benchmark-gpu:
 	@echo "$(BLUE)🌌 Testing GPU performance...$(NC)"
-	@cd holographic-fs/native/holographic && $(VENV_PY) benchmarks_gpu.cpp
+	@cd services/core/native/holographic && $(VENV_PY) benchmarks_gpu.cpp
 	@echo "$(GREEN)✅ GPU benchmarks completed$(NC)"
 
 # Test CPU performance
@@ -291,16 +291,16 @@ openapi:
 # Generate documentation
 docs:
 	@echo "$(BLUE)📚 Generating documentation...$(NC)"
-	@$(VENV_PY) -m pdoc --html holographic-fs/holographicfs --output-dir docs/api
+	@$(VENV_PY) -m pdoc --html services/core/holographicfs --output-dir docs/api
 	@echo "$(GREEN)✅ Documentation generated$(NC)"
 
 # Clean build artifacts and cache
 clean:
 	@echo "$(BLUE)🧹 Cleaning build artifacts...$(NC)"
 	@rm -rf **/__pycache__ build dist .pytest_cache
-	@rm -rf holographic-fs/*.egg-info
-	@rm -rf holographic-fs/native/holographic/build
-	@rm -rf holographic-fs/native/holographic/*.so
+	@rm -rf services/core/*.egg-info
+	@rm -rf services/core/native/holographic/build
+	@rm -rf services/core/native/holographic/*.so
 	@rm -rf $(VENV_DIR)
 	@echo "$(GREEN)✅ Cleanup completed$(NC)"
 
