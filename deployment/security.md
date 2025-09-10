@@ -43,7 +43,6 @@ ufw enable
 **Commands:**
 
 ```bash
-python3.13 scripts/setup_auth.py
-python3.13 scripts/generate_api_keys.py
+echo 'Authentication setup not required for current architecture'
 ```
 

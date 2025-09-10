@@ -60,6 +60,6 @@ python3.13 main.py
 
 ```bash
 curl http://localhost:8081/health
-python3.13 benchmark_soa_system.py
+python3.13 tests/benchmark_soa_system.py
 ```
 

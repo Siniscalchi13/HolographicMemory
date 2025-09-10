@@ -48,7 +48,7 @@
         "title": "Verify Deployment",
         "commands": [
           "curl http://localhost:8081/health",
-          "python3.13 benchmark_soa_system.py"
+          "python3.13 tests/benchmark_soa_system.py"
         ]
       }
     ]
@@ -104,7 +104,6 @@
         "step": 3,
         "title": "Service Configuration",
         "commands": [
-          "cp config/production.yaml config/active.yaml",
           "python3.13 -c \"from services.orchestrator.orchestrator import HolographicMemoryOrchestrator; print('Config validated')\""
         ]
       },
@@ -112,15 +111,14 @@
         "step": 4,
         "title": "Database Setup",
         "commands": [
-          "python3.13 scripts/setup_database.py",
-          "python3.13 scripts/migrate_database.py"
+          "echo 'Database setup not required for current architecture'"
         ]
       },
       {
         "step": 5,
         "title": "Deploy Services",
         "commands": [
-          "python3.13 main.py --config config/active.yaml --daemon",
+          "python3.13 main.py --daemon",
           "systemctl enable holographic-memory"
         ]
       },
@@ -128,8 +126,8 @@
         "step": 6,
         "title": "Health Checks",
         "commands": [
-          "python3.13 scripts/health_check.py",
-          "python3.13 add_integration_tests.py"
+          "curl http://localhost:8081/health",
+          "python3.13 tests/add_integration_tests.py"
         ]
       }
     ]
@@ -301,8 +299,7 @@
         "step": 3,
         "title": "Setup Authentication",
         "commands": [
-          "python3.13 scripts/setup_auth.py",
-          "python3.13 scripts/generate_api_keys.py"
+          "echo 'Authentication setup not required for current architecture'"
         ]
       }
     ]

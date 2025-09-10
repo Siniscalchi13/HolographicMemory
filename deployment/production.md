@@ -58,7 +58,6 @@ chmod 600 key.pem cert.pem
 **Commands:**
 
 ```bash
-cp config/production.yaml config/active.yaml
 python3.13 -c "from services.orchestrator.orchestrator import HolographicMemoryOrchestrator; print('Config validated')"
 ```
 
@@ -68,8 +67,7 @@ python3.13 -c "from services.orchestrator.orchestrator import HolographicMemoryO
 **Commands:**
 
 ```bash
-python3.13 scripts/setup_database.py
-python3.13 scripts/migrate_database.py
+echo 'Database setup not required for current architecture'
 ```
 
 
@@ -78,7 +76,7 @@ python3.13 scripts/migrate_database.py
 **Commands:**
 
 ```bash
-python3.13 main.py --config config/active.yaml --daemon
+python3.13 main.py --daemon
 systemctl enable holographic-memory
 ```
 
@@ -88,7 +86,7 @@ systemctl enable holographic-memory
 **Commands:**
 
 ```bash
-python3.13 scripts/health_check.py
-python3.13 add_integration_tests.py
+curl http://localhost:8081/health
+python3.13 tests/add_integration_tests.py
 ```
 
