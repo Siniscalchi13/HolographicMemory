@@ -74,7 +74,11 @@ public:
         std::uint32_t batch = (std::uint32_t)arr.shape(0);
         std::uint32_t data_len = (std::uint32_t)arr.shape(1);
         const float* ptr = arr.data();
-        return backend_->batch_encode_fft_zero_copy(ptr, batch, data_len, pattern_dim);
+        auto out = backend_->batch_encode_fft_zero_copy(ptr, batch, data_len, pattern_dim);
+        last_dim_ = pattern_dim;
+        last_patterns_.clear();
+        for (const auto& v : out) last_patterns_.push_back(v);
+        return out;
     }
 
     // Convenience: accept list[list[float]] for drop-in compatibility

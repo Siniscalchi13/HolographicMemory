@@ -101,6 +101,21 @@ public:
         return out;
     }
     GPUMetrics get_metrics() const override { return metrics_; }
+
+    bool analyze_device_metrics(const float* vec1,
+                                const float* vec2,
+                                std::uint32_t dimension,
+                                DeviceAnalysisResult& out) override {
+        if (!backend_) return false;
+        try {
+            auto t = backend_->analyze_metrics(vec1, vec2, dimension);
+            out.visibility = std::get<0>(t);
+            out.coherence = std::get<1>(t);
+            out.bell_violation = std::get<2>(t);
+            out.orthogonality = std::get<3>(t);
+            return true;
+        } catch (...) { return false; }
+    }
 private:
     std::unique_ptr<CudaBackend> backend_;
     GPUMetrics metrics_{};
@@ -123,6 +138,20 @@ public:
         GPUMetrics g; g.host_ms = ms; metrics_ = g; return out;
     }
     GPUMetrics get_metrics() const override { return metrics_; }
+    bool analyze_device_metrics(const float* vec1,
+                                const float* vec2,
+                                std::uint32_t dimension,
+                                DeviceAnalysisResult& out) override {
+        if (!backend_) return false;
+        try {
+            auto t = backend_->analyze_metrics(vec1, vec2, dimension);
+            out.visibility = std::get<0>(t);
+            out.coherence = std::get<1>(t);
+            out.bell_violation = std::get<2>(t);
+            out.orthogonality = std::get<3>(t);
+            return true;
+        } catch (...) { return false; }
+    }
 private:
     std::unique_ptr<HipBackend> backend_;
     GPUMetrics metrics_{};

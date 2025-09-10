@@ -23,6 +23,59 @@ __global__ void pad_rows_kernel(const float* __restrict__ in,
     out[b * out_cols + j] = v;
 }
 
+// Parallel dot/norm reduction with atomics for global accumulation
+__global__ void dot_norm_kernel_cuda(const float* __restrict__ a,
+                                     const float* __restrict__ b,
+                                     float* __restrict__ out_dot,
+                                     float* __restrict__ out_n1,
+                                     float* __restrict__ out_n2,
+                                     uint32_t n) {
+    float local_dot = 0.0f;
+    float local_n1  = 0.0f;
+    float local_n2  = 0.0f;
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    uint32_t stride = blockDim.x * gridDim.x;
+    for (uint32_t i = idx; i < n; i += stride) {
+        float x = a[i];
+        float y = b[i];
+        local_dot += x * y;
+        local_n1  += x * x;
+        local_n2  += y * y;
+    }
+    // In-block reduction via warp shuffles
+    for (int offset = warpSize/2; offset > 0; offset >>= 1) {
+        local_dot += __shfl_down_sync(0xffffffff, local_dot, offset);
+        local_n1  += __shfl_down_sync(0xffffffff, local_n1,  offset);
+        local_n2  += __shfl_down_sync(0xffffffff, local_n2,  offset);
+    }
+    // One thread per warp atomically accumulates to global
+    if ((threadIdx.x & (warpSize-1)) == 0) {
+        atomicAdd(out_dot, local_dot);
+        atomicAdd(out_n1,  local_n1);
+        atomicAdd(out_n2,  local_n2);
+    }
+}
+
+__global__ void corr_offset_kernel_cuda(const float* __restrict__ a,
+                                        const float* __restrict__ b,
+                                        float* __restrict__ out,
+                                        uint32_t n,
+                                        uint32_t o1,
+                                        uint32_t o2) {
+    float local = 0.0f;
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    uint32_t stride = blockDim.x * gridDim.x;
+    for (uint32_t i = idx; i < n; i += stride) {
+        float x = a[(i + o1) % n];
+        float y = b[(i + o2) % n];
+        local += x * y;
+    }
+    for (int offset = warpSize/2; offset > 0; offset >>= 1) {
+        local += __shfl_down_sync(0xffffffff, local, offset);
+    }
+    if ((threadIdx.x & (warpSize-1)) == 0) atomicAdd(out, local);
+}
+
 __global__ void magnitude_kernel(const cufftComplex* __restrict__ in,
                                  float* __restrict__ out,
                                  uint32_t n) {
@@ -200,6 +253,60 @@ void CudaBackend::rebuild_graph(uint32_t batch, uint32_t data_len, uint32_t patt
     cudaGraphInstantiate(&graph_exec_, graph_, nullptr, nullptr, 0);
     graph_captured_ = true;
     current_pattern_dim_ = pattern_dim;
+}
+
+std::tuple<float,float,double,float> CudaBackend::analyze_metrics(const float* v1, const float* v2, uint32_t dim) {
+    if (!initialized_) initialize({GPUPlatform::CUDA, 0, 0});
+    if (!v1 || !v2 || dim == 0) return {0.0f, 0.0f, 0.0, 0.0f};
+    // Allocate device buffers for inputs and outputs
+    float *d_a=nullptr, *d_b=nullptr, *d_dot=nullptr, *d_n1=nullptr, *d_n2=nullptr;
+    float *d_c00=nullptr, *d_c01=nullptr, *d_c20=nullptr, *d_c21=nullptr;
+    cudaMalloc(&d_a, dim*sizeof(float));
+    cudaMalloc(&d_b, dim*sizeof(float));
+    cudaMalloc(&d_dot, sizeof(float)); cudaMalloc(&d_n1, sizeof(float)); cudaMalloc(&d_n2, sizeof(float));
+    cudaMalloc(&d_c00, sizeof(float)); cudaMalloc(&d_c01, sizeof(float)); cudaMalloc(&d_c20, sizeof(float)); cudaMalloc(&d_c21, sizeof(float));
+    cudaMemsetAsync(d_dot, 0, sizeof(float), stream_);
+    cudaMemsetAsync(d_n1,  0, sizeof(float), stream_);
+    cudaMemsetAsync(d_n2,  0, sizeof(float), stream_);
+    cudaMemsetAsync(d_c00, 0, sizeof(float), stream_);
+    cudaMemsetAsync(d_c01, 0, sizeof(float), stream_);
+    cudaMemsetAsync(d_c20, 0, sizeof(float), stream_);
+    cudaMemsetAsync(d_c21, 0, sizeof(float), stream_);
+    cudaMemcpyAsync(d_a, v1, dim*sizeof(float), cudaMemcpyHostToDevice, stream_);
+    cudaMemcpyAsync(d_b, v2, dim*sizeof(float), cudaMemcpyHostToDevice, stream_);
+
+    int threads = 256;
+    int blocks = (int)std::min<uint32_t>( (dim + threads - 1)/threads, 1024 );
+    dot_norm_kernel_cuda<<<blocks, threads, 0, stream_>>>(d_a, d_b, d_dot, d_n1, d_n2, dim);
+    corr_offset_kernel_cuda<<<blocks, threads, 0, stream_>>>(d_a, d_b, d_c00, dim, 0, 0);
+    corr_offset_kernel_cuda<<<blocks, threads, 0, stream_>>>(d_a, d_b, d_c01, dim, 0, 1);
+    corr_offset_kernel_cuda<<<blocks, threads, 0, stream_>>>(d_a, d_b, d_c20, dim, 2, 0);
+    corr_offset_kernel_cuda<<<blocks, threads, 0, stream_>>>(d_a, d_b, d_c21, dim, 2, 1);
+    cudaStreamSynchronize(stream_);
+
+    float fdot=0.0f, fn1=0.0f, fn2=0.0f, c00=0.0f, c01=0.0f, c20=0.0f, c21=0.0f;
+    cudaMemcpy(&fdot, d_dot, sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&fn1, d_n1, sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&fn2, d_n2, sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&c00, d_c00, sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&c01, d_c01, sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&c20, d_c20, sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&c21, d_c21, sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Clean up
+    cudaFree(d_a); cudaFree(d_b); cudaFree(d_dot); cudaFree(d_n1); cudaFree(d_n2);
+    cudaFree(d_c00); cudaFree(d_c01); cudaFree(d_c20); cudaFree(d_c21);
+
+    float vis=0.0f, coh=0.0f, ortho = std::fabs(fdot);
+    if (fn1 > 0.0f && fn2 > 0.0f) {
+        float n1 = std::sqrt(fn1), n2 = std::sqrt(fn2);
+        float num = std::fabs(fdot);
+        coh = num / (n1 * n2);
+        vis = (num*num) / ((n1*n1) * (n2*n2));
+    }
+    double S = (double)c00/(double)dim + (double)c01/(double)dim + (double)c20/(double)dim - (double)c21/(double)dim;
+    double bell_violation = S - 2.0;
+    return {vis, coh, bell_violation, ortho};
 }
 
 } // namespace holo

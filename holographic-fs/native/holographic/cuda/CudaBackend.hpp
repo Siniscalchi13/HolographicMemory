@@ -34,6 +34,9 @@ public:
     };
     Metrics metrics() const { return metrics_; }
 
+    // Device-side analysis for two real vectors: returns (vis, coh, bell_violation, orthogonality)
+    std::tuple<float,float,double,float> analyze_metrics(const float* v1, const float* v2, uint32_t dim);
+
 private:
     void ensure_buffers(size_t in_bytes, size_t out_bytes, size_t fft_bytes);
     void destroy_plan();

@@ -12,6 +12,7 @@ public:
     HipBackend();
     ~HipBackend();
     bool available() const noexcept;
+    std::tuple<float,float,double,float> analyze_metrics(const float* v1, const float* v2, uint32_t dim);
 
     std::vector<std::vector<float>> batch_encode_fft_ultra(const float* ptr,
                                                            uint32_t batch,
@@ -29,4 +30,3 @@ private:
 #else
 namespace holo { class HipBackend { public: bool available() const noexcept { return false; } }; }
 #endif
-
