@@ -14,7 +14,7 @@ from typing import List, Optional, Dict, Any
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Query, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -260,6 +260,79 @@ async def rebalance_layers(
 async def get_metrics():
     """Prometheus metrics endpoint."""
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+@app.get("/api/real-metrics")
+async def get_real_metrics(orchestrator: HolographicMemoryOrchestrator = Depends(get_orchestrator)):
+    """Get real-time metrics from the holographic memory system."""
+    try:
+        # Get real metrics from the orchestrator
+        metrics = await orchestrator.get_real_metrics()
+        return JSONResponse(content=metrics)
+    except Exception as e:
+        logger.error(f"Error getting real metrics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/system-status")
+async def get_system_status(orchestrator: HolographicMemoryOrchestrator = Depends(get_orchestrator)):
+    """Get real system status including GPU, memory, and performance."""
+    try:
+        status = await orchestrator.get_system_status()
+        return JSONResponse(content=status)
+    except Exception as e:
+        logger.error(f"Error getting system status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/gpu-status")
+async def get_gpu_status():
+    """Get real GPU acceleration status and capabilities."""
+    try:
+        import holographic_gpu
+        platforms = holographic_gpu.available_platforms()
+        
+        gpu_status = {
+            "available_platforms": platforms,
+            "metal_active": "metal" in platforms,
+            "cuda_available": "cuda" in platforms,
+            "rocm_available": "rocm" in platforms,
+            "capabilities": {
+                "metal": ["SIMD", "simdgroup intrinsics", "device-side kernels"] if "metal" in platforms else [],
+                "cuda": ["warp-level reductions", "shared memory"] if "cuda" in platforms else [],
+                "rocm": ["wavefront operations", "LDS"] if "rocm" in platforms else []
+            }
+        }
+        
+        return JSONResponse(content=gpu_status)
+    except ImportError:
+        return JSONResponse(content={
+            "available_platforms": [],
+            "metal_active": False,
+            "cuda_available": False,
+            "rocm_available": False,
+            "error": "GPU module not available"
+        })
+    except Exception as e:
+        logger.error(f"Error getting GPU status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/memory-usage")
+async def get_memory_usage(orchestrator: HolographicMemoryOrchestrator = Depends(get_orchestrator)):
+    """Get real memory usage statistics."""
+    try:
+        memory_stats = await orchestrator.get_memory_usage()
+        return JSONResponse(content=memory_stats)
+    except Exception as e:
+        logger.error(f"Error getting memory usage: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/performance")
+async def get_performance_metrics(orchestrator: HolographicMemoryOrchestrator = Depends(get_orchestrator)):
+    """Get real performance metrics including ops/sec and latency."""
+    try:
+        performance = await orchestrator.get_performance_metrics()
+        return JSONResponse(content=performance)
+    except Exception as e:
+        logger.error(f"Error getting performance metrics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Dashboard endpoint

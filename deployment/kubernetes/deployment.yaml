@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: holographic-memory
+  labels:
+    app: holographic-memory
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: holographic-memory
+  template:
+    metadata:
+      labels:
+        app: holographic-memory
+    spec:
+      containers:
+      - name: holographic-memory
+        image: holographic-memory:latest
+        ports:
+        - containerPort: 8081
+        - containerPort: 8082
+        - containerPort: 9090
+        env:
+        - name: HOLOGRAPHIC_ENV
+          value: "production"
+        - name: GPU_ENABLED
+          value: "true"
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2"
+          limits:
+            memory: "8Gi"
+            cpu: "4"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: data-volume
+          mountPath: /app/data
+        - name: logs-volume
+          mountPath: /app/logs
+      volumes:
+      - name: data-volume
+        persistentVolumeClaim:
+          claimName: holographic-data-pvc
+      - name: logs-volume
+        persistentVolumeClaim:
+          claimName: holographic-logs-pvc

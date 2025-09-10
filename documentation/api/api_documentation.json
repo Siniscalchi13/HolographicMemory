@@ -1,0 +1,349 @@
+{
+  "title": "HolographicMemory SOA API Documentation",
+  "version": "1.0.0",
+  "description": "Comprehensive API documentation for the HolographicMemory Service-Oriented Architecture",
+  "generated_at": "2025-09-10T16:48:32.460739",
+  "base_url": "http://localhost:8081",
+  "endpoints": {
+    "holographic_memory": {
+      "base_path": "/api/v1/holographic-memory",
+      "description": "Core holographic memory operations",
+      "endpoints": [
+        {
+          "path": "/store",
+          "method": "POST",
+          "description": "Store data in holographic memory",
+          "parameters": {
+            "data": {
+              "type": "string",
+              "required": true,
+              "description": "Data to store"
+            },
+            "metadata": {
+              "type": "object",
+              "required": false,
+              "description": "Optional metadata"
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Data stored successfully",
+              "schema": {
+                "type": "object"
+              }
+            },
+            "400": {
+              "description": "Invalid input data"
+            },
+            "500": {
+              "description": "Internal server error"
+            }
+          }
+        },
+        {
+          "path": "/retrieve",
+          "method": "GET",
+          "description": "Retrieve data from holographic memory",
+          "parameters": {
+            "id": {
+              "type": "string",
+              "required": true,
+              "description": "Memory ID"
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Data retrieved successfully"
+            },
+            "404": {
+              "description": "Data not found"
+            },
+            "500": {
+              "description": "Internal server error"
+            }
+          }
+        },
+        {
+          "path": "/search",
+          "method": "POST",
+          "description": "Search holographic memory",
+          "parameters": {
+            "query": {
+              "type": "string",
+              "required": true,
+              "description": "Search query"
+            },
+            "similarity_threshold": {
+              "type": "float",
+              "required": false,
+              "description": "Similarity threshold"
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Search results"
+            },
+            "400": {
+              "description": "Invalid query"
+            },
+            "500": {
+              "description": "Internal server error"
+            }
+          }
+        }
+      ]
+    },
+    "file_processing": {
+      "base_path": "/api/v1/files",
+      "description": "File processing operations",
+      "endpoints": [
+        {
+          "path": "/upload",
+          "method": "POST",
+          "description": "Upload and process files",
+          "parameters": {
+            "file": {
+              "type": "file",
+              "required": true,
+              "description": "File to upload"
+            },
+            "process_type": {
+              "type": "string",
+              "required": false,
+              "description": "Processing type"
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "File processed successfully"
+            },
+            "400": {
+              "description": "Invalid file"
+            },
+            "500": {
+              "description": "Processing error"
+            }
+          }
+        },
+        {
+          "path": "/process",
+          "method": "POST",
+          "description": "Process uploaded file",
+          "parameters": {
+            "file_id": {
+              "type": "string",
+              "required": true,
+              "description": "File ID"
+            },
+            "options": {
+              "type": "object",
+              "required": false,
+              "description": "Processing options"
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Processing completed"
+            },
+            "404": {
+              "description": "File not found"
+            },
+            "500": {
+              "description": "Processing error"
+            }
+          }
+        }
+      ]
+    },
+    "compression": {
+      "base_path": "/api/v1/compression",
+      "description": "Compression pipeline operations",
+      "endpoints": [
+        {
+          "path": "/compress",
+          "method": "POST",
+          "description": "Compress data using holographic compression",
+          "parameters": {
+            "data": {
+              "type": "string",
+              "required": true,
+              "description": "Data to compress"
+            },
+            "algorithm": {
+              "type": "string",
+              "required": false,
+              "description": "Compression algorithm"
+            },
+            "threshold": {
+              "type": "float",
+              "required": false,
+              "description": "Compression threshold"
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Data compressed successfully"
+            },
+            "400": {
+              "description": "Invalid data"
+            },
+            "500": {
+              "description": "Compression error"
+            }
+          }
+        },
+        {
+          "path": "/decompress",
+          "method": "POST",
+          "description": "Decompress holographic data",
+          "parameters": {
+            "compressed_data": {
+              "type": "string",
+              "required": true,
+              "description": "Compressed data"
+            },
+            "algorithm": {
+              "type": "string",
+              "required": false,
+              "description": "Decompression algorithm"
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Data decompressed successfully"
+            },
+            "400": {
+              "description": "Invalid compressed data"
+            },
+            "500": {
+              "description": "Decompression error"
+            }
+          }
+        }
+      ]
+    },
+    "monitoring": {
+      "base_path": "/api/v1/monitoring",
+      "description": "System monitoring and health checks",
+      "endpoints": [
+        {
+          "path": "/health",
+          "method": "GET",
+          "description": "Get system health status",
+          "responses": {
+            "200": {
+              "description": "Health status"
+            },
+            "503": {
+              "description": "Service unavailable"
+            }
+          }
+        },
+        {
+          "path": "/metrics",
+          "method": "GET",
+          "description": "Get system metrics",
+          "parameters": {
+            "time_range": {
+              "type": "string",
+              "required": false,
+              "description": "Time range for metrics"
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "System metrics"
+            },
+            "500": {
+              "description": "Metrics unavailable"
+            }
+          }
+        },
+        {
+          "path": "/alerts",
+          "method": "GET",
+          "description": "Get active alerts",
+          "responses": {
+            "200": {
+              "description": "Active alerts"
+            },
+            "500": {
+              "description": "Alerts unavailable"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "authentication": {
+    "type": "Bearer Token",
+    "description": "API uses Bearer token authentication",
+    "header": "Authorization: Bearer <token>"
+  },
+  "rate_limiting": {
+    "requests_per_minute": 100,
+    "burst_limit": 200,
+    "description": "Rate limiting is applied per IP address"
+  },
+  "error_codes": {
+    "400": "Bad Request - Invalid input parameters",
+    "401": "Unauthorized - Invalid or missing authentication",
+    "403": "Forbidden - Insufficient permissions",
+    "404": "Not Found - Resource not found",
+    "429": "Too Many Requests - Rate limit exceeded",
+    "500": "Internal Server Error - Server error",
+    "503": "Service Unavailable - Service temporarily unavailable"
+  },
+  "examples": {
+    "store_data": {
+      "request": {
+        "method": "POST",
+        "url": "/api/v1/holographic-memory/store",
+        "headers": {
+          "Authorization": "Bearer <token>",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "data": "Hello, Holographic Memory!",
+          "metadata": {
+            "type": "text"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "mem_12345",
+          "status": "stored",
+          "timestamp": "2023-01-01T00:00:00Z"
+        }
+      }
+    },
+    "search_memory": {
+      "request": {
+        "method": "POST",
+        "url": "/api/v1/holographic-memory/search",
+        "headers": {
+          "Authorization": "Bearer <token>",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "query": "holographic",
+          "similarity_threshold": 0.8
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "results": [
+            {
+              "id": "mem_12345",
+              "similarity": 0.95,
+              "data": "Hello, Holographic Memory!"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

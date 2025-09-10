@@ -24,7 +24,7 @@ async def start_services():
         import uvicorn
         
         # Initialize orchestrator
-        state_dir = Path(__file__).parent / "data" / "state"
+        state_dir = Path(__file__).parent / "data" / "production"
         state_dir.mkdir(parents=True, exist_ok=True)
         orchestrator = HolographicMemoryOrchestrator(state_dir=state_dir)
         print("✅ Orchestrator initialized")

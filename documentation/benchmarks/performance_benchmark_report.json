@@ -1,0 +1,234 @@
+{
+  "benchmark_summary": {
+    "total_benchmarks": 24,
+    "completed_benchmarks": 8,
+    "failed_benchmarks": 0,
+    "total_duration": 31.64566397666931
+  },
+  "benchmark_results": {
+    "GPU Performance": {
+      "benchmarks": [
+        {
+          "name": "GPU Initialization",
+          "metric": "time",
+          "value": 0.001425027847290039,
+          "unit": "seconds",
+          "description": "Time to initialize GPU backend"
+        },
+        {
+          "name": "GPU Performance",
+          "metric": "error",
+          "value": 0,
+          "unit": "error",
+          "description": "GPU benchmark failed: 'holographic_gpu.HolographicGPU' object has no attribute 'holographic_fft_transform'"
+        }
+      ],
+      "category": "GPU Performance",
+      "status": "completed"
+    },
+    "Service Performance": {
+      "benchmarks": [
+        {
+          "name": "Orchestrator Initialization",
+          "metric": "error",
+          "value": 0,
+          "unit": "error",
+          "description": "Orchestrator benchmark failed: No module named 'holographicfs'"
+        },
+        {
+          "name": "Router Performance (1024 bytes)",
+          "metric": "throughput",
+          "value": 778104.7969303125,
+          "unit": "bytes/second",
+          "description": "Router throughput for 1024 byte data"
+        },
+        {
+          "name": "Router Performance (4096 bytes)",
+          "metric": "throughput",
+          "value": 222598.40899231864,
+          "unit": "bytes/second",
+          "description": "Router throughput for 4096 byte data"
+        },
+        {
+          "name": "Router Performance (16384 bytes)",
+          "metric": "throughput",
+          "value": 56649.252276934785,
+          "unit": "bytes/second",
+          "description": "Router throughput for 16384 byte data"
+        },
+        {
+          "name": "Vault ID Generation",
+          "metric": "throughput",
+          "value": 827278.8954635108,
+          "unit": "operations/second",
+          "description": "Vault ID generation throughput"
+        }
+      ],
+      "category": "Service Performance",
+      "status": "completed"
+    },
+    "File Processing Performance": {
+      "benchmarks": [
+        {
+          "name": "File Processing Performance",
+          "metric": "error",
+          "value": 0,
+          "unit": "error",
+          "description": "File processing benchmark failed: 'FileProcessor' object has no attribute 'process_file'"
+        }
+      ],
+      "category": "File Processing Performance",
+      "status": "completed"
+    },
+    "Compression Performance": {
+      "benchmarks": [
+        {
+          "name": "Compression (sparse, 512 elements)",
+          "metric": "throughput",
+          "value": 10578737.18226601,
+          "unit": "elements/second",
+          "description": "Compression throughput for sparse data"
+        },
+        {
+          "name": "Compression Ratio (sparse, 512 elements)",
+          "metric": "ratio",
+          "value": 5.019607843137255,
+          "unit": "x",
+          "description": "Compression ratio for sparse data"
+        },
+        {
+          "name": "Compression (random, 1024 elements)",
+          "metric": "throughput",
+          "value": 2157407.72352823,
+          "unit": "elements/second",
+          "description": "Compression throughput for random data"
+        },
+        {
+          "name": "Compression Ratio (random, 1024 elements)",
+          "metric": "ratio",
+          "value": 0.5029469548133595,
+          "unit": "x",
+          "description": "Compression ratio for random data"
+        },
+        {
+          "name": "Compression (dense, 2048 elements)",
+          "metric": "throughput",
+          "value": 6179809.058992806,
+          "unit": "elements/second",
+          "description": "Compression throughput for dense data"
+        },
+        {
+          "name": "Compression Ratio (dense, 2048 elements)",
+          "metric": "ratio",
+          "value": 1024.0,
+          "unit": "x",
+          "description": "Compression ratio for dense data"
+        },
+        {
+          "name": "Compression (mixed, 4096 elements)",
+          "metric": "throughput",
+          "value": 2321227.5285088904,
+          "unit": "elements/second",
+          "description": "Compression throughput for mixed data"
+        },
+        {
+          "name": "Compression Ratio (mixed, 4096 elements)",
+          "metric": "ratio",
+          "value": 0.5038130381303813,
+          "unit": "x",
+          "description": "Compression ratio for mixed data"
+        }
+      ],
+      "category": "Compression Performance",
+      "status": "completed"
+    },
+    "API Performance": {
+      "benchmarks": [
+        {
+          "name": "API Performance",
+          "metric": "error",
+          "value": 0,
+          "unit": "error",
+          "description": "API benchmark failed: No module named 'holographicfs'"
+        }
+      ],
+      "category": "API Performance",
+      "status": "completed"
+    },
+    "Memory Performance": {
+      "benchmarks": [
+        {
+          "name": "Memory Performance",
+          "metric": "error",
+          "value": 0,
+          "unit": "error",
+          "description": "psutil not available for memory benchmarking"
+        }
+      ],
+      "category": "Memory Performance",
+      "status": "completed"
+    },
+    "Concurrency Performance": {
+      "benchmarks": [
+        {
+          "name": "Concurrency (1 workers)",
+          "metric": "throughput",
+          "value": 9074.651665945477,
+          "unit": "tasks/second",
+          "description": "Concurrent task throughput with 1 workers"
+        },
+        {
+          "name": "Concurrency (2 workers)",
+          "metric": "throughput",
+          "value": 11848.316384180791,
+          "unit": "tasks/second",
+          "description": "Concurrent task throughput with 2 workers"
+        },
+        {
+          "name": "Concurrency (4 workers)",
+          "metric": "throughput",
+          "value": 12475.621653777513,
+          "unit": "tasks/second",
+          "description": "Concurrent task throughput with 4 workers"
+        },
+        {
+          "name": "Concurrency (8 workers)",
+          "metric": "throughput",
+          "value": 11958.101211689238,
+          "unit": "tasks/second",
+          "description": "Concurrent task throughput with 8 workers"
+        },
+        {
+          "name": "Concurrency (16 workers)",
+          "metric": "throughput",
+          "value": 12152.559487160914,
+          "unit": "tasks/second",
+          "description": "Concurrent task throughput with 16 workers"
+        }
+      ],
+      "category": "Concurrency Performance",
+      "status": "completed"
+    },
+    "End-to-End Performance": {
+      "benchmarks": [
+        {
+          "name": "End-to-End Performance",
+          "metric": "error",
+          "value": 0,
+          "unit": "error",
+          "description": "End-to-end benchmark failed: 'FileProcessor' object has no attribute 'process_file'"
+        }
+      ],
+      "category": "End-to-End Performance",
+      "status": "completed"
+    }
+  },
+  "timestamp": "2025-09-10T16:52:01.264771",
+  "system_info": {
+    "platform": "Unknown",
+    "python_version": "Unknown",
+    "cpu_count": "Unknown",
+    "memory_total": "Unknown",
+    "memory_available": "Unknown"
+  }
+}

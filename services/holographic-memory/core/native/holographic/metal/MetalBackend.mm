@@ -90,15 +90,45 @@ void MetalBackend::load_shaders() {
     pso_batch_store_fft_ = create_pipeline("batch_holographic_encode_fft");
     pso_dot_norm_ = create_pipeline("dot_norm_kernel");
     pso_corr_off_ = create_pipeline("correlation_offset_kernel");
+    
+    // GPU Compression Pipeline - Kernel 1: Quantization
+    pso_quantize_ = create_pipeline("gpu_holographic_quantize");
+    pso_quantize_validation_ = create_pipeline("gpu_holographic_quantize_with_validation");
+    pso_quantize_stats_ = create_pipeline("gpu_quantization_statistics");
+    
+    // GPU Compression Pipeline - Kernel 2: Bitplane Extraction
+    // Removed: bitplane extraction pipelines - no longer needed with holographic wave reconstruction
+    
+    // GPU Compression Pipeline - Kernel 3: Sparse Encoding
+    sparse_encoding_pipeline_ = create_pipeline("gpu_sparse_encoding");
+    
+    // GPU Compression Pipeline - Kernel 4: Entropy Coding
+    entropy_coding_pipeline_ = create_pipeline("gpu_entropy_coding");
+    
+    // GPU Compression Pipeline - Kernel 5: Entropy Decoding
+    entropy_decoding_pipeline_ = create_pipeline("gpu_entropy_decoding");
+    
+    // GPU Compression Pipeline - Kernel 6: Sparse Decoding
+    sparse_decoding_pipeline_ = create_pipeline("gpu_sparse_decoding");
+    
     initialize_mps_fft();
 }
 
 id<MTLComputePipelineState> MetalBackend::create_pipeline(const std::string& function_name) {
     NSError* err = nullptr;
     id<MTLFunction> fn = [library_ newFunctionWithName:str(function_name.c_str())];
-    if (!fn) return nil;
+    if (!fn) {
+        NSLog(@"❌ Failed to find Metal function: %s", function_name.c_str());
+        return nil;
+    }
     
     id<MTLComputePipelineState> pso = [device_ newComputePipelineStateWithFunction:fn error:&err];
+    if (!pso && err) {
+        NSLog(@"❌ Failed to create pipeline for %s: %@", function_name.c_str(), [err localizedDescription]);
+        return nil;
+    }
+    
+    NSLog(@"✅ Created pipeline for %s", function_name.c_str());
     return pso;
 }
 
@@ -572,6 +602,584 @@ std::vector<std::vector<float>> MetalBackend::batch_encode_fft_ultra(
     }
     return out;
 }
+
+// ============================================================================
+// GPU COMPRESSION PIPELINE - KERNEL 1: QUANTIZATION
+// ============================================================================
+
+std::vector<std::vector<float>> MetalBackend::gpu_holographic_quantize(
+    const std::vector<std::vector<float>>& input_real,
+    const std::vector<std::vector<float>>& input_imag,
+    uint32_t layer_index,
+    const QuantizationParams& params) {
+    
+    if (!available() || input_real.empty() || input_imag.empty()) return {};
+    
+    uint32_t coefficient_count = static_cast<uint32_t>(input_real[0].size());
+    uint32_t batch_size = static_cast<uint32_t>(input_real.size());
+    
+    // Flatten input data
+    std::vector<float> flat_real, flat_imag;
+    flat_real.reserve(batch_size * coefficient_count);
+    flat_imag.reserve(batch_size * coefficient_count);
+    
+    for (uint32_t b = 0; b < batch_size; ++b) {
+        flat_real.insert(flat_real.end(), input_real[b].begin(), input_real[b].end());
+        flat_imag.insert(flat_imag.end(), input_imag[b].begin(), input_imag[b].end());
+    }
+    
+    // Prepare output buffers
+    std::vector<float> output_real(batch_size * coefficient_count, 0.0f);
+    std::vector<float> output_imag(batch_size * coefficient_count, 0.0f);
+    
+    // Create Metal buffers
+    id<MTLBuffer> b_input_real = [device_ newBufferWithBytes:flat_real.data() 
+                                                      length:flat_real.size() * sizeof(float) 
+                                                     options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b_input_imag = [device_ newBufferWithBytes:flat_imag.data() 
+                                                      length:flat_imag.size() * sizeof(float) 
+                                                     options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b_output_real = [device_ newBufferWithBytes:output_real.data()
+                                                       length:output_real.size() * sizeof(float)
+                                                      options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b_output_imag = [device_ newBufferWithBytes:output_imag.data()
+                                                       length:output_imag.size() * sizeof(float)
+                                                      options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b_params = [device_ newBufferWithBytes:&params 
+                                                  length:sizeof(QuantizationParams) 
+                                                 options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b_layer = [device_ newBufferWithBytes:&layer_index 
+                                                 length:sizeof(uint32_t) 
+                                                options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b_count = [device_ newBufferWithBytes:&coefficient_count 
+                                                 length:sizeof(uint32_t) 
+                                                options:MTLResourceStorageModeManaged];
+    
+    // Execute quantization kernel
+    id<MTLCommandBuffer> cmd = [queue_ commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
+    
+    [enc setComputePipelineState:pso_quantize_];
+    [enc setBuffer:b_input_real offset:0 atIndex:0];
+    [enc setBuffer:b_input_imag offset:0 atIndex:1];
+    [enc setBuffer:b_output_real offset:0 atIndex:2];
+    [enc setBuffer:b_output_imag offset:0 atIndex:3];
+    [enc setBuffer:b_params offset:0 atIndex:4];
+    [enc setBuffer:b_layer offset:0 atIndex:5];
+    [enc setBuffer:b_count offset:0 atIndex:6];
+    
+    // Dispatch threads
+    NSUInteger tgX = 256;
+    NSUInteger gridX = ((coefficient_count + tgX - 1) / tgX) * tgX;
+    [enc dispatchThreads:MTLSizeMake(gridX, 1, 1) threadsPerThreadgroup:MTLSizeMake(tgX, 1, 1)];
+    
+    [enc endEncoding];
+    [cmd commit];
+    [cmd waitUntilCompleted];
+    
+    // Copy results back
+    memcpy(output_real.data(), [b_output_real contents], output_real.size() * sizeof(float));
+    memcpy(output_imag.data(), [b_output_imag contents], output_imag.size() * sizeof(float));
+    
+    // Convert back to 2D vector
+    std::vector<std::vector<float>> result_real, result_imag;
+    result_real.reserve(batch_size);
+    result_imag.reserve(batch_size);
+    
+    for (uint32_t b = 0; b < batch_size; ++b) {
+        std::vector<float> real_slice(
+            output_real.begin() + b * coefficient_count,
+            output_real.begin() + (b + 1) * coefficient_count
+        );
+        std::vector<float> imag_slice(
+            output_imag.begin() + b * coefficient_count,
+            output_imag.begin() + (b + 1) * coefficient_count
+        );
+        result_real.push_back(std::move(real_slice));
+        result_imag.push_back(std::move(imag_slice));
+    }
+    
+    return result_real; // Return real part for now, could return both
+}
+
+std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<float>>, 
+           std::vector<std::vector<float>>, std::vector<std::vector<float>>>
+MetalBackend::gpu_holographic_quantize_with_validation(
+    const std::vector<std::vector<float>>& input_real,
+    const std::vector<std::vector<float>>& input_imag,
+    uint32_t layer_index,
+    const QuantizationParams& params) {
+    
+    if (!available() || input_real.empty() || input_imag.empty()) {
+        return {{}, {}, {}, {}};
+    }
+    
+    uint32_t coefficient_count = static_cast<uint32_t>(input_real[0].size());
+    uint32_t batch_size = static_cast<uint32_t>(input_real.size());
+    
+    // Flatten input data
+    std::vector<float> flat_real, flat_imag;
+    flat_real.reserve(batch_size * coefficient_count);
+    flat_imag.reserve(batch_size * coefficient_count);
+    
+    for (uint32_t b = 0; b < batch_size; ++b) {
+        flat_real.insert(flat_real.end(), input_real[b].begin(), input_real[b].end());
+        flat_imag.insert(flat_imag.end(), input_imag[b].begin(), input_imag[b].end());
+    }
+    
+    // Prepare output buffers
+    std::vector<float> output_real(batch_size * coefficient_count, 0.0f);
+    std::vector<float> output_imag(batch_size * coefficient_count, 0.0f);
+    std::vector<float> phase_errors(batch_size * coefficient_count, 0.0f);
+    std::vector<float> amplitude_errors(batch_size * coefficient_count, 0.0f);
+    
+    // Create Metal buffers
+    id<MTLBuffer> b_input_real = [device_ newBufferWithBytes:flat_real.data() 
+                                                      length:flat_real.size() * sizeof(float) 
+                                                     options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b_input_imag = [device_ newBufferWithBytes:flat_imag.data() 
+                                                      length:flat_imag.size() * sizeof(float) 
+                                                     options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b_output_real = [device_ newBufferWithBytes:output_real.data()
+                                                       length:output_real.size() * sizeof(float)
+                                                      options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b_output_imag = [device_ newBufferWithBytes:output_imag.data()
+                                                       length:output_imag.size() * sizeof(float)
+                                                      options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b_phase_errors = [device_ newBufferWithBytes:phase_errors.data()
+                                                        length:phase_errors.size() * sizeof(float)
+                                                       options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b_amplitude_errors = [device_ newBufferWithBytes:amplitude_errors.data()
+                                                            length:amplitude_errors.size() * sizeof(float)
+                                                           options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b_params = [device_ newBufferWithBytes:&params 
+                                                  length:sizeof(QuantizationParams) 
+                                                 options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b_layer = [device_ newBufferWithBytes:&layer_index 
+                                                 length:sizeof(uint32_t) 
+                                                options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b_count = [device_ newBufferWithBytes:&coefficient_count 
+                                                 length:sizeof(uint32_t) 
+                                                options:MTLResourceStorageModeManaged];
+    
+    // Execute validation kernel
+    id<MTLCommandBuffer> cmd = [queue_ commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
+    
+    [enc setComputePipelineState:pso_quantize_validation_];
+    [enc setBuffer:b_input_real offset:0 atIndex:0];
+    [enc setBuffer:b_input_imag offset:0 atIndex:1];
+    [enc setBuffer:b_output_real offset:0 atIndex:2];
+    [enc setBuffer:b_output_imag offset:0 atIndex:3];
+    [enc setBuffer:b_phase_errors offset:0 atIndex:4];
+    [enc setBuffer:b_amplitude_errors offset:0 atIndex:5];
+    [enc setBuffer:b_params offset:0 atIndex:6];
+    [enc setBuffer:b_layer offset:0 atIndex:7];
+    [enc setBuffer:b_count offset:0 atIndex:8];
+    
+    // Dispatch threads
+    NSUInteger tgX = 256;
+    NSUInteger gridX = ((coefficient_count + tgX - 1) / tgX) * tgX;
+    [enc dispatchThreads:MTLSizeMake(gridX, 1, 1) threadsPerThreadgroup:MTLSizeMake(tgX, 1, 1)];
+    
+    [enc endEncoding];
+    [cmd commit];
+    [cmd waitUntilCompleted];
+    
+    // Copy results back
+    memcpy(output_real.data(), [b_output_real contents], output_real.size() * sizeof(float));
+    memcpy(output_imag.data(), [b_output_imag contents], output_imag.size() * sizeof(float));
+    memcpy(phase_errors.data(), [b_phase_errors contents], phase_errors.size() * sizeof(float));
+    memcpy(amplitude_errors.data(), [b_amplitude_errors contents], amplitude_errors.size() * sizeof(float));
+    
+    // Convert back to 2D vectors
+    std::vector<std::vector<float>> result_real, result_imag, result_phase_errors, result_amplitude_errors;
+    result_real.reserve(batch_size);
+    result_imag.reserve(batch_size);
+    result_phase_errors.reserve(batch_size);
+    result_amplitude_errors.reserve(batch_size);
+    
+    for (uint32_t b = 0; b < batch_size; ++b) {
+        std::vector<float> real_slice(
+            output_real.begin() + b * coefficient_count,
+            output_real.begin() + (b + 1) * coefficient_count
+        );
+        std::vector<float> imag_slice(
+            output_imag.begin() + b * coefficient_count,
+            output_imag.begin() + (b + 1) * coefficient_count
+        );
+        std::vector<float> phase_error_slice(
+            phase_errors.begin() + b * coefficient_count,
+            phase_errors.begin() + (b + 1) * coefficient_count
+        );
+        std::vector<float> amplitude_error_slice(
+            amplitude_errors.begin() + b * coefficient_count,
+            amplitude_errors.begin() + (b + 1) * coefficient_count
+        );
+        
+        result_real.push_back(std::move(real_slice));
+        result_imag.push_back(std::move(imag_slice));
+        result_phase_errors.push_back(std::move(phase_error_slice));
+        result_amplitude_errors.push_back(std::move(amplitude_error_slice));
+    }
+    
+    return {result_real, result_imag, result_phase_errors, result_amplitude_errors};
+}
+
+std::array<float, 4> MetalBackend::gpu_quantization_statistics(
+    const std::vector<std::vector<float>>& phase_errors,
+    const std::vector<std::vector<float>>& amplitude_errors) {
+    
+    if (!available() || phase_errors.empty() || amplitude_errors.empty()) {
+        return {0.0f, 0.0f, 0.0f, 0.0f};
+    }
+    
+    uint32_t coefficient_count = static_cast<uint32_t>(phase_errors[0].size());
+    uint32_t batch_size = static_cast<uint32_t>(phase_errors.size());
+    uint32_t total_coefficients = batch_size * coefficient_count;
+    
+    // Flatten error data
+    std::vector<float> flat_phase_errors, flat_amplitude_errors;
+    flat_phase_errors.reserve(total_coefficients);
+    flat_amplitude_errors.reserve(total_coefficients);
+    
+    for (uint32_t b = 0; b < batch_size; ++b) {
+        flat_phase_errors.insert(flat_phase_errors.end(), phase_errors[b].begin(), phase_errors[b].end());
+        flat_amplitude_errors.insert(flat_amplitude_errors.end(), amplitude_errors[b].begin(), amplitude_errors[b].end());
+    }
+    
+    // Prepare output buffer for statistics
+    std::vector<float> statistics(4, 0.0f); // [max_phase_err, max_amp_err, mean_phase_err, mean_amp_err]
+    
+    // Create Metal buffers
+    id<MTLBuffer> b_phase_errors = [device_ newBufferWithBytes:flat_phase_errors.data() 
+                                                        length:flat_phase_errors.size() * sizeof(float) 
+                                                       options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b_amplitude_errors = [device_ newBufferWithBytes:flat_amplitude_errors.data() 
+                                                            length:flat_amplitude_errors.size() * sizeof(float) 
+                                                           options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b_statistics = [device_ newBufferWithBytes:statistics.data()
+                                                      length:statistics.size() * sizeof(float)
+                                                     options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> b_count = [device_ newBufferWithBytes:&total_coefficients 
+                                                 length:sizeof(uint32_t) 
+                                                options:MTLResourceStorageModeManaged];
+    
+    uint32_t threadgroup_size = 256;
+    id<MTLBuffer> b_tg_size = [device_ newBufferWithBytes:&threadgroup_size 
+                                                   length:sizeof(uint32_t) 
+                                                  options:MTLResourceStorageModeManaged];
+    
+    // Execute statistics kernel
+    id<MTLCommandBuffer> cmd = [queue_ commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
+    
+    [enc setComputePipelineState:pso_quantize_stats_];
+    [enc setBuffer:b_phase_errors offset:0 atIndex:0];
+    [enc setBuffer:b_amplitude_errors offset:0 atIndex:1];
+    [enc setBuffer:b_statistics offset:0 atIndex:2];
+    [enc setBuffer:b_count offset:0 atIndex:3];
+    [enc setBuffer:b_tg_size offset:0 atIndex:4];
+    
+    // Dispatch threads
+    NSUInteger tgX = threadgroup_size;
+    NSUInteger gridX = ((total_coefficients + tgX - 1) / tgX) * tgX;
+    [enc dispatchThreads:MTLSizeMake(gridX, 1, 1) threadsPerThreadgroup:MTLSizeMake(tgX, 1, 1)];
+    
+    [enc endEncoding];
+    [cmd commit];
+    [cmd waitUntilCompleted];
+    
+    // Copy results back
+    memcpy(statistics.data(), [b_statistics contents], statistics.size() * sizeof(float));
+    
+    return {statistics[0], statistics[1], statistics[2], statistics[3]};
+}
+
+// ============================================================================
+// GPU COMPRESSION PIPELINE - KERNEL 2: BITPLANE EXTRACTION
+// ============================================================================
+
+// Removed: gpu_bitplane_extraction method - no longer needed with holographic wave reconstruction
+
+// Removed: gpu_bitplane_statistics method - no longer needed with holographic wave reconstruction
+
+// Removed: gpu_bitplane_reconstruction method - no longer needed with holographic wave reconstruction
+
+// ============================================================================
+// GPU COMPRESSION PIPELINE - KERNEL 3: SPARSE ENCODING
+// ============================================================================
+
+std::tuple<std::vector<float>, std::vector<float>, std::vector<uint32_t>, uint32_t>
+MetalBackend::gpu_sparse_encoding(
+    const std::vector<float>& input_real,
+    const std::vector<float>& input_imag,
+    float threshold,
+    uint32_t max_sparse_count) {
+    
+    if (!device_ || !queue_) {
+        throw std::runtime_error("Metal device not initialized");
+    }
+    
+    uint32_t input_size = static_cast<uint32_t>(input_real.size());
+    if (input_imag.size() != input_size) {
+        throw std::invalid_argument("Input arrays must have same size");
+    }
+    
+    // Create buffers
+    id<MTLBuffer> b_input_real = [device_ newBufferWithBytes:input_real.data()
+                                                      length:input_size * sizeof(float)
+                                                     options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_input_imag = [device_ newBufferWithBytes:input_imag.data()
+                                                      length:input_size * sizeof(float)
+                                                     options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_sparse_real = [device_ newBufferWithLength:max_sparse_count * sizeof(float)
+                                                       options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_sparse_imag = [device_ newBufferWithLength:max_sparse_count * sizeof(float)
+                                                       options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_sparse_indices = [device_ newBufferWithLength:max_sparse_count * sizeof(uint32_t)
+                                                          options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_sparse_count = [device_ newBufferWithLength:sizeof(uint32_t)
+                                                        options:MTLResourceStorageModeShared];
+    
+    // Initialize sparse count to 0
+    uint32_t* count_ptr = static_cast<uint32_t*>([b_sparse_count contents]);
+    *count_ptr = 0;
+    
+    // Create command buffer and encoder
+    id<MTLCommandBuffer> cmd_buffer = [queue_ commandBuffer];
+    id<MTLComputeCommandEncoder> encoder = [cmd_buffer computeCommandEncoder];
+    
+    [encoder setComputePipelineState:sparse_encoding_pipeline_];
+    [encoder setBuffer:b_input_real offset:0 atIndex:0];
+    [encoder setBuffer:b_input_imag offset:0 atIndex:1];
+    [encoder setBuffer:b_sparse_real offset:0 atIndex:2];
+    [encoder setBuffer:b_sparse_imag offset:0 atIndex:3];
+    [encoder setBuffer:b_sparse_indices offset:0 atIndex:4];
+    [encoder setBuffer:b_sparse_count offset:0 atIndex:5];
+    [encoder setBytes:&input_size length:sizeof(uint32_t) atIndex:6];
+    [encoder setBytes:&threshold length:sizeof(float) atIndex:7];
+    [encoder setBytes:&max_sparse_count length:sizeof(uint32_t) atIndex:8];
+    
+    // Dispatch threads
+    MTLSize grid_size = MTLSizeMake(input_size, 1, 1);
+    MTLSize threadgroup_size = MTLSizeMake(256, 1, 1);
+    [encoder dispatchThreads:grid_size threadsPerThreadgroup:threadgroup_size];
+    [encoder endEncoding];
+    
+    [cmd_buffer commit];
+    [cmd_buffer waitUntilCompleted];
+    
+    // Get results
+    uint32_t actual_count = *count_ptr;
+    std::vector<float> sparse_real(actual_count);
+    std::vector<float> sparse_imag(actual_count);
+    std::vector<uint32_t> sparse_indices(actual_count);
+    
+    memcpy(sparse_real.data(), [b_sparse_real contents], actual_count * sizeof(float));
+    memcpy(sparse_imag.data(), [b_sparse_imag contents], actual_count * sizeof(float));
+    memcpy(sparse_indices.data(), [b_sparse_indices contents], actual_count * sizeof(uint32_t));
+    
+    return {sparse_real, sparse_imag, sparse_indices, actual_count};
+}
+
+// ============================================================================
+// GPU COMPRESSION PIPELINE - KERNEL 4: ENTROPY CODING
+// ============================================================================
+
+std::tuple<std::vector<uint8_t>, uint32_t>
+MetalBackend::gpu_entropy_coding(
+    const std::vector<float>& sparse_real,
+    const std::vector<float>& sparse_imag,
+    const std::vector<uint32_t>& sparse_indices,
+    uint32_t sparse_count) {
+    
+    if (!device_ || !queue_) {
+        throw std::runtime_error("Metal device not initialized");
+    }
+    
+    uint32_t max_encoded_size = sparse_count * 6; // 6 bytes per coefficient
+    
+    // Create buffers
+    id<MTLBuffer> b_sparse_real = [device_ newBufferWithBytes:sparse_real.data()
+                                                       length:sparse_count * sizeof(float)
+                                                      options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_sparse_imag = [device_ newBufferWithBytes:sparse_imag.data()
+                                                       length:sparse_count * sizeof(float)
+                                                      options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_sparse_indices = [device_ newBufferWithBytes:sparse_indices.data()
+                                                          length:sparse_count * sizeof(uint32_t)
+                                                         options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_sparse_count = [device_ newBufferWithBytes:&sparse_count
+                                                        length:sizeof(uint32_t)
+                                                       options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_encoded_data = [device_ newBufferWithLength:max_encoded_size
+                                                        options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_encoded_size = [device_ newBufferWithLength:sizeof(uint32_t)
+                                                        options:MTLResourceStorageModeShared];
+    
+    // Create command buffer and encoder
+    id<MTLCommandBuffer> cmd_buffer = [queue_ commandBuffer];
+    id<MTLComputeCommandEncoder> encoder = [cmd_buffer computeCommandEncoder];
+    
+    [encoder setComputePipelineState:entropy_coding_pipeline_];
+    [encoder setBuffer:b_sparse_real offset:0 atIndex:0];
+    [encoder setBuffer:b_sparse_imag offset:0 atIndex:1];
+    [encoder setBuffer:b_sparse_indices offset:0 atIndex:2];
+    [encoder setBuffer:b_sparse_count offset:0 atIndex:3];
+    [encoder setBuffer:b_encoded_data offset:0 atIndex:4];
+    [encoder setBuffer:b_encoded_size offset:0 atIndex:5];
+    [encoder setBytes:&max_encoded_size length:sizeof(uint32_t) atIndex:6];
+    
+    // Dispatch threads
+    MTLSize grid_size = MTLSizeMake(sparse_count, 1, 1);
+    MTLSize threadgroup_size = MTLSizeMake(256, 1, 1);
+    [encoder dispatchThreads:grid_size threadsPerThreadgroup:threadgroup_size];
+    [encoder endEncoding];
+    
+    [cmd_buffer commit];
+    [cmd_buffer waitUntilCompleted];
+    
+    // Get results
+    uint32_t encoded_size = *static_cast<uint32_t*>([b_encoded_size contents]);
+    std::vector<uint8_t> encoded_data(encoded_size);
+    memcpy(encoded_data.data(), [b_encoded_data contents], encoded_size);
+    
+    return {encoded_data, encoded_size};
+}
+
+// ============================================================================
+// GPU COMPRESSION PIPELINE - KERNEL 5: ENTROPY DECODING
+// ============================================================================
+
+std::tuple<std::vector<float>, std::vector<float>, std::vector<uint32_t>, uint32_t>
+MetalBackend::gpu_entropy_decoding(
+    const std::vector<uint8_t>& encoded_data,
+    uint32_t encoded_size) {
+    
+    if (!device_ || !queue_) {
+        throw std::runtime_error("Metal device not initialized");
+    }
+    
+    uint32_t max_decoded_count = encoded_size / 6; // 6 bytes per coefficient
+    
+    // Create buffers
+    id<MTLBuffer> b_encoded_data = [device_ newBufferWithBytes:encoded_data.data()
+                                                        length:encoded_size
+                                                       options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_encoded_size = [device_ newBufferWithBytes:&encoded_size
+                                                         length:sizeof(uint32_t) 
+                                                       options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_decoded_real = [device_ newBufferWithLength:max_decoded_count * sizeof(float)
+                                                        options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_decoded_imag = [device_ newBufferWithLength:max_decoded_count * sizeof(float)
+                                                        options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_decoded_indices = [device_ newBufferWithLength:max_decoded_count * sizeof(uint32_t)
+                                                            options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_decoded_count = [device_ newBufferWithLength:sizeof(uint32_t)
+                                                          options:MTLResourceStorageModeShared];
+    
+    // Create command buffer and encoder
+    id<MTLCommandBuffer> cmd_buffer = [queue_ commandBuffer];
+    id<MTLComputeCommandEncoder> encoder = [cmd_buffer computeCommandEncoder];
+    
+    [encoder setComputePipelineState:entropy_decoding_pipeline_];
+    [encoder setBuffer:b_encoded_data offset:0 atIndex:0];
+    [encoder setBuffer:b_encoded_size offset:0 atIndex:1];
+    [encoder setBuffer:b_decoded_real offset:0 atIndex:2];
+    [encoder setBuffer:b_decoded_imag offset:0 atIndex:3];
+    [encoder setBuffer:b_decoded_indices offset:0 atIndex:4];
+    [encoder setBuffer:b_decoded_count offset:0 atIndex:5];
+    [encoder setBytes:&max_decoded_count length:sizeof(uint32_t) atIndex:6];
+    
+    // Dispatch threads
+    MTLSize grid_size = MTLSizeMake(max_decoded_count, 1, 1);
+    MTLSize threadgroup_size = MTLSizeMake(256, 1, 1);
+    [encoder dispatchThreads:grid_size threadsPerThreadgroup:threadgroup_size];
+    [encoder endEncoding];
+    
+    [cmd_buffer commit];
+    [cmd_buffer waitUntilCompleted];
+    
+    // Get results
+    uint32_t decoded_count = *static_cast<uint32_t*>([b_decoded_count contents]);
+    std::vector<float> decoded_real(decoded_count);
+    std::vector<float> decoded_imag(decoded_count);
+    std::vector<uint32_t> decoded_indices(decoded_count);
+    
+    memcpy(decoded_real.data(), [b_decoded_real contents], decoded_count * sizeof(float));
+    memcpy(decoded_imag.data(), [b_decoded_imag contents], decoded_count * sizeof(float));
+    memcpy(decoded_indices.data(), [b_decoded_indices contents], decoded_count * sizeof(uint32_t));
+    
+    return {decoded_real, decoded_imag, decoded_indices, decoded_count};
+}
+
+// ============================================================================
+// GPU COMPRESSION PIPELINE - KERNEL 6: SPARSE DECODING
+// ============================================================================
+
+std::tuple<std::vector<float>, std::vector<float>>
+MetalBackend::gpu_sparse_decoding(
+    const std::vector<float>& sparse_real,
+    const std::vector<float>& sparse_imag,
+    const std::vector<uint32_t>& sparse_indices,
+    uint32_t sparse_count,
+    uint32_t output_size) {
+    
+    if (!device_ || !queue_) {
+        throw std::runtime_error("Metal device not initialized");
+    }
+    
+    // Create buffers
+    id<MTLBuffer> b_sparse_real = [device_ newBufferWithBytes:sparse_real.data()
+                                                       length:sparse_count * sizeof(float)
+                                                      options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_sparse_imag = [device_ newBufferWithBytes:sparse_imag.data()
+                                                       length:sparse_count * sizeof(float)
+                                                      options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_sparse_indices = [device_ newBufferWithBytes:sparse_indices.data()
+                                                          length:sparse_count * sizeof(uint32_t)
+                                                         options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_sparse_count = [device_ newBufferWithBytes:&sparse_count
+                                                 length:sizeof(uint32_t) 
+                                                       options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_output_real = [device_ newBufferWithLength:output_size * sizeof(float)
+                                                       options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_output_imag = [device_ newBufferWithLength:output_size * sizeof(float)
+                                                       options:MTLResourceStorageModeShared];
+    
+    // Create command buffer and encoder
+    id<MTLCommandBuffer> cmd_buffer = [queue_ commandBuffer];
+    id<MTLComputeCommandEncoder> encoder = [cmd_buffer computeCommandEncoder];
+    
+    [encoder setComputePipelineState:sparse_decoding_pipeline_];
+    [encoder setBuffer:b_sparse_real offset:0 atIndex:0];
+    [encoder setBuffer:b_sparse_imag offset:0 atIndex:1];
+    [encoder setBuffer:b_sparse_indices offset:0 atIndex:2];
+    [encoder setBuffer:b_sparse_count offset:0 atIndex:3];
+    [encoder setBuffer:b_output_real offset:0 atIndex:4];
+    [encoder setBuffer:b_output_imag offset:0 atIndex:5];
+    [encoder setBytes:&output_size length:sizeof(uint32_t) atIndex:6];
+    
+    // Dispatch threads
+    MTLSize grid_size = MTLSizeMake(output_size, 1, 1);
+    MTLSize threadgroup_size = MTLSizeMake(256, 1, 1);
+    [encoder dispatchThreads:grid_size threadsPerThreadgroup:threadgroup_size];
+    [encoder endEncoding];
+    
+    [cmd_buffer commit];
+    [cmd_buffer waitUntilCompleted];
+    
+    // Get results
+    std::vector<float> output_real(output_size);
+    std::vector<float> output_imag(output_size);
+    
+    memcpy(output_real.data(), [b_output_real contents], output_size * sizeof(float));
+    memcpy(output_imag.data(), [b_output_imag contents], output_size * sizeof(float));
+    
+    return {output_real, output_imag};
+}
+
 } // namespace holo
 
 #endif

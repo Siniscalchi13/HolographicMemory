@@ -105,6 +105,133 @@ MetalHoloCore::DeviceAnalysisResult MetalHoloCore::analyze_metrics_hostback(cons
     return r;
 }
 
+// ============================================================================
+// GPU COMPRESSION PIPELINE - KERNEL 1: QUANTIZATION
+// ============================================================================
+
+std::vector<std::vector<float>> MetalHoloCore::gpu_holographic_quantize(
+    const std::vector<std::vector<float>>& input_real,
+    const std::vector<std::vector<float>>& input_imag,
+    uint32_t layer_index,
+    const QuantizationParams& params) {
+    
+    if (!available() || input_real.empty() || input_imag.empty()) return {};
+    
+    // Convert MetalHoloCore::QuantizationParams to MetalBackend::QuantizationParams
+    MetalBackend::QuantizationParams backend_params;
+    for (int i = 0; i < 7; ++i) {
+        backend_params.phase_bits[i] = params.phase_bits[i];
+        backend_params.amplitude_bits[i] = params.amplitude_bits[i];
+        backend_params.phase_step[i] = params.phase_step[i];
+        backend_params.amplitude_step[i] = params.amplitude_step[i];
+        backend_params.max_phase_error[i] = params.max_phase_error[i];
+    }
+    
+    auto t0 = high_resolution_clock::now();
+    auto result = backend_->gpu_holographic_quantize(input_real, input_imag, layer_index, backend_params);
+    auto dt = duration_cast<duration<double, std::milli>>(high_resolution_clock::now() - t0).count();
+    metrics_.batch_time_ms = dt;
+    
+    return result;
+}
+
+std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<float>>, 
+           std::vector<std::vector<float>>, std::vector<std::vector<float>>>
+MetalHoloCore::gpu_holographic_quantize_with_validation(
+    const std::vector<std::vector<float>>& input_real,
+    const std::vector<std::vector<float>>& input_imag,
+    uint32_t layer_index,
+    const QuantizationParams& params) {
+    
+    if (!available() || input_real.empty() || input_imag.empty()) {
+        return {{}, {}, {}, {}};
+    }
+    
+    // Convert MetalHoloCore::QuantizationParams to MetalBackend::QuantizationParams
+    MetalBackend::QuantizationParams backend_params;
+    for (int i = 0; i < 7; ++i) {
+        backend_params.phase_bits[i] = params.phase_bits[i];
+        backend_params.amplitude_bits[i] = params.amplitude_bits[i];
+        backend_params.phase_step[i] = params.phase_step[i];
+        backend_params.amplitude_step[i] = params.amplitude_step[i];
+        backend_params.max_phase_error[i] = params.max_phase_error[i];
+    }
+    
+    auto t0 = high_resolution_clock::now();
+    auto result = backend_->gpu_holographic_quantize_with_validation(input_real, input_imag, layer_index, backend_params);
+    auto dt = duration_cast<duration<double, std::milli>>(high_resolution_clock::now() - t0).count();
+    metrics_.batch_time_ms = dt;
+    
+    return result;
+}
+
+std::array<float, 4> MetalHoloCore::gpu_quantization_statistics(
+    const std::vector<std::vector<float>>& phase_errors,
+    const std::vector<std::vector<float>>& amplitude_errors) {
+    
+    if (!available() || phase_errors.empty() || amplitude_errors.empty()) {
+        return {0.0f, 0.0f, 0.0f, 0.0f};
+    }
+    
+    auto t0 = high_resolution_clock::now();
+    auto result = backend_->gpu_quantization_statistics(phase_errors, amplitude_errors);
+    auto dt = duration_cast<duration<double, std::milli>>(high_resolution_clock::now() - t0).count();
+    metrics_.search_time_ms = dt;
+    
+    return result;
+}
+
+// ============================================================================
+// GPU COMPRESSION PIPELINE - KERNEL 2: BITPLANE EXTRACTION - REMOVED
+// ============================================================================
+// Removed: bitplane extraction methods - no longer needed with holographic wave reconstruction
+
+// Removed: All bitplane extraction method implementations - no longer needed with holographic wave reconstruction
+
+// IGPUBackend interface methods
+bool MetalHoloCore::initialize(const GPUConfig& cfg) {
+    // Initialize the Metal backend
+    backend_ = std::make_unique<MetalBackend>();
+    return backend_ != nullptr && available();
+}
+
+std::vector<std::vector<float>> MetalHoloCore::batch_encode_fft_zero_copy(const float* ptr,
+                                                                         std::uint32_t batch,
+                                                                         std::uint32_t data_len,
+                                                                         std::uint32_t pattern_dim) {
+    if (!available() || !ptr) {
+        return {};
+    }
+    
+    // Convert pointer to vector format and use batch_encode_fft_ultra
+    std::vector<std::vector<float>> batch_data(batch);
+    for (uint32_t i = 0; i < batch; ++i) {
+        batch_data[i].resize(data_len);
+        std::copy(ptr + i * data_len, ptr + (i + 1) * data_len, batch_data[i].begin());
+    }
+    
+    return backend_->batch_encode_fft_ultra(batch_data, pattern_dim);
+}
+
+GPUMetrics MetalHoloCore::get_metrics() const {
+    if (!available()) {
+        return {};
+    }
+    
+    // Convert PerformanceMetrics to GPUMetrics
+    GPUMetrics gpu_metrics;
+    gpu_metrics.host_ms = metrics_.batch_time_ms;
+    gpu_metrics.device_ms = metrics_.batch_time_ms;
+    gpu_metrics.h2d_time_ms = 0.0;
+    gpu_metrics.fft_time_ms = 0.0;
+    gpu_metrics.d2h_time_ms = 0.0;
+    gpu_metrics.operations_per_second = metrics_.operations_per_second;
+    gpu_metrics.memory_bandwidth_gb_s = metrics_.memory_bandwidth_gb_s;
+    gpu_metrics.device_utilization = 0.0;
+    
+    return gpu_metrics;
+}
+
 } // namespace holo
 
 #endif

@@ -49,6 +49,10 @@ public:
                                         std::uint32_t dimension,
                                         DeviceAnalysisResult& out) { (void)vec1; (void)vec2; (void)dimension; (void)out; return false; }
 
+    // GPU Compression Pipeline - Kernel 2: Bitplane Extraction
+    // Default implementations return empty results if not supported
+    // Removed: bitplane extraction methods - no longer needed with holographic wave reconstruction
+
     static std::vector<GPUPlatform> get_available_platforms();
     static std::unique_ptr<IGPUBackend> create_backend(GPUPlatform pf);
 };

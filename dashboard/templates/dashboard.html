@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HolographicMemory SOA Dashboard</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="dashboard-header">
+            <h1>🚀 HolographicMemory SOA Dashboard</h1>
+            <div class="status-indicator">
+                <span class="status-dot active"></span>
+                <span>System Online</span>
+            </div>
+        </header>
+        
+        <nav class="dashboard-nav">
+            <a href="#overview" class="nav-item active">Overview</a>
+            <a href="#services" class="nav-item">Services</a>
+            <a href="#gpu" class="nav-item">GPU</a>
+            <a href="#compression" class="nav-item">Compression</a>
+            <a href="#monitoring" class="nav-item">Monitoring</a>
+            <a href="#logs" class="nav-item">Logs</a>
+        </nav>
+        
+        <main class="dashboard-main">
+            <section id="overview" class="dashboard-section active">
+                <h2>System Overview</h2>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <h3>Services</h3>
+                        <div class="metric-value">5/5</div>
+                        <div class="metric-status healthy">Healthy</div>
+                    </div>
+                    <div class="metric-card">
+                        <h3>GPU Status</h3>
+                        <div class="metric-value">Active</div>
+                        <div class="metric-status healthy">Available</div>
+                    </div>
+                    <div class="metric-card">
+                        <h3>Memory Usage</h3>
+                        <div class="metric-value">2.1GB</div>
+                        <div class="metric-status warning">65%</div>
+                    </div>
+                    <div class="metric-card">
+                        <h3>Compression Ratio</h3>
+                        <div class="metric-value">1475x</div>
+                        <div class="metric-status healthy">Excellent</div>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="services" class="dashboard-section">
+                <h2>Service Status</h2>
+                <div class="services-grid">
+                    <div class="service-card">
+                        <h3>Orchestrator</h3>
+                        <div class="service-status healthy">Running</div>
+                        <div class="service-metrics">
+                            <span>Uptime: 2h 15m</span>
+                            <span>Requests: 1,247</span>
+                        </div>
+                    </div>
+                    <div class="service-card">
+                        <h3>Router</h3>
+                        <div class="service-status healthy">Running</div>
+                        <div class="service-metrics">
+                            <span>Uptime: 2h 15m</span>
+                            <span>Routes: 892</span>
+                        </div>
+                    </div>
+                    <div class="service-card">
+                        <h3>Vault</h3>
+                        <div class="service-status healthy">Running</div>
+                        <div class="service-metrics">
+                            <span>Uptime: 2h 15m</span>
+                            <span>Stored: 156 items</span>
+                        </div>
+                    </div>
+                    <div class="service-card">
+                        <h3>Telemetry</h3>
+                        <div class="service-status healthy">Running</div>
+                        <div class="service-metrics">
+                            <span>Uptime: 2h 15m</span>
+                            <span>Metrics: 2,341</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="gpu" class="dashboard-section">
+                <h2>GPU Performance</h2>
+                <div class="gpu-metrics">
+                    <div class="gpu-card">
+                        <h3>Metal Shaders</h3>
+                        <div class="shader-list">
+                            <div class="shader-item">✅ enhanced_vector_add</div>
+                            <div class="shader-item">✅ batch_holographic_store</div>
+                            <div class="shader-item">✅ holographic_similarity_search</div>
+                            <div class="shader-item">✅ holographic_fft_transform</div>
+                            <div class="shader-item">✅ gpu_sparse_encoding</div>
+                            <div class="shader-item">✅ gpu_entropy_coding</div>
+                        </div>
+                    </div>
+                    <div class="gpu-card">
+                        <h3>Performance Metrics</h3>
+                        <canvas id="gpuChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="compression" class="dashboard-section">
+                <h2>Compression Pipeline</h2>
+                <div class="compression-metrics">
+                    <div class="compression-card">
+                        <h3>Algorithm Performance</h3>
+                        <div class="algorithm-stats">
+                            <div class="algorithm-item">
+                                <span>Huffman</span>
+                                <span>1.99x</span>
+                            </div>
+                            <div class="algorithm-item">
+                                <span>LZW</span>
+                                <span>3.70x</span>
+                            </div>
+                            <div class="algorithm-item">
+                                <span>Arithmetic</span>
+                                <span>1475.00x</span>
+                            </div>
+                            <div class="algorithm-item">
+                                <span>Wavelet</span>
+                                <span>5.00x</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="compression-card">
+                        <h3>Compression History</h3>
+                        <canvas id="compressionChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="monitoring" class="dashboard-section">
+                <h2>System Monitoring</h2>
+                <div class="monitoring-grid">
+                    <div class="monitor-card">
+                        <h3>CPU Usage</h3>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 45%"></div>
+                        </div>
+                        <span>45%</span>
+                    </div>
+                    <div class="monitor-card">
+                        <h3>Memory Usage</h3>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 65%"></div>
+                        </div>
+                        <span>65%</span>
+                    </div>
+                    <div class="monitor-card">
+                        <h3>GPU Usage</h3>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 30%"></div>
+                        </div>
+                        <span>30%</span>
+                    </div>
+                    <div class="monitor-card">
+                        <h3>Network I/O</h3>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 20%"></div>
+                        </div>
+                        <span>20%</span>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="logs" class="dashboard-section">
+                <h2>System Logs</h2>
+                <div class="logs-container">
+                    <div class="log-entry info">
+                        <span class="log-time">2023-01-01 16:53:53</span>
+                        <span class="log-level">INFO</span>
+                        <span class="log-message">GPU backend initialized for advanced kernels</span>
+                    </div>
+                    <div class="log-entry success">
+                        <span class="log-time">2023-01-01 16:53:53</span>
+                        <span class="log-level">SUCCESS</span>
+                        <span class="log-message">Advanced compression algorithms implemented successfully</span>
+                    </div>
+                    <div class="log-entry warning">
+                        <span class="log-time">2023-01-01 16:52:01</span>
+                        <span class="log-level">WARNING</span>
+                        <span class="log-message">Memory usage approaching threshold</span>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

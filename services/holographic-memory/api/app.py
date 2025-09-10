@@ -26,12 +26,36 @@ except Exception:
     fitz = None
 
 from holographicfs.memory import mount, HoloFS
-from services.api.hwp_v4 import build_sparse_layer, write_hwp_v4, write_hwp_v4_micro
+from hwp_v4 import build_sparse_layer, write_hwp_v4, write_hwp_v4_micro
 from holographicfs.index import sha256_file
-from services.api.router_layers import route_layers
-from services.router import MathematicalRouter
-from services.telemetry import PerformanceTelemetry
-from services.vault import SecurityGuard
+from router_layers import route_layers
+# Import services using importlib to handle hyphenated directory names
+import importlib.util
+import sys
+import os
+
+# Add services directory to path
+services_path = os.path.join(os.path.dirname(__file__), '..', '..')
+if services_path not in sys.path:
+    sys.path.insert(0, services_path)
+
+# Import router
+router_spec = importlib.util.spec_from_file_location("mathematical_router", os.path.join(services_path, "router", "mathematical_router.py"))
+router_module = importlib.util.module_from_spec(router_spec)
+router_spec.loader.exec_module(router_module)
+MathematicalRouter = router_module.MathematicalRouter
+
+# Import telemetry
+telemetry_spec = importlib.util.spec_from_file_location("performance_tracker", os.path.join(services_path, "telemetry", "performance_tracker.py"))
+telemetry_module = importlib.util.module_from_spec(telemetry_spec)
+telemetry_spec.loader.exec_module(telemetry_module)
+PerformanceTelemetry = telemetry_module.PerformanceTelemetry
+
+# Import vault
+vault_spec = importlib.util.spec_from_file_location("security_guard", os.path.join(services_path, "vault", "security_guard.py"))
+vault_module = importlib.util.module_from_spec(vault_spec)
+vault_spec.loader.exec_module(vault_module)
+SecurityGuard = vault_module.SecurityGuard
 from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
 import threading
 import logging

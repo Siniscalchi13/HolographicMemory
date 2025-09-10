@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include "../GPUBackend.hpp"
 
 namespace holo {
 
@@ -17,12 +18,20 @@ struct PerformanceMetrics {
     double memory_bandwidth_gb_s {0.0};
 };
 
-class MetalHoloCore {
+class MetalHoloCore : public IGPUBackend {
 public:
     MetalHoloCore();
     ~MetalHoloCore();
 
     bool available() const noexcept;
+
+    // IGPUBackend interface methods
+    bool initialize(const GPUConfig& cfg) override;
+    std::vector<std::vector<float>> batch_encode_fft_zero_copy(const float* ptr,
+                                                              std::uint32_t batch,
+                                                              std::uint32_t data_len,
+                                                              std::uint32_t pattern_dim) override;
+    GPUMetrics get_metrics() const override;
 
     // Compute
     void fft_transform(const std::vector<float>& input,
@@ -52,6 +61,69 @@ public:
     // to compute interference visibility, phase coherence, CHSH violation, and orthogonality.
     struct DeviceAnalysisResult { float visibility; float coherence; double bell_violation; float orthogonality; };
     DeviceAnalysisResult analyze_metrics_hostback(const float* v1, const float* v2, std::uint32_t dim);
+
+    // ============================================================================
+    // GPU COMPRESSION PIPELINE - KERNEL 1: QUANTIZATION
+    // ============================================================================
+    
+    // Layer-specific quantization parameters for 7-layer holographic decomposition
+    struct QuantizationParams {
+        // Phase precision (bits) per layer - critical for recall accuracy
+        uint32_t phase_bits[7];     // [12, 12, 12, 10, 10, 8, 6] - decreasing precision
+        // Amplitude precision (bits) per layer
+        uint32_t amplitude_bits[7]; // [12, 12, 10, 8, 8, 6, 4] - decreasing precision
+        // Quantization step sizes (computed from bit precision)
+        float phase_step[7];    // 2π / (2^phase_bits)
+        float amplitude_step[7]; // max_amplitude / (2^amplitude_bits)
+        // Maximum phase error bounds per layer (degrees)
+        float max_phase_error[7]; // [0.1, 0.1, 0.1, 0.5, 0.5, 2.0, 2.0]
+    };
+    
+    // GPU Quantization - Basic quantization without error tracking
+    std::vector<std::vector<float>> gpu_holographic_quantize(
+        const std::vector<std::vector<float>>& input_real,
+        const std::vector<std::vector<float>>& input_imag,
+        uint32_t layer_index,
+        const QuantizationParams& params);
+    
+    // GPU Quantization with Error Bounds Validation
+    // Returns {quantized_real, quantized_imag, phase_errors, amplitude_errors}
+    std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<float>>, 
+               std::vector<std::vector<float>>, std::vector<std::vector<float>>>
+    gpu_holographic_quantize_with_validation(
+        const std::vector<std::vector<float>>& input_real,
+        const std::vector<std::vector<float>>& input_imag,
+        uint32_t layer_index,
+        const QuantizationParams& params);
+    
+    // GPU Quantization Statistics Collection
+    // Returns {max_phase_err, max_amp_err, mean_phase_err, mean_amp_err}
+    std::array<float, 4> gpu_quantization_statistics(
+        const std::vector<std::vector<float>>& phase_errors,
+        const std::vector<std::vector<float>>& amplitude_errors);
+    
+    // ============================================================================
+    // GPU COMPRESSION PIPELINE - KERNEL 2: BITPLANE EXTRACTION
+    // ============================================================================
+    
+    // Bitplane extraction parameters for zero-tree coding
+    struct BitplaneParams {
+        uint32_t max_bitplanes[7];        // Maximum bitplanes per layer
+        uint32_t significance_threshold[7]; // Threshold for significance
+        uint32_t zero_tree_depth[7];      // Maximum zero-tree depth
+        float amplitude_scale[7];         // Amplitude scaling factors
+    };
+    
+    // GPU Bitplane Extraction - MSB-first encoding with zero-tree coding
+    // Returns {bitplanes, significance_map, zero_tree_map}
+    std::tuple<std::vector<std::vector<uint32_t>>, std::vector<uint32_t>, std::vector<uint32_t>>
+    gpu_bitplane_extraction(
+        const std::vector<std::vector<float>>& quantized_real,
+        const std::vector<std::vector<float>>& quantized_imag,
+        uint32_t layer_index,
+        const BitplaneParams& params);
+    
+    // Removed: bitplane extraction methods - no longer needed with holographic wave reconstruction
 
 private:
     std::unique_ptr<MetalBackend> backend_;

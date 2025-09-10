@@ -54,6 +54,8 @@ public:
 
     GPUMetrics get_metrics() const override { return metrics_; }
 
+    // Removed: bitplane extraction methods - no longer needed with holographic wave reconstruction
+
     bool analyze_device_metrics(const float* vec1,
                                 const float* vec2,
                                 std::uint32_t dimension,

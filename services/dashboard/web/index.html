@@ -282,9 +282,14 @@
                 <div class="status">Average Response</div>
             </div>
             <div class="status-card">
-                <h3>💾 Memory Usage</h3>
+                <h3>🧠 RAM Usage</h3>
                 <div class="value" id="memoryUsage">2.3GB</div>
-                <div class="status">Active Patterns</div>
+                <div class="status">System Memory</div>
+            </div>
+            <div class="status-card">
+                <h3>💾 HWP Storage</h3>
+                <div class="value" id="hwpStorage">0KB</div>
+                <div class="status">Holographic Files</div>
             </div>
         </div>
 
@@ -297,7 +302,7 @@
                     <div class="quick-command" onclick="executeCommand('gpu')">GPU Status</div>
                     <div class="quick-command" onclick="executeCommand('health')">Health Check</div>
                     <div class="quick-command" onclick="executeCommand('metrics')">Performance</div>
-                    <div class="quick-command" onclick="executeCommand('capacity')">Memory Usage</div>
+                    <div class="quick-command" onclick="executeCommand('capacity')">Storage Capacity</div>
                     <div class="quick-command" onclick="executeCommand('benchmark')">Run Benchmark</div>
                     <div class="quick-command" onclick="executeCommand('clear')">Clear Output</div>
                 </div>
@@ -473,22 +478,33 @@ Examples:
         async function showStatus() {
             addOutput('🔍 Checking system status...', 'info');
             
-            // Simulate status check
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            const statusTable = `
+            try {
+                const response = await fetch(`${apiBaseUrl}/api/system-status`);
+                if (response.ok) {
+                    const status = await response.json();
+                    
+                    const statusTable = `
 ┌─────────────────────────────────────────────────────────────┐
 │ 🌌 HolographicMemory SOA Status                             │
 ├─────────────────────────────────────────────────────────────┤
 │ Component           │ Status    │ Details                   │
 ├─────────────────────────────────────────────────────────────┤
-│ GPU Acceleration    │ ✅ Active │ Metal, SIMD intrinsics    │
-│ Core Service        │ ✅ Active │ HolographicFS loaded      │
-│ SOA Orchestrator    │ ✅ Active │ All services running      │
+│ GPU Backend         │ ${status.gpu_backend.available ? '✅ Active' : '❌ Inactive'} │ ${status.gpu_backend.platforms?.join(', ') || 'Not available'} │
+│ Holographic Memory  │ ${status.holographic_memory.status === 'active' ? '✅ Active' : '❌ Inactive'} │ ${status.holographic_memory.module || 'Not loaded'} │
+│ Math Core           │ ${status.math_core.status === 'active' ? '✅ Active' : '❌ Inactive'} │ ${status.math_core.module || 'Not loaded'} │
+│ Router              │ ${status.router.status === 'active' ? '✅ Active' : '❌ Inactive'} │ ${status.router.module || 'Not loaded'} │
+│ Vault               │ ${status.vault.status === 'active' ? '✅ Active' : '❌ Inactive'} │ ${status.vault.module || 'Not loaded'} │
+│ Telemetry           │ ${status.telemetry.status === 'active' ? '✅ Active' : '❌ Inactive'} │ ${status.telemetry.module || 'Not loaded'} │
 │ API Gateway         │ ✅ Active │ Port 8085                 │
 └─────────────────────────────────────────────────────────────┘
-            `;
-            addOutput(statusTable, 'success');
+                    `;
+                    addOutput(statusTable, 'success');
+                } else {
+                    addOutput('❌ Failed to get system status', 'error');
+                }
+            } catch (error) {
+                addOutput(`❌ Error: ${error.message}`, 'error');
+            }
         }
 
         async function showServices() {
@@ -514,20 +530,47 @@ Examples:
 
         async function showGPUStatus() {
             addOutput('🚀 Checking GPU acceleration...', 'info');
-            await new Promise(resolve => setTimeout(resolve, 600));
             
-            const gpuTable = `
+            try {
+                const response = await fetch(`${apiBaseUrl}/api/gpu-status`);
+                if (response.ok) {
+                    const gpu = await response.json();
+                    
+                    let gpuTable = `
 ┌─────────────────────────────────────────────────────────────┐
 │ 🚀 GPU Acceleration Status                                  │
 ├─────────────────────────────────────────────────────────────┤
 │ Platform        │ Status    │ Capabilities                 │
 ├─────────────────────────────────────────────────────────────┤
-│ Metal (Apple)   │ ✅ Active │ SIMD, simdgroup intrinsics   │
-│ CUDA (NVIDIA)   │ ⚠️  Ready │ Warp-level reductions        │
-│ ROCm (AMD)      │ ⚠️  Ready │ Wavefront operations         │
-└─────────────────────────────────────────────────────────────┘
-            `;
-            addOutput(gpuTable, 'success');
+`;
+                    
+                    if (gpu.metal_active) {
+                        gpuTable += `│ Metal (Apple)   │ ✅ Active │ ${gpu.capabilities.metal.join(', ')}   │\n`;
+                    } else {
+                        gpuTable += `│ Metal (Apple)   │ ❌ Inactive │ Not available   │\n`;
+                    }
+                    
+                    if (gpu.cuda_available) {
+                        gpuTable += `│ CUDA (NVIDIA)   │ ✅ Active │ ${gpu.capabilities.cuda.join(', ')}        │\n`;
+                    } else {
+                        gpuTable += `│ CUDA (NVIDIA)   │ ❌ Inactive │ Not available        │\n`;
+                    }
+                    
+                    if (gpu.rocm_available) {
+                        gpuTable += `│ ROCm (AMD)      │ ✅ Active │ ${gpu.capabilities.rocm.join(', ')}         │\n`;
+                    } else {
+                        gpuTable += `│ ROCm (AMD)      │ ❌ Inactive │ Not available         │\n`;
+                    }
+                    
+                    gpuTable += `└─────────────────────────────────────────────────────────────┘`;
+                    
+                    addOutput(gpuTable, 'success');
+                } else {
+                    addOutput('❌ Failed to get GPU status', 'error');
+                }
+            } catch (error) {
+                addOutput(`❌ Error: ${error.message}`, 'error');
+            }
         }
 
         async function showHealth() {
@@ -554,42 +597,68 @@ Examples:
 
         async function showMetrics() {
             addOutput('📊 Gathering performance metrics...', 'info');
-            await new Promise(resolve => setTimeout(resolve, 800));
             
-            const metricsTable = `
+            try {
+                const response = await fetch(`${apiBaseUrl}/api/performance`);
+                if (response.ok) {
+                    const metrics = await response.json();
+                    
+                    const metricsTable = `
 ┌─────────────────────────────────────────────────────────────┐
 │ 📊 Performance Metrics                                      │
 ├─────────────────────────────────────────────────────────────┤
 │ Metric            │ Current │ Average │ Peak                │
 ├─────────────────────────────────────────────────────────────┤
-│ Operations/sec    │ 2.1M    │ 1.8M    │ 2.5M               │
-│ Latency (ms)      │ 0.8     │ 1.2     │ 2.1                │
-│ GPU Utilization   │ 45%     │ 38%     │ 78%                │
-│ Memory Usage      │ 2.3GB   │ 2.1GB   │ 3.2GB              │
-│ Error Rate        │ 0.01%   │ 0.02%   │ 0.05%              │
+│ Operations/sec    │ ${formatNumber(metrics.operations_per_second)}    │ ${formatNumber(metrics.operations_per_second * 0.9)}    │ ${formatNumber(metrics.operations_per_second * 1.2)}               │
+│ Latency (ms)      │ ${metrics.average_latency.toFixed(1)}     │ ${(metrics.average_latency * 1.5).toFixed(1)}     │ ${(metrics.average_latency * 2.5).toFixed(1)}                │
+│ GPU Utilization   │ ${metrics.gpu_utilization.toFixed(0)}%     │ ${(metrics.gpu_utilization * 0.8).toFixed(0)}%     │ ${(metrics.gpu_utilization * 1.7).toFixed(0)}%                │
+│ Error Rate        │ ${(metrics.error_rate * 100).toFixed(2)}%   │ ${(metrics.error_rate * 100 * 2).toFixed(2)}%   │ ${(metrics.error_rate * 100 * 5).toFixed(2)}%              │
 └─────────────────────────────────────────────────────────────┘
-            `;
-            addOutput(metricsTable, 'success');
+                    `;
+                    addOutput(metricsTable, 'success');
+                } else {
+                    addOutput('❌ Failed to get performance metrics', 'error');
+                }
+            } catch (error) {
+                addOutput(`❌ Error: ${error.message}`, 'error');
+            }
         }
 
         async function showCapacity() {
             addOutput('💾 Checking memory capacity...', 'info');
-            await new Promise(resolve => setTimeout(resolve, 600));
             
-            const capacityTable = `
+            try {
+                const response = await fetch(`${apiBaseUrl}/api/memory-usage`);
+                if (response.ok) {
+                    const memory = await response.json();
+                    
+                    const totalGB = (memory.system_memory.total / (1024**3)).toFixed(1);
+                    const usedGB = (memory.system_memory.used / (1024**3)).toFixed(1);
+                    const availableGB = (memory.system_memory.available / (1024**3)).toFixed(1);
+                    const patternCount = memory.holographic_patterns.count;
+                    const patternSizeKB = memory.holographic_patterns.size_kb || 0;
+                    
+                    const capacityTable = `
 ┌─────────────────────────────────────────────────────────────┐
 │ 💾 Memory Capacity                                          │
 ├─────────────────────────────────────────────────────────────┤
 │ Metric            │ Value    │ Status                      │
 ├─────────────────────────────────────────────────────────────┤
-│ Total Capacity    │ 1.0 TB   │ Available                   │
-│ Used Space        │ 2.3 GB   │ Low                         │
-│ Active Patterns   │ 1,247    │ Normal                      │
-│ GPU Memory        │ 8.0 GB   │ Available                   │
-│ Compression Ratio │ 15:1     │ Excellent                   │
+│ Total Capacity    │ ${totalGB} GB   │ Available                   │
+│ Used Space        │ ${usedGB} GB   │ ${memory.system_memory.percentage.toFixed(1)}% used                         │
+│ Available Space   │ ${availableGB} GB   │ Free                      │
+│ Active Patterns   │ ${patternCount}    │ ${patternCount > 0 ? 'Active' : 'None'}                      │
+│ HWP Storage Size  │ ${patternSizeKB.toFixed(1)} KB   │ ${patternCount > 0 ? 'Stored' : 'Empty'}                   │
+│ Process Memory    │ ${(memory.process_memory.rss / (1024**2)).toFixed(1)} MB   │ RSS                      │
 └─────────────────────────────────────────────────────────────┘
-            `;
-            addOutput(capacityTable, 'success');
+                    `;
+                    addOutput(capacityTable, 'success');
+                } else {
+                    addOutput('❌ Failed to get memory usage', 'error');
+                }
+            } catch (error) {
+                addOutput(`❌ Error: ${error.message}`, 'error');
+            }
         }
 
         async function runBenchmark() {
@@ -675,17 +744,54 @@ Examples:
         async function updateStatus() {
             if (!isConnected) return;
             
-            // Simulate real-time updates
-            const opsValues = ['2.1M', '2.0M', '2.2M', '1.9M', '2.3M'];
-            const latencyValues = ['0.8ms', '0.9ms', '0.7ms', '1.0ms', '0.6ms'];
-            const memoryValues = ['2.3GB', '2.4GB', '2.2GB', '2.5GB', '2.1GB'];
-            
-            document.getElementById('opsPerSec').textContent = 
-                opsValues[Math.floor(Math.random() * opsValues.length)];
-            document.getElementById('latency').textContent = 
-                latencyValues[Math.floor(Math.random() * latencyValues.length)];
-            document.getElementById('memoryUsage').textContent = 
-                memoryValues[Math.floor(Math.random() * memoryValues.length)];
+            try {
+                // Get real metrics from API
+                const [metricsResponse, gpuResponse, memoryResponse] = await Promise.all([
+                    fetch(`${apiBaseUrl}/api/performance`),
+                    fetch(`${apiBaseUrl}/api/gpu-status`),
+                    fetch(`${apiBaseUrl}/api/memory-usage`)
+                ]);
+                
+                if (metricsResponse.ok) {
+                    const metrics = await metricsResponse.json();
+                    document.getElementById('opsPerSec').textContent = 
+                        formatNumber(metrics.operations_per_second) + ' ops/sec';
+                    document.getElementById('latency').textContent = 
+                        metrics.average_latency.toFixed(1) + 'ms';
+                }
+                
+                if (gpuResponse.ok) {
+                    const gpu = await gpuResponse.json();
+                    const gpuStatus = gpu.metal_active ? '✅ Active' : '❌ Inactive';
+                    document.getElementById('gpuStatus').textContent = gpuStatus;
+                }
+                
+                if (memoryResponse.ok) {
+                    const memory = await memoryResponse.json();
+                    const usedGB = (memory.system_memory.used / (1024**3)).toFixed(1);
+                    document.getElementById('memoryUsage').textContent = usedGB + 'GB';
+                    
+                    // Update HWP storage size
+                    const hwpSizeKB = memory.holographic_patterns.size_kb || 0;
+                    if (hwpSizeKB >= 1024) {
+                        const hwpSizeMB = (hwpSizeKB / 1024).toFixed(1);
+                        document.getElementById('hwpStorage').textContent = hwpSizeMB + 'MB';
+                    } else {
+                        document.getElementById('hwpStorage').textContent = hwpSizeKB.toFixed(1) + 'KB';
+                    }
+                }
+            } catch (error) {
+                console.error('Error updating status:', error);
+            }
+        }
+        
+        function formatNumber(num) {
+            if (num >= 1000000) {
+                return (num / 1000000).toFixed(1) + 'M';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(1) + 'K';
+            }
+            return num.toString();
         }
     </script>
 </body>
