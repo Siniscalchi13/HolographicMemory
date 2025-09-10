@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from services.orchestrator import HolographicMemoryOrchestrator
+from services.orchestrator.orchestrator import HolographicMemoryOrchestrator
 from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
 import logging
 
@@ -70,7 +70,7 @@ app.add_middleware(
 )
 
 # Static files
-app.mount("/static", StaticFiles(directory="services/api/static"), name="static")
+app.mount("/static", StaticFiles(directory="services/holographic-memory/api/static"), name="static")
 
 
 # Pydantic models
@@ -266,7 +266,7 @@ async def get_metrics():
 @app.get("/")
 async def dashboard():
     """Simple dashboard."""
-    return FileResponse("services/api/static/index.html")
+    return FileResponse("services/holographic-memory/api/static/index.html")
 
 
 if __name__ == "__main__":

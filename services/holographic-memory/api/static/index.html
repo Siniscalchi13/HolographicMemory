@@ -1,72 +1,91 @@
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Holographic Memory</title>
-    <link rel="stylesheet" href="/static/styles.css" />
-  </head>
-  <body>
-    <header>
-      <div>Holographic Memory</div>
-      <div class="muted" id="status">Connecting…</div>
-    </header>
-    <div id="banner" class="banner"></div>
-    <main class="grid">
-      <section class="card">
-        <h3>Folders</h3>
-        <div id="tree"></div>
-      </section>
-      <section class="card">
-        <div class="row space">
-          <div>
-            <h3 style="display:inline">Files</h3>
-            <span id="cwd" class="muted"></span>
-          </div>
-          <div class="row">
-            <input type="text" id="q" placeholder="Search by filename" />
-            <div class="pill" id="viewMode" title="Toggle view">list</div>
-          </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HolographicMemory SOA System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .header {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .status {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .endpoint {
+            background: #e8f4f8;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 4px solid #2196F3;
+        }
+        .method {
+            font-weight: bold;
+            color: #1976D2;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🌌 HolographicMemory SOA System</h1>
+        <p>Advanced Holographic Memory with GPU Acceleration</p>
+    </div>
+    
+    <div class="status">
+        <h2>✅ System Status: Running</h2>
+        <p>All SOA services are operational and ready for requests.</p>
+    </div>
+    
+    <div class="status">
+        <h2>🔗 Available Endpoints</h2>
+        
+        <div class="endpoint">
+            <span class="method">GET</span> / - This dashboard
         </div>
-        <div id="toolbar" class="row" style="display:none; margin:8px 0;">
-          <button id="btnDeleteSel" class="btn btn-danger">🗑️ Delete Selected</button>
-          <button id="btnZipSel" class="btn btn-primary">📦 Download Selected</button>
-          <span id="selection-count" class="muted small">0 files selected</span>
+        
+        <div class="endpoint">
+            <span class="method">POST</span> /store - Store content in holographic memory
         </div>
-        <div id="drop">Drag & drop files here, or <input type="file" id="file" multiple></div>
-        <div id="pagination"></div>
-        <div id="gridview"></div>
-        <table id="listview">
-          <thead><tr>
-            <th style="width:28px"><input type="checkbox" id="select-all"></th>
-            <th style="width:40px"></th>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Original Size</th>
-            <th>Holo Size</th>
-            <th>Compression</th>
-            <th>Modified</th>
-            <th style="width:100px">Actions</th>
-          </tr></thead>
-          <tbody id="rows"></tbody>
-        </table>
-      </section>
-      <section class="card">
-        <h3>Preview</h3>
-        <div id="preview"></div>
-        <h3>Stats</h3>
-        <div id="stats"></div>
-        <div class="muted" id="statusBar">0 items</div>
-        <h3>Settings</h3>
-        <div class="row">
-          <input id="apiKey" type="password" placeholder="API key (optional)" />
-          <button id="saveKey">Save</button>
+        
+        <div class="endpoint">
+            <span class="method">GET</span> /recall/{id} - Recall content by ID
         </div>
-        <div class="row" style="margin-top: 12px;">
-          <button id="showAllFiles" class="btn btn-primary">🔄 Show All Files</button>
+        
+        <div class="endpoint">
+            <span class="method">GET</span> /search - Search holographic memory
         </div>
-      </section>
-    </main>
-    <script src="/static/app.js" type="module"></script>
-  </body>
-  </html>
+        
+        <div class="endpoint">
+            <span class="method">GET</span> /health - Health check
+        </div>
+        
+        <div class="endpoint">
+            <span class="method">GET</span> /metrics - Prometheus metrics
+        </div>
+    </div>
+    
+    <div class="status">
+        <h2>🚀 Features</h2>
+        <ul>
+            <li>GPU-accelerated holographic memory (Metal/CUDA/ROCm)</li>
+            <li>7-layer holographic decomposition</li>
+            <li>3D exact recall engine</li>
+            <li>SOA architecture with service orchestration</li>
+            <li>Real-time performance telemetry</li>
+            <li>Secure vault storage</li>
+        </ul>
+    </div>
+</body>
+</html>

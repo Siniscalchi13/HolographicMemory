@@ -19,12 +19,19 @@ _core_path = _pkg_root / "core"
 if _core_path.exists():
     sys.path.insert(0, str(_core_path))
 
+# Add services to path for imports
+_services_root = _pkg_root.parent
+sys.path.insert(0, str(_services_root / "math-core"))
+sys.path.insert(0, str(_services_root / "router"))
+sys.path.insert(0, str(_services_root / "vault"))
+sys.path.insert(0, str(_services_root / "telemetry"))
+
 from holographicfs.memory import Memory as HolographicMemory
-from services.math_core.optimizer import DimensionOptimizer
-from services.math_core.threshold import ThresholdCalculator
-from services.router.mathematical_router import MathematicalRouter
-from services.vault.security_guard import SecurityGuard
-from services.telemetry.performance_tracker import PerformanceTelemetry
+from optimizer import DimensionOptimizer
+from threshold import ThresholdCalculator
+from mathematical_router import MathematicalRouter
+from security_guard import SecurityGuard
+from performance_tracker import PerformanceTelemetry
 
 
 class HolographicMemoryOrchestrator:

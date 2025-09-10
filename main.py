@@ -11,6 +11,7 @@ from pathlib import Path
 
 # Add services to Python path
 sys.path.insert(0, str(Path(__file__).parent / "services"))
+sys.path.insert(0, str(Path(__file__).parent / "services" / "holographic-memory" / "api"))
 
 async def start_services():
     """Start all SOA services"""
@@ -18,21 +19,30 @@ async def start_services():
     
     # Import services
     try:
-        from services.orchestrator.orchestrator import Orchestrator
-        from services.holographic_memory.api.app_soa import app as api_app
+        from services.orchestrator.orchestrator import HolographicMemoryOrchestrator
+        from app_soa import app as api_app
         import uvicorn
         
-        # Start orchestrator
-        orchestrator = Orchestrator()
-        await orchestrator.start()
-        print("✅ Orchestrator started")
+        # Initialize orchestrator
+        state_dir = Path(__file__).parent / "data" / "state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        orchestrator = HolographicMemoryOrchestrator(state_dir=state_dir)
+        print("✅ Orchestrator initialized")
+        
+        # Get port from command line or use default
+        port = 8080
+        if len(sys.argv) > 1 and sys.argv[1] == "--port":
+            try:
+                port = int(sys.argv[2])
+            except (IndexError, ValueError):
+                print("⚠️  Invalid port, using default 8080")
         
         # Start API service
-        print("🚀 Starting API service on port 8080...")
+        print(f"🚀 Starting API service on port {port}...")
         config = uvicorn.Config(
             api_app,
             host="0.0.0.0",
-            port=8080,
+            port=port,
             log_level="info",
             reload=False
         )

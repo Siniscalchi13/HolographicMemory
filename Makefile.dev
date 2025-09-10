@@ -4,15 +4,17 @@
 PY?=python3
 PIP?=$(PY) -m pip
 VENV_DIR?=venv
-VENV_PY?=$(VENV_DIR)/bin/python
+VENV_PY?=$(shell pwd)/$(VENV_DIR)/bin/python
 VENV_PIP?=$(VENV_PY) -m pip
-DEV_PORT?=8080
 DEV_HOST?=0.0.0.0
 
-# Development targets
-.PHONY: dev-setup dev-test dev-build dev-native dev-api dev-soa dev-benchmark dev-demo dev-clean
+# Dynamic port selection
+DEV_PORT?=$(shell python3 scripts/find_port.py)
 
-dev-setup:
+# Development targets
+.PHONY: dev-setup dev-test dev-build dev-native dev-api dev-soa dev-benchmark dev-demo dev-clean dev dev-verify launch-dev dev-all
+
+dev:
 	@echo "🔧 Setting up development environment..."
 	@echo "📦 Creating virtual environment..."
 	$(PY) -m venv $(VENV_DIR)
@@ -25,9 +27,85 @@ dev-setup:
 	@echo "🧪 Installing development dependencies..."
 	$(VENV_PIP) install pytest pytest-cov pytest-asyncio
 	$(VENV_PIP) install black flake8 isort mypy
+	@echo "📊 Installing dashboard dependencies..."
+	$(VENV_PIP) install -r services/dashboard/requirements.txt
 	@echo "🔨 Building native extensions..."
 	$(MAKE) dev-native
 	@echo "✅ Development environment setup complete!"
+	@echo ""
+	@echo "🎯 Next step: Activate virtual environment and run verification"
+	@echo "   source venv/bin/activate"
+	@echo "   make dev-verify"
+
+dev-verify:
+	@echo "🔍 Verifying development environment..."
+	@echo "🌌 Testing GPU acceleration..."
+	@$(VENV_PY) -c "import sys; sys.path.append('services/holographic-memory/core/native/holographic/build'); import holographic_gpu; print('GPU platforms:', holographic_gpu.available_platforms())"
+	@echo "🧪 Testing core service import..."
+	@$(VENV_PY) -c "import holographicfs; print('✅ Core service imported successfully')"
+	@echo "🧮 Testing math-core service import..."
+	@$(VENV_PY) -c "import sys; sys.path.append('services/math-core'); import optimizer; print('✅ Math-core service imported successfully')"
+	@echo "🔄 Testing router service import..."
+	@$(VENV_PY) -c "import sys; sys.path.append('services/router'); import mathematical_router; print('✅ Router service imported successfully')"
+	@echo "📊 Testing telemetry service import..."
+	@$(VENV_PY) -c "import sys; sys.path.append('services/telemetry'); import performance_tracker; print('✅ Telemetry service imported successfully')"
+	@echo "🔒 Testing vault service import..."
+	@$(VENV_PY) -c "import sys; sys.path.append('services/vault'); import vault_storage; print('✅ Vault service imported successfully')"
+	@echo "✅ Development environment verification complete!"
+	@echo ""
+	@echo "🚀 Next step: Launch development system"
+	@echo "   make launch-dev"
+
+dev-kill:
+	@echo "🛑 Stopping existing HolographicMemory processes..."
+	@-pkill -f "python.*main.py" 2>/dev/null || true
+	@-pkill -f "uvicorn.*app_soa" 2>/dev/null || true
+	@-pkill -f "python3 -m http.server" 2>/dev/null || true
+	@echo "✅ Existing processes stopped"
+
+dev-launch:
+	@echo "🚀 Launching SOA Web Dashboard..."
+	@echo "🌌 Starting web-based command center..."
+	@echo "📊 Opening browser dashboard at http://localhost:8086"
+	@echo "🔗 API will run on http://localhost:8085"
+	@echo ""
+	@echo "Starting API server in background..."
+	@$(VENV_PY) main.py --port 8085 &
+	@sleep 3
+	@echo "Starting web dashboard server..."
+	@cd services/dashboard/web && python3 -m http.server 8086 &
+	@sleep 2
+	@echo "✅ Dashboard ready! Opening browser..."
+	@open http://localhost:8086 || xdg-open http://localhost:8086 || echo "Please open http://localhost:8086 in your browser"
+	@echo ""
+	@echo "🎯 Web Dashboard Features:"
+	@echo "   • Beautiful terminal-style interface"
+	@echo "   • Real-time system monitoring"
+	@echo "   • Interactive SOA commands"
+	@echo "   • GPU status and performance metrics"
+	@echo "   • Holographic memory operations"
+	@echo ""
+	@echo "Press Ctrl+C to stop both servers"
+	@wait
+
+dev-all:
+	@echo "🎯 Running complete development setup sequence..."
+	@echo "🧹 Step 1: Cleaning build artifacts..."
+	$(MAKE) dev-clean
+	@echo ""
+	@echo "🛑 Step 2: Stopping existing processes..."
+	$(MAKE) dev-kill
+	@echo ""
+	@echo "🔧 Step 3: Setting up development environment..."
+	$(MAKE) dev
+	@echo ""
+	@echo "🔍 Step 4: Verifying development environment..."
+	$(MAKE) dev-verify
+	@echo ""
+	@echo "🚀 Step 5: Launching development system..."
+	@echo "⚠️  Note: You need to activate the virtual environment first:"
+	@echo "   source venv/bin/activate"
+	@echo "   make launch-dev"
 
 dev-test:
 	@echo "🧪 Running development tests..."

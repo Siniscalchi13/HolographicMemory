@@ -8,9 +8,18 @@ from __future__ import annotations
 import re
 from typing import Dict, List, Tuple
 
-from services.math_core import DimensionOptimizer, ThresholdCalculator
+import sys
+from pathlib import Path
+
+# Add math-core and vault to path
+_services_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_services_root / "math-core"))
+sys.path.insert(0, str(_services_root / "vault"))
+
+from optimizer import DimensionOptimizer
+from threshold import ThresholdCalculator
 import os
-from services.vault import SecurityGuard
+from security_guard import SecurityGuard
 
 
 LAYER_NAMES = [

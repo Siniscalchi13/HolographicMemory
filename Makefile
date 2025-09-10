@@ -12,7 +12,7 @@ include Makefile.syntax
 .DEFAULT_GOAL := help
 
 # Main targets that delegate to specific Makefiles
-.PHONY: help setup test build native api soa clean dev prod lint syntax
+.PHONY: help setup test build native api soa clean dev prod lint syntax dev-verify launch-dev dev-all
 
 # Development targets
 setup: dev-setup
@@ -21,6 +21,11 @@ build: dev-build
 native: dev-native
 api: dev-api
 soa: dev-soa
+dev: dev-setup
+launch-dev: dev-launch
+dev-kill: dev-kill
+dev-all: dev-all
+clean: dev-clean
 
 # Production targets
 deploy: prod-deploy

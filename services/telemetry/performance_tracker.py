@@ -7,8 +7,14 @@ using DimensionOptimizer.
 from __future__ import annotations
 
 from typing import Dict, Tuple
+import sys
+from pathlib import Path
 
-from services.math_core import DimensionOptimizer
+# Add math-core to path
+_services_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_services_root / "math-core"))
+
+from optimizer import DimensionOptimizer
 
 
 class PerformanceTelemetry:
