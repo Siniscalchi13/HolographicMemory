@@ -148,7 +148,7 @@ make soa
 make cpp
 
 # Install core service library
-cd services/core && python -m pip install -e .
+cd services/holographic-memory/core && python -m pip install -e .
 
 # Run tests
 make test
@@ -243,21 +243,23 @@ python main.py
 ### SOA (Service-Oriented Architecture) with GPU-First Core
 
 ```text
-services/core/                   # GPU-first holographic memory engine
-├── native/holographic/          # C++ core with Metal/CUDA/ROCm
-│   ├── holographic_memory.cpp   # FFT-based wave operations
-│   ├── holographic_native_3d.cpp # 3D exact recall
-│   └── metal/                   # GPU acceleration with simdgroup
-├── holographicfs/               # Python wrappers
-└── tests/                       # Test suite
+services/holographic-memory/     # Main holographic memory service
+├── core/                        # Core implementation
+│   ├── native/holographic/      # C++ core with Metal/CUDA/ROCm
+│   │   ├── holographic_memory.cpp # FFT-based wave operations
+│   │   ├── holographic_native_3d.cpp # 3D exact recall
+│   │   └── metal/               # GPU acceleration with simdgroup
+│   ├── holographicfs/           # Python wrappers
+│   └── tests/                   # Test suite
+├── api/                         # REST API endpoints
+└── shared/                      # Shared utilities
 
 services/                        # SOA services
-├── orchestrator.py              # Main service orchestrator
-├── api/app_soa.py              # FastAPI REST service (orchestrates)
-├── math_core/                   # Mathematical operations service
-├── router/                      # Layer routing service
-├── telemetry/                   # Performance metrics service
-├── vault/                       # Security layer service
+├── orchestrator/                # Service orchestration
+├── math-core/                   # Mathematical computation
+├── router/                      # Request routing
+├── telemetry/                   # Monitoring & observability
+├── vault/                       # Secure storage
 └── shared/                      # Common types and interfaces
 
 data/                           # Clean data organization

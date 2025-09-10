@@ -1,0 +1,99 @@
+# Makefile.syntax - Syntax checking targets
+
+# Variables
+PY?=python3
+VENV_DIR?=venv
+VENV_PY?=$(VENV_DIR)/bin/python
+
+# Syntax checking targets
+.PHONY: syntax-check syntax-python syntax-cpp syntax-yaml syntax-json syntax-shell
+
+syntax-check:
+	@echo "📝 Checking syntax of all files..."
+	@echo "🐍 Checking Python syntax..."
+	$(MAKE) syntax-python
+	@echo "🔧 Checking C++ syntax..."
+	$(MAKE) syntax-cpp
+	@echo "📋 Checking YAML syntax..."
+	$(MAKE) syntax-yaml
+	@echo "📄 Checking JSON syntax..."
+	$(MAKE) syntax-json
+	@echo "🐚 Checking shell script syntax..."
+	$(MAKE) syntax-shell
+	@echo "✅ All syntax checks complete!"
+
+syntax-python:
+	@echo "🐍 Checking Python syntax..."
+	@find services/ tools/ demos/ research/ validation/ -name "*.py" | while read file; do \
+		echo "Checking $$file..."; \
+		$(VENV_PY) -m py_compile "$$file" || exit 1; \
+	done
+	@echo "✅ Python syntax check complete!"
+
+syntax-cpp:
+	@echo "🔧 Checking C++ syntax..."
+	@find services/holographic-memory/core/native -name "*.cpp" -o -name "*.hpp" -o -name "*.h" | while read file; do \
+		echo "Checking $$file..."; \
+		g++ -fsyntax-only -std=c++17 "$$file" || exit 1; \
+	done
+	@echo "✅ C++ syntax check complete!"
+
+syntax-yaml:
+	@echo "📋 Checking YAML syntax..."
+	@find . -name "*.yml" -o -name "*.yaml" | while read file; do \
+		echo "Checking $$file..."; \
+		$(VENV_PY) -c "import yaml; yaml.safe_load(open('$$file'))" || exit 1; \
+	done
+	@echo "✅ YAML syntax check complete!"
+
+syntax-json:
+	@echo "📄 Checking JSON syntax..."
+	@find . -name "*.json" -not -path "./venv/*" -not -path "./.git/*" | while read file; do \
+		echo "Checking $$file..."; \
+		$(VENV_PY) -m json.tool "$$file" > /dev/null || exit 1; \
+	done
+	@echo "✅ JSON syntax check complete!"
+
+syntax-shell:
+	@echo "🐚 Checking shell script syntax..."
+	@find . -name "*.sh" -not -path "./venv/*" -not -path "./.git/*" | while read file; do \
+		echo "Checking $$file..."; \
+		bash -n "$$file" || exit 1; \
+	done
+	@echo "✅ Shell script syntax check complete!"
+
+# Validation targets
+.PHONY: validate validate-python validate-cpp validate-config
+
+validate:
+	@echo "🔍 Validating all components..."
+	@echo "🐍 Validating Python code..."
+	$(MAKE) validate-python
+	@echo "🔧 Validating C++ code..."
+	$(MAKE) validate-cpp
+	@echo "📋 Validating configuration..."
+	$(MAKE) validate-config
+	@echo "✅ All validation complete!"
+
+validate-python:
+	@echo "🐍 Validating Python code..."
+	@$(VENV_PY) -m py_compile main.py
+	@$(VENV_PY) -m py_compile services/orchestrator/orchestrator.py
+	@$(VENV_PY) -m py_compile services/holographic-memory/api/app_soa.py
+	@echo "✅ Python validation complete!"
+
+validate-cpp:
+	@echo "🔧 Validating C++ code..."
+	@cd services/holographic-memory/core/native/holographic && \
+		g++ -fsyntax-only -std=c++17 holographic_memory.cpp
+	@cd services/holographic-memory/core/native/holographic && \
+		g++ -fsyntax-only -std=c++17 holographic_native_3d.cpp
+	@echo "✅ C++ validation complete!"
+
+validate-config:
+	@echo "📋 Validating configuration files..."
+	@$(VENV_PY) -c "import yaml; yaml.safe_load(open('docker-compose.yml'))"
+	@$(VENV_PY) -c "import yaml; yaml.safe_load(open('docker-compose-dev.yml'))"
+	@$(VENV_PY) -c "import yaml; yaml.safe_load(open('docker-compose.prod.yml'))"
+	@$(VENV_PY) -m json.tool project_manifest.json > /dev/null
+	@echo "✅ Configuration validation complete!"

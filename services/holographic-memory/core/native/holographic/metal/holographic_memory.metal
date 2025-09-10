@@ -213,7 +213,7 @@ kernel void dot_norm_kernel(
     uint tid              [[ thread_index_in_threadgroup ]])
 {
     const uint tg = tg_sz; // actual threads per threadgroup
-    const uint SIMD = simdgroup_size; // lanes per simdgroup (typically 32)
+    const uint SIMD = 32; // lanes per simdgroup (typically 32)
     const uint sidx = tid / SIMD;     // simdgroup index within threadgroup
     const uint sg_max = (tg + SIMD - 1u) / SIMD;
     threadgroup float sg_dot[16];
@@ -275,7 +275,7 @@ kernel void correlation_offset_kernel(
     uint tid              [[ thread_index_in_threadgroup ]])
 {
     const uint tg = tg_sz;
-    const uint SIMD = simdgroup_size;
+    const uint SIMD = 32;
     const uint sidx = tid / SIMD;
     const uint sg_max = (tg + SIMD - 1u) / SIMD;
     threadgroup float sg_sum[16];

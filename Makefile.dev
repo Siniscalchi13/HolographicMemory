@@ -1,0 +1,99 @@
+# Makefile.dev - Development targets
+
+# Variables
+PY?=python3
+PIP?=$(PY) -m pip
+VENV_DIR?=venv
+VENV_PY?=$(VENV_DIR)/bin/python
+VENV_PIP?=$(VENV_PY) -m pip
+DEV_PORT?=8080
+DEV_HOST?=0.0.0.0
+
+# Development targets
+.PHONY: dev-setup dev-test dev-build dev-native dev-api dev-soa dev-benchmark dev-demo dev-clean
+
+dev-setup:
+	@echo "🔧 Setting up development environment..."
+	@echo "📦 Creating virtual environment..."
+	$(PY) -m venv $(VENV_DIR)
+	@echo "⬆️ Upgrading pip, wheel, setuptools..."
+	$(VENV_PIP) install --upgrade pip wheel setuptools
+	@echo "📚 Installing API dependencies..."
+	$(VENV_PIP) install -r services/holographic-memory/api/requirements.txt
+	@echo "🔧 Installing core service..."
+	$(VENV_PIP) install -e services/holographic-memory/core
+	@echo "🧪 Installing development dependencies..."
+	$(VENV_PIP) install pytest pytest-cov pytest-asyncio
+	$(VENV_PIP) install black flake8 isort mypy
+	@echo "🔨 Building native extensions..."
+	$(MAKE) dev-native
+	@echo "✅ Development environment setup complete!"
+
+dev-test:
+	@echo "🧪 Running development tests..."
+	@echo "🔍 Testing core service..."
+	@cd services/holographic-memory/core && $(VENV_PY) -m pytest -v --cov=holographicfs --cov-report=html
+	@echo "🌐 Testing API service..."
+	@cd services/holographic-memory/api && $(VENV_PY) -m pytest -v
+	@echo "🧮 Testing math-core service..."
+	@cd services/math-core && $(VENV_PY) -m pytest -v
+	@echo "🔄 Testing router service..."
+	@cd services/router && $(VENV_PY) -m pytest -v
+	@echo "📊 Testing telemetry service..."
+	@cd services/telemetry && $(VENV_PY) -m pytest -v
+	@echo "🔒 Testing vault service..."
+	@cd services/vault && $(VENV_PY) -m pytest -v
+	@echo "✅ All development tests passed!"
+
+dev-build:
+	@echo "🔨 Building development components..."
+	@echo "📦 Building core service..."
+	@cd services/holographic-memory/core && $(VENV_PY) -m build
+	@echo "🔧 Building native extensions..."
+	$(MAKE) dev-native
+	@echo "✅ Development build complete!"
+
+dev-native:
+	@echo "🔧 Building native extensions for development..."
+	@which clang++ > /dev/null || (echo "❌ clang++ not found. Install Xcode Command Line Tools: xcode-select --install" && exit 1)
+	@which cmake > /dev/null || (echo "❌ cmake not found. Install with: brew install cmake" && exit 1)
+	@echo "🏗️ Building GPU backend with CMake..."
+	@cd services/holographic-memory/core/native/holographic && \
+		mkdir -p build && \
+		cd build && \
+		cmake .. -DCMAKE_BUILD_TYPE=Debug -DBUILD_METAL=ON -DBUILD_3D=ON && \
+		make -j$(shell sysctl -n hw.ncpu)
+	@echo "✅ Native extensions built successfully!"
+
+dev-api:
+	@echo "🚀 Starting development API server..."
+	@echo "🌐 Server will be available at http://$(DEV_HOST):$(DEV_PORT)"
+	@echo "📚 API documentation at http://$(DEV_HOST):$(DEV_PORT)/docs"
+	@$(VENV_PY) -m uvicorn services.holographic-memory.api.app_soa:app --reload --host $(DEV_HOST) --port $(DEV_PORT)
+
+dev-soa:
+	@echo "🌐 Starting development SOA system..."
+	@echo "🔧 Starting all services in development mode..."
+	@$(VENV_PY) main.py
+
+dev-benchmark:
+	@echo "📊 Running development benchmarks..."
+	@echo "🔍 Running GPU performance benchmarks..."
+	@$(VENV_PY) -c "import sys; sys.path.append('services/holographic-memory/core/native/holographic/build'); import holographic_gpu; print('GPU platforms:', holographic_gpu.available_platforms())"
+	@echo "🧮 Running mathematical validation benchmarks..."
+	@$(VENV_PY) tools/validate_accuracy.py
+	@echo "✅ Development benchmarks complete!"
+
+dev-demo:
+	@echo "🎬 Running development demos..."
+	@echo "🎯 Running end-to-end demo..."
+	@$(VENV_PY) tools/demo_end_to_end.py
+	@echo "✅ Development demos complete!"
+
+dev-clean:
+	@echo "🧹 Cleaning development artifacts..."
+	@rm -rf **/__pycache__ build dist .pytest_cache
+	@rm -rf services/holographic-memory/core/*.egg-info
+	@rm -rf services/holographic-memory/core/native/holographic/build
+	@rm -rf htmlcov .coverage
+	@echo "✅ Development cleanup complete!"

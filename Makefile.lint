@@ -1,0 +1,88 @@
+# Makefile.lint - Linting and code quality targets
+
+# Variables
+PY?=python3
+VENV_DIR?=venv
+VENV_PY?=$(VENV_DIR)/bin/python
+VENV_BLACK?=$(VENV_DIR)/bin/black
+VENV_FLAKE8?=$(VENV_DIR)/bin/flake8
+VENV_ISORT?=$(VENV_DIR)/bin/isort
+VENV_MYPY?=$(VENV_DIR)/bin/mypy
+
+# Linting targets
+.PHONY: lint-all lint-python lint-cpp lint-markdown lint-yaml lint-json
+
+lint-all:
+	@echo "🔍 Running all linting checks..."
+	@echo "🐍 Linting Python code..."
+	$(MAKE) lint-python
+	@echo "🔧 Linting C++ code..."
+	$(MAKE) lint-cpp
+	@echo "📝 Linting Markdown documentation..."
+	$(MAKE) lint-markdown
+	@echo "📋 Linting YAML configuration..."
+	$(MAKE) lint-yaml
+	@echo "📄 Linting JSON configuration..."
+	$(MAKE) lint-json
+	@echo "✅ All linting checks complete!"
+
+lint-python:
+	@echo "🐍 Linting Python code..."
+	@echo "🎨 Formatting with black..."
+	@$(VENV_BLACK) --check --diff services/ tools/ demos/ research/ validation/
+	@echo "📋 Sorting imports with isort..."
+	@$(VENV_ISORT) --check-only --diff services/ tools/ demos/ research/ validation/
+	@echo "🔍 Checking with flake8..."
+	@$(VENV_FLAKE8) services/ tools/ demos/ research/ validation/
+	@echo "🔬 Type checking with mypy..."
+	@$(VENV_MYPY) services/ tools/ demos/ research/ validation/
+	@echo "✅ Python linting complete!"
+
+lint-cpp:
+	@echo "🔧 Linting C++ code..."
+	@echo "🎨 Formatting with clang-format..."
+	@find services/holographic-memory/core/native -name "*.cpp" -o -name "*.hpp" -o -name "*.h" | xargs clang-format --dry-run --Werror
+	@echo "🔍 Checking with cppcheck..."
+	@cppcheck --enable=all --inconclusive --std=c++17 services/holographic-memory/core/native/
+	@echo "✅ C++ linting complete!"
+
+lint-markdown:
+	@echo "📝 Linting Markdown documentation..."
+	@echo "🔍 Checking with markdownlint..."
+	@markdownlint documentation/ README.md *.md
+	@echo "✅ Markdown linting complete!"
+
+lint-yaml:
+	@echo "📋 Linting YAML configuration..."
+	@echo "🔍 Checking with yamllint..."
+	@yamllint docker-compose*.yml deploy/ documentation/
+	@echo "✅ YAML linting complete!"
+
+lint-json:
+	@echo "📄 Linting JSON configuration..."
+	@echo "🔍 Checking JSON syntax..."
+	@find . -name "*.json" -not -path "./venv/*" -not -path "./.git/*" | xargs python -m json.tool > /dev/null
+	@echo "✅ JSON linting complete!"
+
+# Auto-fix targets
+.PHONY: lint-fix-python lint-fix-cpp lint-fix-markdown
+
+lint-fix-python:
+	@echo "🔧 Auto-fixing Python code..."
+	@echo "🎨 Formatting with black..."
+	@$(VENV_BLACK) services/ tools/ demos/ research/ validation/
+	@echo "📋 Sorting imports with isort..."
+	@$(VENV_ISORT) services/ tools/ demos/ research/ validation/
+	@echo "✅ Python auto-fix complete!"
+
+lint-fix-cpp:
+	@echo "🔧 Auto-fixing C++ code..."
+	@echo "🎨 Formatting with clang-format..."
+	@find services/holographic-memory/core/native -name "*.cpp" -o -name "*.hpp" -o -name "*.h" | xargs clang-format -i
+	@echo "✅ C++ auto-fix complete!"
+
+lint-fix-markdown:
+	@echo "🔧 Auto-fixing Markdown documentation..."
+	@echo "🎨 Formatting with markdownlint..."
+	@markdownlint --fix documentation/ README.md *.md
+	@echo "✅ Markdown auto-fix complete!"

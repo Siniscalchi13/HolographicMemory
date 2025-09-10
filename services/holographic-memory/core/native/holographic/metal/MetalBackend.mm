@@ -47,14 +47,14 @@ void MetalBackend::load_shaders() {
         // 1. Relative to binary (for installed apps)
         [binaryDir stringByAppendingPathComponent:@"holographic_memory.metal"],
         // 2. Build directory (for development)
-        [binaryDir stringByAppendingPathComponent:@"holographic-fs/native/holographic/build/metal/holographic_memory.metal"],
+        [binaryDir stringByAppendingPathComponent:@"services/core/native/holographic/build/metal/holographic_memory.metal"],
         // 3. Source directory (for development)
-        [binaryDir stringByAppendingPathComponent:@"holographic-fs/native/holographic/metal/holographic_memory.metal"],
+        [binaryDir stringByAppendingPathComponent:@"services/core/native/holographic/metal/holographic_memory.metal"],
         // 4. Current working directory fallbacks
         @"build/metal/holographic_memory.metal",
         @"metal/holographic_memory.metal",
-        @"holographic-fs/native/holographic/build/metal/holographic_memory.metal",
-        @"holographic-fs/native/holographic/metal/holographic_memory.metal"
+        @"services/core/native/holographic/build/metal/holographic_memory.metal",
+        @"services/core/native/holographic/metal/holographic_memory.metal"
     ];
     
     NSString* file = nil;

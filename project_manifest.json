@@ -1,0 +1,60 @@
+{
+  "name": "HolographicMemory",
+  "version": "4.0.0",
+  "description": "Advanced holographic memory system with GPU acceleration and 3D exact recall",
+  "architecture": "SOA",
+  "services": {
+    "holographic-memory": {
+      "type": "core",
+      "port": 8080,
+      "description": "Main holographic memory engine with GPU acceleration"
+    },
+    "orchestrator": {
+      "type": "orchestration",
+      "port": 8000,
+      "description": "Central service orchestration and coordination"
+    },
+    "math-core": {
+      "type": "computation",
+      "port": 8001,
+      "description": "Mathematical computation services"
+    },
+    "router": {
+      "type": "routing",
+      "port": 8002,
+      "description": "Request routing and load balancing"
+    },
+    "telemetry": {
+      "type": "monitoring",
+      "port": 8003,
+      "description": "Monitoring and observability"
+    },
+    "vault": {
+      "type": "storage",
+      "port": 8004,
+      "description": "Secure data storage and retrieval"
+    }
+  },
+  "features": {
+    "gpu_acceleration": true,
+    "metal_support": true,
+    "cuda_support": true,
+    "rocm_support": true,
+    "3d_exact_recall": true,
+    "simdgroup_intrinsics": true,
+    "soa_architecture": true
+  },
+  "performance": {
+    "max_ops_per_sec": "2000000+",
+    "latency_ms": "<1",
+    "accuracy_percent": "99.99",
+    "gpu_backends": ["metal", "cuda", "rocm"]
+  },
+  "dependencies": {
+    "python": ">=3.8",
+    "numpy": ">=1.26",
+    "fastapi": ">=0.110",
+    "uvicorn": ">=0.27",
+    "pybind11": ">=3.0"
+  }
+}

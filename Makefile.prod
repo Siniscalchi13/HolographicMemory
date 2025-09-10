@@ -1,0 +1,107 @@
+# Makefile.prod - Production targets
+
+# Variables
+PY?=python3
+PIP?=$(PY) -m pip
+VENV_DIR?=venv
+VENV_PY?=$(VENV_DIR)/bin/python
+VENV_PIP?=$(VENV_PY) -m pip
+PROD_PORT?=8080
+PROD_HOST?=0.0.0.0
+DOCKER_REGISTRY?=holographicmemory
+VERSION?=$(shell git describe --tags --always --dirty)
+
+# Production targets
+.PHONY: prod-deploy prod-release prod-test prod-benchmark prod-clean prod-docker
+
+prod-deploy:
+	@echo "🚀 Deploying to production..."
+	@echo "🔍 Validating production readiness..."
+	$(MAKE) prod-test
+	@echo "📦 Building production packages..."
+	$(MAKE) prod-build
+	@echo "🐳 Building production Docker images..."
+	$(MAKE) prod-docker
+	@echo "☸️ Deploying to Kubernetes..."
+	@kubectl apply -f deploy/k8s/
+	@echo "✅ Production deployment complete!"
+
+prod-release:
+	@echo "📦 Creating production release..."
+	@echo "🏷️ Version: $(VERSION)"
+	@echo "🔍 Running production tests..."
+	$(MAKE) prod-test
+	@echo "📊 Running production benchmarks..."
+	$(MAKE) prod-benchmark
+	@echo "📦 Building release packages..."
+	@cd services/holographic-memory/core && $(VENV_PY) -m build --sdist --wheel
+	@echo "🐳 Building release Docker images..."
+	@docker build -t $(DOCKER_REGISTRY)/holographic-memory:$(VERSION) .
+	@docker build -t $(DOCKER_REGISTRY)/holographic-memory:latest .
+	@echo "📋 Creating release notes..."
+	@echo "Release $(VERSION) created successfully!" > RELEASE_NOTES.md
+	@echo "✅ Production release $(VERSION) complete!"
+
+prod-test:
+	@echo "🧪 Running production tests..."
+	@echo "🔍 Testing core service..."
+	@cd services/holographic-memory/core && $(VENV_PY) -m pytest -v --tb=short
+	@echo "🌐 Testing API service..."
+	@cd services/holographic-memory/api && $(VENV_PY) -m pytest -v --tb=short
+	@echo "🧮 Testing math-core service..."
+	@cd services/math-core && $(VENV_PY) -m pytest -v --tb=short
+	@echo "🔄 Testing router service..."
+	@cd services/router && $(VENV_PY) -m pytest -v --tb=short
+	@echo "📊 Testing telemetry service..."
+	@cd services/telemetry && $(VENV_PY) -m pytest -v --tb=short
+	@echo "🔒 Testing vault service..."
+	@cd services/vault && $(VENV_PY) -m pytest -v --tb=short
+	@echo "✅ All production tests passed!"
+
+prod-benchmark:
+	@echo "📊 Running production benchmarks..."
+	@echo "🔍 Running GPU performance benchmarks..."
+	@$(VENV_PY) -c "import sys; sys.path.append('services/holographic-memory/core/native/holographic/build'); import holographic_gpu; print('GPU platforms:', holographic_gpu.available_platforms())"
+	@echo "🧮 Running mathematical validation benchmarks..."
+	@$(VENV_PY) tools/validate_accuracy.py
+	@echo "📈 Running enterprise benchmarks..."
+	@$(VENV_PY) tools/run_enterprise_benchmarks.py
+	@echo "✅ Production benchmarks complete!"
+
+prod-build:
+	@echo "🔨 Building production components..."
+	@echo "📦 Building core service..."
+	@cd services/holographic-memory/core && $(VENV_PY) -m build --sdist --wheel
+	@echo "🔧 Building native extensions..."
+	$(MAKE) prod-native
+	@echo "✅ Production build complete!"
+
+prod-native:
+	@echo "🔧 Building native extensions for production..."
+	@which clang++ > /dev/null || (echo "❌ clang++ not found. Install Xcode Command Line Tools: xcode-select --install" && exit 1)
+	@which cmake > /dev/null || (echo "❌ cmake not found. Install with: brew install cmake" && exit 1)
+	@echo "🏗️ Building GPU backend with CMake (Release)..."
+	@cd services/holographic-memory/core/native/holographic && \
+		mkdir -p build && \
+		cd build && \
+		cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_METAL=ON -DBUILD_3D=ON && \
+		make -j$(shell sysctl -n hw.ncpu)
+	@echo "✅ Production native extensions built successfully!"
+
+prod-docker:
+	@echo "🐳 Building production Docker images..."
+	@echo "🏗️ Building main service image..."
+	@docker build -t $(DOCKER_REGISTRY)/holographic-memory:$(VERSION) .
+	@docker build -t $(DOCKER_REGISTRY)/holographic-memory:latest .
+	@echo "🌐 Building API service image..."
+	@docker build -f services/holographic-memory/api/Dockerfile -t $(DOCKER_REGISTRY)/holographic-api:$(VERSION) services/holographic-memory/api/
+	@echo "✅ Production Docker images built successfully!"
+
+prod-clean:
+	@echo "🧹 Cleaning production artifacts..."
+	@rm -rf **/__pycache__ build dist .pytest_cache
+	@rm -rf services/holographic-memory/core/*.egg-info
+	@rm -rf services/holographic-memory/core/native/holographic/build
+	@rm -rf htmlcov .coverage
+	@docker system prune -f
+	@echo "✅ Production cleanup complete!"

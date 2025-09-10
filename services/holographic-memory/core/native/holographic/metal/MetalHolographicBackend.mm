@@ -33,7 +33,7 @@ bool MetalHolographicBackend::initialize() {
 
 void MetalHolographicBackend::load_shader_library() {
     NS::Error* error = nullptr;
-    auto path = NS::String::string("holographic-fs/native/holographic/metal/holographic_kernels.metal", NS::UTF8StringEncoding);
+    auto path = NS::String::string("services/core/native/holographic/metal/holographic_kernels.metal", NS::UTF8StringEncoding);
     auto src = NS::String::stringWithContentsOfFile(path, NS::UTF8StringEncoding, nullptr);
     if (!src) return;
     library_ = device_->newLibrary(src, nullptr, &error);
