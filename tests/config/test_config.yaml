@@ -1,0 +1,88 @@
+# Enhanced enterprise test configuration
+test_suite:
+  name: "HolographicMemory Enterprise Test Suite"
+  version: "1.0.0"
+  description: "Comprehensive enterprise-grade testing for SOA system"
+
+logging:
+  level: INFO
+  handlers:
+    - type: file
+      filename: tests/reports/logs/test_execution.log
+      level: INFO
+      max_bytes: 10485760
+      backup_count: 5
+    - type: file
+      filename: tests/reports/logs/performance.log
+      level: INFO
+      max_bytes: 10485760
+      backup_count: 5
+    - type: file
+      filename: tests/reports/logs/security.log
+      level: WARNING
+      max_bytes: 10485760
+      backup_count: 5
+    - type: file
+      filename: tests/reports/logs/audit.log
+      level: INFO
+      max_bytes: 10485760
+      backup_count: 5
+    - type: file
+      filename: tests/reports/logs/compliance.log
+      level: INFO
+      max_bytes: 10485760
+      backup_count: 5
+
+reporting:
+  html:
+    enabled: true
+    output_dir: tests/reports/html
+  json:
+    enabled: true
+    output_dir: tests/reports/json
+  coverage:
+    enabled: true
+    output_dir: tests/reports/coverage
+    threshold: 80
+    html_report: true
+
+performance:
+  load_testing:
+    concurrent_users: 1000
+    duration_minutes: 30
+    ramp_up_seconds: 60
+  stress_testing:
+    max_users: 2000
+    step_size: 100
+    step_duration_seconds: 300
+  endurance_testing:
+    duration_hours: 24
+    check_interval_minutes: 15
+
+security:
+  vulnerability_scanning:
+    enabled: true
+    tools: ["bandit", "pip-audit"]
+    severity_threshold: "HIGH"
+
+compliance:
+  regulations: ["GDPR", "SOX", "HIPAA"]
+  audit_trail:
+    enabled: true
+    retention_days: 2555
+  data_retention:
+    enabled: true
+    default_retention_days: 365
+
+chaos:
+  failure_injection:
+    enabled: true
+    failure_rate: 0.1
+  network_partitions:
+    enabled: true
+    partition_duration_seconds: 30
+  resource_exhaustion:
+    enabled: true
+    cpu_threshold: 0.9
+    memory_threshold: 0.9
+    disk_threshold: 0.9

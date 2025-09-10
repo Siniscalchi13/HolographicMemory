@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="grid">
+  <div class="card"><h3>Total Tests</h3><div class="value">{{ summary.total_tests }}</div></div>
+  <div class="card"><h3>Passed</h3><div class="value">{{ summary.passed }}</div></div>
+  <div class="card"><h3>Failed</h3><div class="value">{{ summary.failed }}</div></div>
+  <div class="card"><h3>Perf Events</h3><div class="value">{{ summary.perf_events }}</div></div>
+  <div class="card"><h3>Security Events</h3><div class="value">{{ summary.security_events }}</div></div>
+  <div class="card"><h3>Compliance</h3><div class="value">{{ summary.compliance_events }}</div></div>
+  <div class="card"><h3>Coverage</h3><div class="value">{{ summary.coverage }}%</div></div>
+</div>
+<p>See detailed pages: test_execution.html, performance_analysis.html, security_assessment.html, compliance_report.html, coverage_report.html</p>
+{% endblock %}
+

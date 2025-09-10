@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Performance Analysis</h2>
+<div>
+  {% for item in logs %}
+    <div class="card">
+      <div><strong>{{ item.metric or item.get('message','metric') }}</strong></div>
+      <div>Value: {{ item.value or '' }} {{ item.unit or '' }}</div>
+      <div class="timestamp">{{ item.timestamp or '' }}</div>
+    </div>
+  {% else %}
+    <p>No performance metrics recorded.</p>
+  {% endfor %}
+</div>
+{% endblock %}
+

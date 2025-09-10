@@ -1,0 +1,6 @@
+chaos:
+  network_partition_probability: 0.1
+  cpu_throttle_pct: 50
+  mem_pressure_pct: 70
+  fault_injection_rate: 0.05
+

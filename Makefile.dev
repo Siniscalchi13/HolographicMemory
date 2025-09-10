@@ -123,6 +123,15 @@ dev-test:
 	@cd services/vault && $(VENV_PY) -m pytest -v
 	@echo "✅ All development tests passed!"
 
+.PHONY: dev-enterprise-tests
+dev-enterprise-tests:
+	@echo "🏢 Running enterprise test suite (unit, integration, contract, e2e)..."
+	@$(VENV_PY) -m pip install -e services/holographic-memory/core
+	@$(VENV_PIP) install .[dev,enterprise]
+	@$(VENV_PY) -m pytest -m "unit or integration or contract or e2e" --html=tests/reports/pytest_enterprise.html --self-contained-html -q
+	@echo "📊 Coverage report: tests/reports/coverage/index.html"
+	@echo "✅ Enterprise tests complete."
+
 dev-build:
 	@echo "🔨 Building development components..."
 	@echo "📦 Building core service..."

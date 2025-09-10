@@ -1,0 +1,9 @@
+auth:
+  require_auth: false
+  allowed_roles:
+    - admin
+    - user
+scans:
+  enable_bandit: true
+  enable_pip_audit: true
+

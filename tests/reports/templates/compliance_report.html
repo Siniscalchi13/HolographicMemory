@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Compliance Report</h2>
+<div>
+  {% for item in logs %}
+    <div class="card">
+      <div><strong>{{ item.regulation or 'REG' }} - {{ item.requirement or '' }}</strong></div>
+      <div>Status: {{ item.status or 'unknown' }}</div>
+      <div class="timestamp">{{ item.timestamp or '' }}</div>
+    </div>
+  {% else %}
+    <p>No compliance validations recorded.</p>
+  {% endfor %}
+</div>
+{% endblock %}
+

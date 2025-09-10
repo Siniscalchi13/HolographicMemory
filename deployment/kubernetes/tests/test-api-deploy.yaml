@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hmc-api-test
+  namespace: holographic-tests
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hmc-api-test
+  template:
+    metadata:
+      labels:
+        app: hmc-api-test
+    spec:
+      containers:
+        - name: api
+          image: python:3.11-slim
+          command: ["bash", "-lc", "pip install -U pip && pip install -e services/holographic-memory/core .[dev] && uvicorn services.holographic-memory.api.app_soa:app --host 0.0.0.0 --port 8081"]
+          ports:
+            - containerPort: 8081
+          env:
+            - name: HOLOGRAPHIC_USE_GPU
+              value: "false"
+            - name: HOLOGRAPHIC_DATA_DIR
+              value: "/data"
+          volumeMounts:
+            - mountPath: /data
+              name: data
+      volumes:
+        - name: data
+          emptyDir: {}
+

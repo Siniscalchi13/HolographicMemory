@@ -1,0 +1,7 @@
+targets:
+  concurrent_users: 1000
+  max_rps: 5000
+  cpu_util_pct: 85
+  mem_util_pct: 80
+  gpu_util_pct: 90
+

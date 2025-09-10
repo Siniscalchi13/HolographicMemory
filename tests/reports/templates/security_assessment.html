@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Security Assessment</h2>
+<div>
+  {% for item in logs %}
+    <div class="card">
+      <div><strong>{{ item.event or 'security_event' }}</strong></div>
+      <div>Severity: {{ item.severity or 'INFO' }}</div>
+      <div class="timestamp">{{ item.timestamp or '' }}</div>
+    </div>
+  {% else %}
+    <p>No security events recorded.</p>
+  {% endfor %}
+</div>
+{% endblock %}
+

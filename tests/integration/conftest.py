@@ -28,5 +28,8 @@ class _FakeMemory:
 
 @pytest.fixture(autouse=True, scope="session")
 def _patch_memory(monkeypatch: pytest.MonkeyPatch) -> None:
-    import services.orchestrator.orchestrator as orch
+    try:
+        import services.orchestrator.orchestrator as orch
+    except Exception:
+        import services.orchestrator.orchestrator as orch  # type: ignore[no-redef]
     monkeypatch.setattr(orch, "HolographicMemory", _FakeMemory, raising=True)

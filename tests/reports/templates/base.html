@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title or 'Enterprise Test Report' }}</title>
+    <link rel="stylesheet" href="assets/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>{{ title or 'Enterprise Test Report' }}</h1>
+        <div class="timestamp">Generated: {{ timestamp }}</div>
+      </div>
+      {% block content %}{% endblock %}
+    </div>
+  </body>
+  <script>console.log('Enterprise Report Loaded');</script>
+</html>
+
