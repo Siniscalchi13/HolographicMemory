@@ -384,7 +384,7 @@
     <!-- Full-width SmartHaus Header -->
     <header class="page-header">
       <div class="header-container">
-        <img src="/assets/images/smarthaus-logo-light.svg" alt="SmartHaus" class="logo">
+        <img src="/assets/images/sh-logo-dark.svg" alt="SmartHaus" class="logo">
         <nav class="main-nav">
           <a id="nav-dashboard" href="#">Dashboard</a>
           <a id="nav-terminal" href="#">Terminal</a>
@@ -457,6 +457,11 @@
     <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
     <script>
+        // Authentication check
+        if (sessionStorage.getItem('soa_authenticated') !== 'true') {
+            window.location.href = '/soa_login.html';
+        }
+
         let apiBaseUrl = 'http://localhost:8085';
         let isConnected = false;
         let ws; let metricsWs; let term; let fitAddon;

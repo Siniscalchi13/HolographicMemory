@@ -1,63 +1,63 @@
 {
   "service_ports": {
-    "main_dashboard": 8088,
-    "api": 8091,
-    "terminal_service": 8093,
-    "terminal_interface": 8094,
-    "metrics_service": 8095,
-    "analytics_dashboard": 8096,
-    "api_status": 8097
+    "main_dashboard": 8085,
+    "api": 8086,
+    "terminal_service": 8087,
+    "terminal_interface": 8088,
+    "metrics_service": 8089,
+    "analytics_dashboard": 8090,
+    "api_status": 8091
   },
-  "timestamp": 1757600917.535716,
+  "timestamp": 1757608737.1016011,
   "services": {
     "main_dashboard": {
       "name": "SOA Dashboard Hub",
-      "port": 8088,
+      "port": 8085,
       "running": true,
-      "pid": 71180,
-      "started_at": 1757600906.4698062
+      "pid": 19361,
+      "started_at": 1757608724.911602
     },
     "api": {
       "name": "API Server",
-      "port": 8091,
+      "port": 8086,
       "running": true,
-      "pid": 71281,
-      "started_at": 1757600909.4808698
+      "pid": 19496,
+      "started_at": 1757608729.04579
     },
     "terminal_service": {
       "name": "Terminal Service",
-      "port": 8093,
+      "port": 8087,
       "running": true,
-      "pid": 71406,
-      "started_at": 1757600911.492492
+      "pid": 19691,
+      "started_at": 1757608731.055715
     },
     "terminal_interface": {
       "name": "Terminal Interface",
-      "port": 8094,
+      "port": 8088,
       "running": true,
-      "pid": 71495,
-      "started_at": 1757600912.508679
+      "pid": 19789,
+      "started_at": 1757608732.069781
     },
     "metrics_service": {
       "name": "Metrics Service",
-      "port": 8095,
+      "port": 8089,
       "running": true,
-      "pid": 71557,
-      "started_at": 1757600914.516261
+      "pid": 20048,
+      "started_at": 1757608734.078877
     },
     "analytics_dashboard": {
       "name": "Analytics Dashboard",
-      "port": 8096,
+      "port": 8090,
       "running": true,
-      "pid": 71655,
-      "started_at": 1757600916.523395
+      "pid": 20182,
+      "started_at": 1757608736.0908642
     },
     "api_status": {
       "name": "API Status Page",
-      "port": 8097,
+      "port": 8091,
       "running": true,
-      "pid": 71764,
-      "started_at": 1757600917.535708
+      "pid": 20294,
+      "started_at": 1757608737.1015968
     }
   }
 }

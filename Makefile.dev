@@ -112,6 +112,12 @@ dev-verify:
 	@echo "🎊 YOUR HOLOGRAPHIC MEMORY SOA IS READY TO GO! 🎊"
 	@echo "================================================================"
 
+# Quick, post-start link verification (expects SOA running)
+.PHONY: soa-verify
+soa-verify:
+	@echo "🔎 Verifying SOA hub endpoints..."
+	@$(VENV_PY) tools/soa_verify.py
+
 # ┌─────────────────────────────────────────────────────────────────────────────┐
 # │ Process Management                                                         │
 # └─────────────────────────────────────────────────────────────────────────────┘
@@ -326,7 +332,7 @@ dev-clean:
 	@rm -rf services/holographic-memory/core/native/holographic/build
 	@rm -rf htmlcov .coverage
 	@echo "   Cleaning SOA artifacts..."
-	@rm -f soa_config.json
+	@rm -f soa_config.json soa_ports.json
 	@rm -rf dashboard/__pycache__
 	@rm -rf services/dashboard/__pycache__
 	@echo "   Cleaning test artifacts..."
@@ -361,7 +367,7 @@ clean-all:
 	@rm -rf htmlcov .coverage
 	@echo ""
 	@echo "🌐 Step 5: Cleaning SOA artifacts..."
-	@rm -f soa_config.json
+	@rm -f soa_config.json soa_ports.json
 	@rm -rf dashboard/__pycache__
 	@rm -rf services/dashboard/__pycache__
 	@echo ""

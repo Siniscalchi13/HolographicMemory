@@ -11,6 +11,8 @@ import json
 import time
 from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from urllib.parse import urlparse
+import requests
 import logging
 
 # Configure logging
@@ -26,12 +28,31 @@ class SOAConfigHandler(BaseHTTPRequestHandler):
             self.serve_soa_config()
         elif self.path == '/soa_dashboard.html':
             self.serve_dashboard()
+        elif self.path == '/soa_login.html':
+            self.serve_login()
         elif self.path == '/sh-logo-square-dark.svg':
             self.serve_logo()
         elif self.path.startswith('/assets/images/sh-logo-dark.svg'):
-            self.serve_assets_logo()
+            self.serve_sh_logo_dark()
         elif self.path.startswith('/assets/images/smarthaus-logo-light.svg'):
             self.serve_smarthaus_logo()
+        elif self.path == '/terminal':
+            if not self._is_authenticated():
+                return self._redirect('/soa_login.html')
+            self.proxy_service('terminal_interface', '/')
+        elif self.path == '/analytics':
+            if not self._is_authenticated():
+                return self._redirect('/soa_login.html')
+            self.proxy_service('analytics_dashboard', '/')
+        elif self.path == '/status':
+            if not self._is_authenticated():
+                return self._redirect('/soa_login.html')
+            self.proxy_service('api_status', '/')
+        elif self.path.startswith('/docs'):
+            if not self._is_authenticated():
+                return self._redirect('/soa_login.html')
+            # Proxy /docs and any subpaths to API service
+            self.proxy_service('api', self.path)
         else:
             self.send_error(404, "Not Found")
 
@@ -65,6 +86,34 @@ class SOAConfigHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 logger.error("Service control error: %s", e)
                 self.send_error(500, "Internal Server Error")
+        elif self.path == '/login':
+            # Trivial login handler (dev). In prod, replace with real auth.
+            length = int(self.headers.get('Content-Length', 0) or 0)
+            body = self.rfile.read(length).decode('utf-8') if length else ''
+            try:
+                data = json.loads(body) if body else {}
+            except json.JSONDecodeError:
+                data = {}
+            username = data.get('username')
+            password = data.get('password')
+            if username == 'admin' and password == 'soa2024':
+                # Set cookie and redirect
+                self.send_response(200)
+                self.send_header('Set-Cookie', 'soa_auth=1; Path=/; HttpOnly; SameSite=Lax')
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'ok': True}).encode('utf-8'))
+            else:
+                self.send_response(401)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'ok': False, 'error': 'Invalid credentials'}).encode('utf-8'))
+        elif self.path == '/logout':
+            self.send_response(200)
+            self.send_header('Set-Cookie', 'soa_auth=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT')
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'ok': True}).encode('utf-8'))
         else:
             self.send_error(404, "Not Found")
     
@@ -104,34 +153,23 @@ class SOAConfigHandler(BaseHTTPRequestHandler):
     
     def _build_navigation_urls(self, registry):
         """Build navigation URLs from registry for easy frontend consumption"""
-        nav_urls = {}
         services = registry.get("services", {})
-        
-        # Main dashboard
-        if "main_dashboard" in services:
-            nav_urls["dashboard"] = services["main_dashboard"].get("url")
-        
-        # Terminal interface
-        if "terminal_interface" in services:
-            nav_urls["terminal"] = services["terminal_interface"].get("url")
-        
-        # Analytics dashboard
-        if "analytics_dashboard" in services:
-            nav_urls["analytics"] = services["analytics_dashboard"].get("url")
-        
-        # API status page
-        if "api_status" in services:
-            nav_urls["status"] = services["api_status"].get("url")
-        
-        # API docs
-        if "api" in services:
-            nav_urls["docs"] = services["api"].get("docs_url")
-        
-        return nav_urls
+        # Build hub base from Host header
+        host = self.headers.get('Host') or f"localhost:{getattr(self.server, 'server_port', 8080)}"
+        base = f"http://{host}"
+        return {
+            'dashboard': f"{base}/soa_dashboard.html",
+            'terminal' : f"{base}/terminal",
+            'analytics': f"{base}/analytics",
+            'status'   : f"{base}/status",
+            'docs'     : f"{base}/docs",
+        }
     
     def serve_dashboard(self):
         """Serve the main dashboard HTML"""
         try:
+            if not self._is_authenticated():
+                return self._redirect('/soa_login.html')
             dashboard_file = Path("soa_dashboard.html")
             if dashboard_file.exists():
                 with open(dashboard_file, 'r', encoding='utf-8') as f:
@@ -146,6 +184,25 @@ class SOAConfigHandler(BaseHTTPRequestHandler):
                 
         except Exception as e:
             logger.error("Error serving dashboard: %s", e)
+            self.send_error(500, "Internal Server Error")
+    
+    def serve_login(self):
+        """Serve the login page HTML"""
+        try:
+            login_file = Path("soa_login.html")
+            if login_file.exists():
+                with open(login_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(content.encode('utf-8'))
+            else:
+                self.send_error(404, "Login page not found")
+                
+        except Exception as e:
+            logger.error("Error serving login page: %s", e)
             self.send_error(500, "Internal Server Error")
     
     def serve_logo(self):
@@ -203,9 +260,64 @@ class SOAConfigHandler(BaseHTTPRequestHandler):
             logger.error("Error serving SmartHaus logo: %s", e)
             self.send_error(500, "Internal Server Error")
     
+    def serve_sh_logo_dark(self):
+        """Serve the SmartHaus dark logo from /assets/images"""
+        try:
+            logo_path = Path("assets/images/sh-logo-dark.svg")
+            if logo_path.exists():
+                with open(logo_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+
+                self.send_response(200)
+                self.send_header('Content-Type', 'image/svg+xml')
+                self.end_headers()
+                self.wfile.write(content.encode('utf-8'))
+            else:
+                self.send_error(404, "Logo not found")
+        except Exception as e:
+            logger.error("Error serving SmartHaus dark logo: %s", e)
+            self.send_error(500, "Internal Server Error")
+    
     def log_message(self, format, *args):
         """Override to use our logger"""
         logger.info(format % args)
+
+    # --- Helpers ---
+    def _is_authenticated(self) -> bool:
+        cookies = self.headers.get('Cookie', '')
+        return 'soa_auth=1' in cookies
+
+    def _redirect(self, path: str):
+        self.send_response(302)
+        self.send_header('Location', path)
+        self.end_headers()
+
+    def _get_service_port(self, name: str) -> int | None:
+        try:
+            with open('soa_config.json', 'r', encoding='utf-8') as f:
+                cfg = json.load(f)
+            return cfg.get('service_ports', {}).get(name)
+        except Exception:
+            return None
+
+    def proxy_service(self, service_name: str, upstream_path: str):
+        port = self._get_service_port(service_name)
+        if not port:
+            self.send_error(502, f"Service {service_name} not available")
+            return
+        url = f"http://localhost:{port}{upstream_path}"
+        try:
+            # Pass through simple GET proxy
+            resp = requests.get(url, timeout=5)
+            self.send_response(resp.status_code)
+            # Basic content-type passthrough
+            ctype = resp.headers.get('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Type', ctype)
+            self.end_headers()
+            self.wfile.write(resp.content)
+        except requests.RequestException as e:
+            logger.error("Proxy error for %s to %s: %s", service_name, url, e)
+            self.send_error(502, "Bad Gateway")
 
 def run_config_server(port=8080):
     """Run the SOA config server"""

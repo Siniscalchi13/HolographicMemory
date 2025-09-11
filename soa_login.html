@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOA Dashboard Login</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #FAFAFA;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-container {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            border: 1px solid #E4E4E7;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .logo h1 {
+            color: #000120;
+            font-size: 2rem;
+            font-weight: 600;
+        }
+
+        .logo p {
+            color: #52525B;
+            margin-top: 0.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #111827;
+            font-weight: 500;
+        }
+
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #E4E4E7;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        input[type="text"]:focus, input[type="password"]:focus {
+            outline: none;
+            border-color: #6366F1;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 0.75rem;
+            background: #6366F1;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .login-btn:hover {
+            background: #4F46E5;
+            transform: translateY(-1px);
+        }
+
+        .error {
+            background: #FEF2F2;
+            color: #DC2626;
+            padding: 0.75rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            display: none;
+            border: 1px solid #FECACA;
+        }
+
+        .info {
+            background: #EFF6FF;
+            color: #1D4ED8;
+            padding: 0.75rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            border: 1px solid #BFDBFE;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 2rem;
+            color: #52525B;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo">
+            <img src="/assets/images/sh-logo-dark.svg" alt="SmartHaus" style="height: 60px; margin-bottom: 1rem;">
+            <h1>SOA Dashboard</h1>
+            <p>HolographicMemory System</p>
+        </div>
+
+        <div class="error" id="error-message"></div>
+        
+        <div class="info">
+            <strong>Default Credentials:</strong><br>
+            Username: <code>admin</code><br>
+            Password: <code>soa2024</code>
+        </div>
+
+        <form id="login-form">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            
+            <button type="submit" class="login-btn">Login to Dashboard</button>
+        </form>
+
+        <div class="footer">
+            <p>Secure access to SOA services monitoring</p>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('error-message');
+            try {
+                const resp = await fetch('/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username, password})});
+                if (resp.ok) {
+                    sessionStorage.setItem('soa_authenticated', 'true');
+                    sessionStorage.setItem('soa_username', username);
+                    window.location.href = 'soa_dashboard.html';
+                } else {
+                    errorDiv.textContent = 'Invalid username or password';
+                    errorDiv.style.display = 'block';
+                    document.getElementById('password').value = '';
+                }
+            } catch (e) {
+                errorDiv.textContent = 'Login request failed';
+                errorDiv.style.display = 'block';
+            }
+        });
+
+        // Check if already authenticated
+        if (sessionStorage.getItem('soa_authenticated') === 'true') {
+            window.location.href = 'soa_dashboard.html';
+        }
+    </script>
+</body>
+</html>
