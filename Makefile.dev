@@ -3,7 +3,7 @@
 # Variables
 PY?=python3
 PIP?=$(PY) -m pip
-VENV_DIR?=venv
+VENV_DIR?=venv313
 VENV_PY?=$(shell pwd)/$(VENV_DIR)/bin/python
 VENV_PIP?=$(VENV_PY) -m pip
 DEV_HOST?=0.0.0.0
@@ -34,7 +34,7 @@ dev:
 	@echo "✅ Development environment setup complete!"
 	@echo ""
 	@echo "🎯 Next step: Activate virtual environment and run verification"
-	@echo "   source venv/bin/activate"
+	@echo "   source venv313/bin/activate"
 	@echo "   make dev-verify"
 
 dev-verify:
@@ -104,7 +104,7 @@ dev-all:
 	@echo ""
 	@echo "🚀 Step 5: Launching development system..."
 	@echo "⚠️  Note: You need to activate the virtual environment first:"
-	@echo "   source venv/bin/activate"
+	@echo "   source venv313/bin/activate"
 	@echo "   make launch-dev"
 
 dev-test:
