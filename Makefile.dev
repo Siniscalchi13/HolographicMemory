@@ -12,7 +12,7 @@ VENV_DIR        ?= venv313
 VENV_PY         ?= $(shell pwd)/$(VENV_DIR)/bin/python
 VENV_PIP        ?= $(VENV_PY) -m pip
 DEV_HOST        ?= 0.0.0.0
-DEV_PORT        ?= $(shell python3 scripts/find_port.py)
+DEV_PORT        ?= $(shell $(VENV_PY) scripts/find_port.py)
 
 # ┌─────────────────────────────────────────────────────────────────────────────┐
 # │ Target Declarations                                                        │
@@ -30,15 +30,11 @@ dev:
 	$(PY) -m venv $(VENV_DIR)
 	@echo "⬆️ Upgrading pip, wheel, setuptools..."
 	$(VENV_PIP) install --upgrade pip wheel setuptools
-	@echo "📚 Installing API dependencies..."
-	$(VENV_PIP) install -r services/holographic-memory/api/requirements.txt
-	@echo "🔧 Installing core service..."
-	$(VENV_PIP) install -e services/holographic-memory/core
+	@echo "🔧 Installing project dependencies from pyproject.toml..."
+	$(VENV_PIP) install -e .
 	@echo "🧪 Installing development dependencies..."
 	$(VENV_PIP) install pytest pytest-cov pytest-asyncio
 	$(VENV_PIP) install black flake8 isort mypy
-	@echo "📊 Installing dashboard dependencies..."
-	$(VENV_PIP) install -r services/dashboard/requirements.txt
 	@echo "🔨 Building native extensions..."
 	$(MAKE) dev-native
 	@echo "✅ Development environment setup complete!"
@@ -79,7 +75,7 @@ dev-verify:
 	@echo "🌌 Testing GPU acceleration..."
 	@$(VENV_PY) -c "import sys; sys.path.append('services/holographic-memory/core/native/holographic/build'); import holographic_gpu; print('GPU platforms:', holographic_gpu.available_platforms())"
 	@echo "🧪 Testing core service import..."
-	@$(VENV_PY) -c "import holographicfs; print('✅ Core service imported successfully')"
+	@$(VENV_PY) -c "import sys; sys.path.append('services/holographic-memory/core'); import holographicfs; print('✅ Core service imported successfully')"
 	@echo "🧮 Testing math-core service import..."
 	@$(VENV_PY) -c "import sys; sys.path.append('services/math-core'); import optimizer; print('✅ Math-core service imported successfully')"
 	@echo "🔄 Testing router service import..."
@@ -150,6 +146,11 @@ soa-kill:
 	@-pkill -f "app_soa" 2>/dev/null || true
 	@-pkill -f "http.server" 2>/dev/null || true
 	@-pkill -f "app.py" 2>/dev/null || true
+	@-pkill -f "soa_config_server.py" 2>/dev/null || true
+	@-pkill -f "services.metrics.server" 2>/dev/null || true
+	@-pkill -f "services.terminal.terminal_server" 2>/dev/null || true
+	@-pkill -f "uvicorn" 2>/dev/null || true
+	@-pkill -f "flask" 2>/dev/null || true
 	@echo "✅ All processes killed"
 
 # ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -166,7 +167,7 @@ dev-launch:
 	@$(VENV_PY) main.py --port 8085 &
 	@sleep 3
 	@echo "Starting web dashboard server..."
-	@cd services/dashboard/web && python3 -m http.server 8086 &
+	@cd services/dashboard/web && $(VENV_PY) -m http.server 8086 &
 	@sleep 2
 	@echo "✅ Dashboard ready! Opening browser..."
 	@open http://localhost:8086 || xdg-open http://localhost:8086 || echo "Please open http://localhost:8086 in your browser"

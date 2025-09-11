@@ -615,6 +615,7 @@
             }
 
             const ports = serviceConfig.service_ports;
+            const navUrls = serviceConfig.navigation_urls || {};
 
             // Update API Server
             if (ports.api) {
@@ -622,16 +623,16 @@
                 document.getElementById('api-link').href = `http://localhost:${ports.api}`;
                 document.getElementById('api-docs-link').href = `http://localhost:${ports.api}/docs`;
                 const docs = document.getElementById('nav-docs');
-                if (docs) docs.href = `http://localhost:${ports.api}/docs`;
+                if (docs) docs.href = navUrls.docs || `http://localhost:${ports.api}/docs`;
                 setStatus('api', true);
                 setUptime('api');
                 probeLatency('api', ports.api, '/healthz');
             }
 
             // Update Dashboard link (self-reference)
-            if (ports.main_dashboard) {
+            if (navUrls.dashboard) {
                 const dashboard = document.getElementById('nav-dashboard');
-                if (dashboard) dashboard.href = `http://localhost:${ports.main_dashboard}/soa_dashboard.html`;
+                if (dashboard) dashboard.href = navUrls.dashboard;
             }
 
             // Update Terminal Interface
@@ -639,7 +640,7 @@
                 document.getElementById('terminal_interface-port').textContent = ports.terminal_interface;
                 document.getElementById('terminal_interface-link').href = `http://localhost:${ports.terminal_interface}`;
                 const term = document.getElementById('nav-terminal');
-                if (term) term.href = `http://localhost:${ports.terminal_interface}`;
+                if (term) term.href = navUrls.terminal || `http://localhost:${ports.terminal_interface}`;
                 setStatus('terminal_interface', true);
                 setUptime('terminal_interface');
                 probeLatency('terminal_interface', ports.terminal_interface, '/');
@@ -650,7 +651,7 @@
                 document.getElementById('analytics_dashboard-port').textContent = ports.analytics_dashboard;
                 document.getElementById('analytics_dashboard-link').href = `http://localhost:${ports.analytics_dashboard}`;
                 const ana = document.getElementById('nav-analytics');
-                if (ana) ana.href = `http://localhost:${ports.analytics_dashboard}`;
+                if (ana) ana.href = navUrls.analytics || `http://localhost:${ports.analytics_dashboard}`;
                 setStatus('analytics_dashboard', true);
                 setUptime('analytics_dashboard');
                 probeLatency('analytics_dashboard', ports.analytics_dashboard, '/');
@@ -661,7 +662,7 @@
                 document.getElementById('api_status-port').textContent = ports.api_status;
                 document.getElementById('api_status-link').href = `http://localhost:${ports.api_status}`;
                 const st = document.getElementById('nav-status');
-                if (st) st.href = `http://localhost:${ports.api_status}`;
+                if (st) st.href = navUrls.status || `http://localhost:${ports.api_status}`;
                 setStatus('api_status', true);
                 setUptime('api_status');
                 probeLatency('api_status', ports.api_status, '/');

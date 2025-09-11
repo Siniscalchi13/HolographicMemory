@@ -66,8 +66,8 @@ class SOAManager:
                 startup_delay=2.0
             ),
             "terminal_interface": ServiceConfig(
-                name="Terminal Interface", 
-                command=f"cd {self.project_root}/services/dashboard/web && python3 -m http.server {{port}}",
+                name="Terminal Interface",
+                command=f"cd {self.project_root}/services/dashboard/web && {self.venv_python} -m http.server {{port}}",
                 health_check_path="/",
                 startup_delay=1.0
             ),
@@ -86,7 +86,7 @@ class SOAManager:
             ),
             "api_status": ServiceConfig(
                 name="API Status Page",
-                command=f"cd {self.project_root}/services/holographic-memory/api/static && python3 -m http.server {{port}}",
+                command=f"cd {self.project_root}/services/holographic-memory/api/static && {self.venv_python} -m http.server {{port}}",
                 health_check_path="/",
                 startup_delay=1.0,
                 required=False

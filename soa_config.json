@@ -1,0 +1,63 @@
+{
+  "service_ports": {
+    "main_dashboard": 8085,
+    "api": 8086,
+    "terminal_service": 8087,
+    "terminal_interface": 8088,
+    "metrics_service": 8089,
+    "analytics_dashboard": 8090,
+    "api_status": 8091
+  },
+  "timestamp": 1757600076.429746,
+  "services": {
+    "main_dashboard": {
+      "name": "SOA Dashboard Hub",
+      "port": 8085,
+      "running": true,
+      "pid": 22535,
+      "started_at": 1757600064.362582
+    },
+    "api": {
+      "name": "API Server",
+      "port": 8086,
+      "running": true,
+      "pid": 22645,
+      "started_at": 1757600068.379898
+    },
+    "terminal_service": {
+      "name": "Terminal Service",
+      "port": 8087,
+      "running": true,
+      "pid": 22811,
+      "started_at": 1757600070.3876731
+    },
+    "terminal_interface": {
+      "name": "Terminal Interface",
+      "port": 8088,
+      "running": true,
+      "pid": 22894,
+      "started_at": 1757600071.398766
+    },
+    "metrics_service": {
+      "name": "Metrics Service",
+      "port": 8089,
+      "running": true,
+      "pid": 22956,
+      "started_at": 1757600073.40752
+    },
+    "analytics_dashboard": {
+      "name": "Analytics Dashboard",
+      "port": 8090,
+      "running": true,
+      "pid": 23036,
+      "started_at": 1757600075.4191658
+    },
+    "api_status": {
+      "name": "API Status Page",
+      "port": 8091,
+      "running": true,
+      "pid": 23123,
+      "started_at": 1757600076.4297411
+    }
+  }
+}

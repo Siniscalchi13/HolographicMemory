@@ -1,60 +1,60 @@
 {
-  "timestamp": "2025-09-11T09:27:13.897556",
+  "timestamp": "2025-09-11T10:14:36.430142",
   "registry_version": "1.0",
   "services": {
     "main_dashboard": {
       "name": "SOA Dashboard Hub",
-      "port": 8110,
+      "port": 8085,
       "running": true,
-      "started_at": 1757597222.818614,
-      "url": "http://localhost:8110/soa_dashboard.html",
-      "api_url": "http://localhost:8110/api/soa-config"
+      "started_at": 1757600064.362582,
+      "url": "http://localhost:8085/soa_dashboard.html",
+      "api_url": "http://localhost:8085/api/soa-config"
     },
     "api": {
       "name": "API Server",
-      "port": 8113,
+      "port": 8086,
       "running": true,
-      "started_at": 1757597225.829279,
-      "url": "http://localhost:8113",
-      "docs_url": "http://localhost:8113/docs",
-      "health_url": "http://localhost:8113/healthz"
+      "started_at": 1757600068.379898,
+      "url": "http://localhost:8086",
+      "docs_url": "http://localhost:8086/docs",
+      "health_url": "http://localhost:8086/healthz"
     },
     "terminal_service": {
       "name": "Terminal Service",
-      "port": 8115,
+      "port": 8087,
       "running": true,
-      "started_at": 1757597227.838557,
-      "ws_url": "ws://localhost:8115/ws",
-      "health_url": "http://localhost:8115/healthz"
+      "started_at": 1757600070.3876731,
+      "ws_url": "ws://localhost:8087/ws",
+      "health_url": "http://localhost:8087/healthz"
     },
     "terminal_interface": {
       "name": "Terminal Interface",
-      "port": 8116,
+      "port": 8088,
       "running": true,
-      "started_at": 1757597228.854866,
-      "url": "http://localhost:8116"
+      "started_at": 1757600071.398766,
+      "url": "http://localhost:8088"
     },
     "metrics_service": {
       "name": "Metrics Service",
-      "port": 8117,
+      "port": 8089,
       "running": true,
-      "started_at": 1757597230.869077,
-      "ws_url": "ws://localhost:8117/ws",
-      "health_url": "http://localhost:8117/healthz"
+      "started_at": 1757600073.40752,
+      "ws_url": "ws://localhost:8089/ws",
+      "health_url": "http://localhost:8089/healthz"
     },
     "analytics_dashboard": {
       "name": "Analytics Dashboard",
-      "port": 8118,
+      "port": 8090,
       "running": true,
-      "started_at": 1757597232.8848388,
-      "url": "http://localhost:8118"
+      "started_at": 1757600075.4191658,
+      "url": "http://localhost:8090"
     },
     "api_status": {
       "name": "API Status Page",
-      "port": 8119,
+      "port": 8091,
       "running": true,
-      "started_at": 1757597233.897027,
-      "url": "http://localhost:8119"
+      "started_at": 1757600076.4297411,
+      "url": "http://localhost:8091"
     }
   }
 }
