@@ -617,6 +617,17 @@
             ws.send(payload);
         }
 
+        // Listen for messages from main dashboard
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.type === 'executeCommand') {
+                const command = event.data.command;
+                console.log('Received command from main dashboard:', command);
+                
+                // Execute the command in the terminal using the same mapping
+                executeCommand(command);
+            }
+        });
+
         // Connect to metrics WebSocket for live data
         async function connectMetricsWebSocket() {
             try {
@@ -742,8 +753,25 @@
 
         async function executeCommand(cmd = null) {
             const input = document.getElementById('commandInput');
-            const command = (cmd || (input ? input.value.trim() : '')).trim();
+            let command = (cmd || (input ? input.value.trim() : '')).trim();
             if (!command) return;
+
+            // Map quick command names to actual shell commands
+            const commandMap = {
+                'status': 'systemctl status',
+                'services': 'ps aux | grep -E "(holographic|soa|uvicorn|terminal)"',
+                'gpu': 'system_profiler SPDisplaysDataType | grep -i metal',
+                'health': 'curl -s http://localhost:$(cat soa_config.json | jq -r ".service_ports.api")/healthz',
+                'metrics': 'curl -s http://localhost:$(cat soa_config.json | jq -r ".service_ports.metrics_service")/history | jq ".[-1]"',
+                'capacity': 'df -h && echo "--- Holographic Memory Data ---" && du -sh services/holographic-memory/core/data/ 2>/dev/null || echo "No data directory found"',
+                'benchmark': 'cd services/holographic-memory/core && python -m pytest tests/ -v --tb=short',
+                'clear': 'clear'
+            };
+            
+            // If it's a mapped command, use the actual command
+            if (commandMap[command]) {
+                command = commandMap[command];
+            }
 
             // If real terminal is connected, just send to shell
             if (ws && ws.readyState === 1) {

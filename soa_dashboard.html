@@ -451,6 +451,7 @@
             <h3>GPU Utilization</h3>
             <div class="metric-value" id="gpuUtilVal">–%</div>
             <div class="metric-desc">Metal/CUDA/ROCm shader pipeline usage</div>
+            <div class="metric-status" id="gpu-status" style="margin-top: 8px; font-size: 0.9em; font-weight: 600;">Checking...</div>
           </div>
           <div class="metric-card">
             <h3>GPU Memory</h3>
@@ -566,6 +567,37 @@
                 </div>
             </div>
         </div>
+
+        <!-- Quick Commands Section -->
+        <section class="quick-commands-section" style="max-width: 120rem; margin: var(--space-8) auto; background: white; border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--space-8); box-shadow: var(--shadow-sm);">
+            <h3 style="color: var(--color-text-primary); margin-bottom: var(--space-6); font-size: var(--font-size-xl);">🎯 Quick Commands</h3>
+            <div class="quick-commands-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4);">
+                <button class="quick-command-btn" onclick="executeQuickCommand('status')" style="background: var(--biology-emerald); color: white; border: none; padding: var(--space-4); border-radius: var(--radius-md); cursor: pointer; font-weight: 600; transition: all 0.2s;">
+                    📊 System Status
+                </button>
+                <button class="quick-command-btn" onclick="executeQuickCommand('services')" style="background: var(--biology-emerald); color: white; border: none; padding: var(--space-4); border-radius: var(--radius-md); cursor: pointer; font-weight: 600; transition: all 0.2s;">
+                    🔧 SOA Services
+                </button>
+                <button class="quick-command-btn" onclick="executeQuickCommand('gpu')" style="background: var(--biology-emerald); color: white; border: none; padding: var(--space-4); border-radius: var(--radius-md); cursor: pointer; font-weight: 600; transition: all 0.2s;">
+                    🎮 GPU Status
+                </button>
+                <button class="quick-command-btn" onclick="executeQuickCommand('health')" style="background: var(--biology-emerald); color: white; border: none; padding: var(--space-4); border-radius: var(--radius-md); cursor: pointer; font-weight: 600; transition: all 0.2s;">
+                    ❤️ Health Check
+                </button>
+                <button class="quick-command-btn" onclick="executeQuickCommand('metrics')" style="background: var(--biology-emerald); color: white; border: none; padding: var(--space-4); border-radius: var(--radius-md); cursor: pointer; font-weight: 600; transition: all 0.2s;">
+                    📈 Performance
+                </button>
+                <button class="quick-command-btn" onclick="executeQuickCommand('capacity')" style="background: var(--biology-emerald); color: white; border: none; padding: var(--space-4); border-radius: var(--radius-md); cursor: pointer; font-weight: 600; transition: all 0.2s;">
+                    💾 Storage Capacity
+                </button>
+                <button class="quick-command-btn" onclick="executeQuickCommand('benchmark')" style="background: var(--biology-emerald); color: white; border: none; padding: var(--space-4); border-radius: var(--radius-md); cursor: pointer; font-weight: 600; transition: all 0.2s;">
+                    🏃 Run Benchmark
+                </button>
+                <button class="quick-command-btn" onclick="executeQuickCommand('clear')" style="background: var(--biology-emerald); color: white; border: none; padding: var(--space-4); border-radius: var(--radius-md); cursor: pointer; font-weight: 600; transition: all 0.2s;">
+                    🧹 Clear Terminal
+                </button>
+            </div>
+        </section>
 
         <div class="footer">
             <p><strong>HolographicMemory SOA System</strong> | SmartHaus Group</p>
@@ -852,6 +884,18 @@
                                 }
                             }
                             
+                            // Update GPU status indicator (if it exists)
+                            const gpuStatusEl = document.getElementById('gpu-status');
+                            if (gpuStatusEl) {
+                                if (msg.gpu?.available) {
+                                    gpuStatusEl.textContent = '🟢 Active';
+                                    gpuStatusEl.style.color = 'var(--biology-emerald)';
+                                } else {
+                                    gpuStatusEl.textContent = '🔴 Inactive';
+                                    gpuStatusEl.style.color = 'var(--biology-coral)';
+                                }
+                            }
+                            
                             if (gpuMemVal) {
                                 if (msg.gpu?.available) {
                                     const gpuMemUsed = msg.gpu.memory_used || 0;
@@ -889,6 +933,57 @@
             while (v>=1024 && i<units.length-1) { v/=1024; i++; }
             return short? `${v.toFixed(1)}${units[i]}` : `${v.toFixed(1)} ${units[i]}`;
         }
+
+        // Quick command execution - opens terminal and executes command
+        function executeQuickCommand(command) {
+            // Get the terminal URL from navigation
+            const terminalLink = document.getElementById('nav-terminal');
+            if (terminalLink && terminalLink.href && terminalLink.href !== '#') {
+                // Open terminal in new tab and execute command
+                const terminalWindow = window.open(terminalLink.href, '_blank');
+                
+                // Wait for terminal to load, then execute command
+                setTimeout(() => {
+                    if (terminalWindow && !terminalWindow.closed) {
+                        // Send message to terminal window to execute command
+                        terminalWindow.postMessage({
+                            type: 'executeCommand',
+                            command: command
+                        }, '*');
+                    }
+                }, 2000);
+            } else {
+                // Fallback: show alert with command to run
+                const commandMap = {
+                    'status': 'systemctl status',
+                    'services': 'ps aux | grep -E "(holographic|soa|uvicorn|terminal)"',
+                    'gpu': 'system_profiler SPDisplaysDataType | grep -i metal',
+                    'health': 'curl -s http://localhost:$(cat soa_config.json | jq -r ".service_ports.api")/healthz',
+                    'metrics': 'curl -s http://localhost:$(cat soa_config.json | jq -r ".service_ports.metrics_service")/metrics',
+                    'capacity': 'df -h && du -sh services/holographic-memory/core/data/',
+                    'benchmark': 'cd services/holographic-memory/core && python -m pytest tests/ -v',
+                    'clear': 'clear'
+                };
+                
+                const actualCommand = commandMap[command] || command;
+                alert(`Command to run in terminal:\n\n${actualCommand}\n\nPlease open the Terminal interface and run this command.`);
+            }
+        }
+
+        // Add hover effects for quick command buttons
+        document.addEventListener('DOMContentLoaded', function() {
+            const quickCommandBtns = document.querySelectorAll('.quick-command-btn');
+            quickCommandBtns.forEach(btn => {
+                btn.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateY(-2px)';
+                    this.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+                });
+                btn.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateY(0)';
+                    this.style.boxShadow = 'none';
+                });
+            });
+        });
     </script>
 </body>
 </html>
