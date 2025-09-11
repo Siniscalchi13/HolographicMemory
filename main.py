@@ -20,7 +20,7 @@ async def start_services():
     # Import services
     try:
         from services.orchestrator.orchestrator import HolographicMemoryOrchestrator
-        from app_soa import app as api_app
+        from services.holographic_memory.api.app_soa import app as api_app
         import uvicorn
         
         # Initialize orchestrator
