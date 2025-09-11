@@ -38,7 +38,8 @@ def test_quantize_and_reconstruct():
     q = gpu.gpu_holographic_quantize_with_validation(real, imag, 0, params)
     assert q is not None
     # Basic reconstruction call (phase is arbitrary random for test)
-    phase = np.random.rand(n, d).astype(np.float32)
+    # Phase should be 1D array according to function signature
+    phase = np.random.rand(n).astype(np.float32)
     rec = gpu.gpu_holographic_wave_reconstruction(real.tolist(), imag.tolist(), phase.tolist(), 0)
     assert rec is not None
 

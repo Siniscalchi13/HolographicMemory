@@ -34,6 +34,11 @@ class ThresholdCalculator:
         target = min(int(c_micro), int(c_microk8)) if c_microk8 is not None else int(c_micro)
         lo = max(1, int(lo))
         hi = max(lo, int(hi))
+        
+        # Check if even the highest value meets the target
+        if int(c_v4_curve(hi)) > target:
+            return hi  # Return hi if no value meets the target
+        
         ans = hi
         while lo <= hi:
             mid = (lo + hi) // 2

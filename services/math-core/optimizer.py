@@ -39,7 +39,11 @@ class DimensionOptimizer:
         D = {k: int(round(total_budget * (q[k] / Z))) for k in q}
         # Apply floors (if any)
         if floors:
-            lifted = {k: max(D.get(k, 0), int(floors.get(k, 0))) for k in q}
+            # Apply floors to all keys that exist in both D and floors
+            lifted = {}
+            for k in q:
+                floor_value = int(floors.get(k, 0))
+                lifted[k] = max(D.get(k, 0), floor_value)
             lift_sum = sum(lifted.values())
             if lift_sum == total_budget:
                 return lifted

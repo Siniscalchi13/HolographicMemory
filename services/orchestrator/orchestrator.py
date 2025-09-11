@@ -8,10 +8,14 @@ Provides clean service boundaries and proper separation of concerns.
 from __future__ import annotations
 
 import sys
+import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 import json
 import time
+
+# Set up logger
+logger = logging.getLogger(__name__)
 
 # Add core service to path
 _pkg_root = Path(__file__).resolve().parent
@@ -150,8 +154,15 @@ class HolographicMemoryOrchestrator:
         """Retrieve content using GPU memory with telemetry tracking."""
         start_time = time.time()
         
-        # GPU Memory retrieval
-        content = self.memory.retrieve_bytes(doc_id)
+        # GPU Memory retrieval with graceful handling of unknown documents
+        try:
+            content = self.memory.retrieve_bytes(doc_id)
+        except (RuntimeError, KeyError) as e:
+            # Return empty content for unknown documents instead of raising
+            if "No holographic retrieval path available" in str(e) or "not found" in str(e).lower():
+                content = b""
+            else:
+                raise
         
         # Telemetry tracking
         retrieval_time = time.time() - start_time

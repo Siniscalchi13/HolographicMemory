@@ -1,22 +1,4 @@
-#!/usr/bin/env python3
-"""
-Generate comprehensive test summary HTML for HolographicMemory
-"""
-
-import os
-import json
-from datetime import datetime
-from pathlib import Path
-
-def generate_test_summary():
-    """Generate a comprehensive test summary HTML page"""
-    
-    # Create reports directory if it doesn't exist
-    reports_dir = Path("tests/reports")
-    reports_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Unified dashboard with embedded tabs
-    summary_html = '''<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -251,7 +233,7 @@ def generate_test_summary():
             </div>
             
             <div class="footer">
-                <p>Generated on ''' + datetime.now().strftime("%B %d, %Y at %I:%M %p") + '''</p>
+                <p>Generated on September 10, 2025 at 10:02 PM</p>
                 <p>HolographicMemory Testing Framework</p>
             </div>
         </div>
@@ -421,7 +403,7 @@ def generate_test_summary():
                 const errorDetails = testRow.querySelector('.error, .failed, [class*="error"]')?.textContent?.trim() || 
                                    testRow.textContent?.trim() || 'No error details available';
                 
-                const errorText = `Test: ${testName}\\n\\nError Details:\\n${errorDetails}`;
+                const errorText = `Test: ${testName}\n\nError Details:\n${errorDetails}`;
                 
                 navigator.clipboard.writeText(errorText).then(() => {
                     const originalText = button.textContent;
@@ -444,14 +426,14 @@ def generate_test_summary():
                 const selectedTests = iframeDoc.querySelectorAll('.test-checkbox:not(#select-all-tests):checked');
                 if (selectedTests.length === 0) return;
                 
-                let allErrors = 'Selected Test Failures:\\n\\n';
+                let allErrors = 'Selected Test Failures:\n\n';
                 selectedTests.forEach((checkbox, index) => {
                     const testRow = checkbox.closest('tr') || checkbox.closest('div');
                     const testName = testRow.querySelector('td:first-child')?.textContent?.trim() || `Test ${index + 1}`;
                     const errorDetails = testRow.querySelector('.error, .failed, [class*="error"]')?.textContent?.trim() || 
                                        testRow.textContent?.trim() || 'No error details available';
                     
-                    allErrors += `${index + 1}. ${testName}\\n${errorDetails}\\n\\n`;
+                    allErrors += `${index + 1}. ${testName}\n${errorDetails}\n\n`;
                 });
                 
                 navigator.clipboard.writeText(allErrors).then(() => {
@@ -493,44 +475,4 @@ def generate_test_summary():
         });
     </script>
 </body>
-</html>'''
-    
-    # Write summary HTML
-    summary_path = reports_dir / "index.html"
-    with open(summary_path, 'w') as f:
-        f.write(summary_html)
-    
-    print(f"✅ Test summary created at {summary_path}")
-    
-    # Create test report metadata
-    report_data = {
-        'timestamp': datetime.now().isoformat(),
-        'test_suites': {
-            'unit': {'status': 'completed', 'coverage': 'generated'},
-            'integration': {'status': 'completed', 'logs': 'available'},
-            'e2e': {'status': 'completed', 'logs': 'available'},
-            'performance': {'status': 'completed', 'benchmarks': 'available'}
-        },
-        'reports': {
-            'coverage': 'tests/reports/coverage/index.html',
-            'pytest': 'tests/reports/html/pytest_report.html',
-            'junit': 'tests/reports/junit/junit.xml',
-            'performance': 'tests/reports/performance/'
-        },
-        'logs': {
-            'unit': 'logs/unit_tests.log',
-            'integration': 'logs/integration_tests.log',
-            'e2e': 'logs/e2e_tests.log',
-            'performance': 'logs/performance_tests.log'
-        }
-    }
-    
-    # Save report metadata
-    metadata_path = reports_dir / "test_report.json"
-    with open(metadata_path, 'w') as f:
-        json.dump(report_data, f, indent=2)
-    
-    print(f"✅ Test metadata saved at {metadata_path}")
-
-if __name__ == "__main__":
-    generate_test_summary()
+</html>

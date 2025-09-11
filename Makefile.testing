@@ -159,23 +159,13 @@ test-report:
 	@echo "$(GREEN)✅ Test report generated$(NC)"
 
 test-open:
-	@echo "$(BLUE)🌐 Opening test reports in Chrome...$(NC)"
-	@echo "$(CYAN)📊 Opening Coverage Report...$(NC)"
-	@open -a "Google Chrome" $(COVERAGE_DIR)/index.html 2>/dev/null || \
-		open -a "Chrome" $(COVERAGE_DIR)/index.html 2>/dev/null || \
-		echo "$(YELLOW)⚠️  Chrome not found, please open $(COVERAGE_DIR)/index.html manually$(NC)"
-	@sleep 2
-	@echo "$(CYAN)📄 Opening Pytest HTML Report...$(NC)"
-	@open -a "Google Chrome" $(HTML_DIR)/pytest_report.html 2>/dev/null || \
-		open -a "Chrome" $(HTML_DIR)/pytest_report.html 2>/dev/null || \
-		echo "$(YELLOW)⚠️  Chrome not found, please open $(HTML_DIR)/pytest_report.html manually$(NC)"
-	@sleep 2
-	@echo "$(CYAN)📋 Opening Test Summary...$(NC)"
+	@echo "$(BLUE)🌐 Opening unified test dashboard in Chrome...$(NC)"
+	@echo "$(CYAN)📊 Opening dashboard with embedded tabs...$(NC)"
 	@$(VENV_PY) scripts/generate_test_summary.py
-	@open -a "Google Chrome" $(REPORTS_DIR)/index.html 2>/dev/null || \
-		open -a "Chrome" $(REPORTS_DIR)/index.html 2>/dev/null || \
+	@open -a "Google Chrome" "file://$(shell pwd)/$(REPORTS_DIR)/index.html" 2>/dev/null || \
+		open -a "Chrome" "file://$(shell pwd)/$(REPORTS_DIR)/index.html" 2>/dev/null || \
 		echo "$(YELLOW)⚠️  Chrome not found, please open $(REPORTS_DIR)/index.html manually$(NC)"
-	@echo "$(GREEN)✅ All test reports opened in Chrome$(NC)"
+	@echo "$(GREEN)✅ Unified test dashboard opened in Chrome$(NC)"
 
 # ┌─────────────────────────────────────────────────────────────────────────────┐
 # │ CI/CD Integration                                                          │

@@ -7,6 +7,8 @@ __pycache__/
 env/
 venv/
 .venv/
+venv313/
+.venv313/
 *.egg-info/
 dist/
 build/
@@ -20,7 +22,7 @@ build/
 
 # Coverage / Test
 .pytest_cache/
-.coverage
+.coverage*
 coverage.xml
 htmlcov/
 

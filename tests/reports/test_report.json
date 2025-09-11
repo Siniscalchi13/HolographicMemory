@@ -1,0 +1,33 @@
+{
+  "timestamp": "2025-09-10T22:02:25.979773",
+  "test_suites": {
+    "unit": {
+      "status": "completed",
+      "coverage": "generated"
+    },
+    "integration": {
+      "status": "completed",
+      "logs": "available"
+    },
+    "e2e": {
+      "status": "completed",
+      "logs": "available"
+    },
+    "performance": {
+      "status": "completed",
+      "benchmarks": "available"
+    }
+  },
+  "reports": {
+    "coverage": "tests/reports/coverage/index.html",
+    "pytest": "tests/reports/html/pytest_report.html",
+    "junit": "tests/reports/junit/junit.xml",
+    "performance": "tests/reports/performance/"
+  },
+  "logs": {
+    "unit": "logs/unit_tests.log",
+    "integration": "logs/integration_tests.log",
+    "e2e": "logs/e2e_tests.log",
+    "performance": "logs/performance_tests.log"
+  }
+}

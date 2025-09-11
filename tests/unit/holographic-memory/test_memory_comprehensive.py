@@ -46,12 +46,21 @@ def test_write_hwp_v4_micro_k8_header(n: int, tmp_path) -> None:
     
     amps, phases, scale = _mk_layer(n)
     test_file = tmp_path / f"test_k8_{n}.hwp"
+    
+    # Create indices for k8 format (k<=8)
+    indices = list(range(min(8, n)))
+    amps_subset = amps[:len(indices)]
+    phases_subset = phases[:len(indices)]
+    
     write_hwp_v4_micro_k8(
         test_file,
         doc_id_hex="abcd1234",
         original_size=1024,
         dimension=64,
-        layers_count=1
+        indices=indices,
+        amps_q=amps_subset,
+        phs_q=phases_subset,
+        amp_scale=scale
     )
     raw = test_file.read_bytes()
     assert raw.startswith(b"H4K8")
@@ -61,14 +70,22 @@ def test_write_hwp_v4_micro_k8_header(n: int, tmp_path) -> None:
 @pytest.mark.unit
 @pytest.mark.parametrize("layers", [1, 2, 3, 4])
 def test_write_hwp_v4_sparse_layers(layers: int) -> None:
-    from services.holographic_memory.api.hwp_v4 import write_hwp_v4, build_sparse_layer
+    from hwp_v4 import write_hwp_v4, build_sparse_layer
 
     buf = io.BytesIO()
     entries = []
     for i in range(layers):
         amps, phases, scale = _mk_layer(8)
-        entries.append(build_sparse_layer(name=f"L{i}", indices=list(range(8)), amplitudes=amps, phases=phases, scale=scale))
-    write_hwp_v4(buf, entries)
+        entries.append(build_sparse_layer(name=f"L{i}", amplitudes=amps, phases=phases, top_k=8))
+    write_hwp_v4(
+        buf,
+        doc_id="test123",
+        filename="test.hwp",
+        original_size=1024,
+        content_type="application/octet-stream",
+        dimension=32,
+        layers=entries
+    )
     raw = buf.getvalue()
     assert raw.startswith(b"HWP4V001")
     assert len(raw) > 8
