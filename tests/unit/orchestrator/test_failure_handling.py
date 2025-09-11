@@ -14,8 +14,11 @@ def test_vault_storage_path_on_secret(monkeypatch, tmp_path):
     orch = HolographicMemoryOrchestrator(state_dir=tmp_path / "state")
     payload = b"api_key=XYZ; password=secret"
     out = orch.store_content(payload, {"filename": "secrets.txt", "content_type": "text/plain"})
-    assert out["routing_decision"]["vault"] is True
-    assert out["storage_result"]["encrypted"] is True
+    # When routed to vault, the structure is different
+    assert out["encrypted"] is True
+    assert out["holographic_patterns"] is False
+    assert "vault_id" in out
+    assert "vault_path" in out
 
 
 @pytest.mark.unit

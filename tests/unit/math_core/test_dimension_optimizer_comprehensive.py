@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import math
+import sys
 from typing import Dict
 
 import pytest
+
+# Add math-core to path for imports
+sys.path.insert(0, 'services/math-core')
+from optimizer import DimensionOptimizer
 
 
 @pytest.mark.unit
@@ -24,8 +29,6 @@ import pytest
     ],
 )
 def test_optimize_dimensions_budget_normalization(loads: Dict[str, int], importance: Dict[str, float], budget: int) -> None:
-    from services.math_core.optimizer import DimensionOptimizer
-
     D = DimensionOptimizer().optimize_dimensions(loads, importance, budget, floors=None)
     assert isinstance(D, dict)
     assert sum(D.values()) == int(budget) if budget > 0 else sum(D.values()) == 0
@@ -46,8 +49,6 @@ def test_optimize_dimensions_budget_normalization(loads: Dict[str, int], importa
     ],
 )
 def test_optimize_dimensions_floors(loads_example: Dict[str, int], floors: Dict[str, int], budget: int) -> None:
-    from services.math_core.optimizer import DimensionOptimizer
-
     loads = dict(loads_example)
     # Ensure all keys present in loads
     for k in floors:
@@ -80,7 +81,6 @@ def loads_example() -> Dict[str, int]:
     ],
 )
 def test_relative_allocation_trends(loads_example: Dict[str, int], importance: Dict[str, float]) -> None:
-    from services.math_core.optimizer import DimensionOptimizer
 
     D = DimensionOptimizer().optimize_dimensions(loads_example, importance, 1000)
     # Higher importance should not yield zero when budget is ample
@@ -95,7 +95,6 @@ def test_relative_allocation_trends(loads_example: Dict[str, int], importance: D
 @pytest.mark.unit
 @pytest.mark.parametrize("budget", [1, 2, 3, 5, 10, 33, 64, 127, 255, 1024, 2048, 4096])
 def test_normalization_exact_sum(loads_example: Dict[str, int], budget: int) -> None:
-    from services.math_core.optimizer import DimensionOptimizer
 
     D = DimensionOptimizer().optimize_dimensions(loads_example, {k: 1.0 for k in loads_example}, budget)
     assert sum(D.values()) == int(budget)
@@ -118,7 +117,6 @@ def test_normalization_exact_sum(loads_example: Dict[str, int], budget: int) -> 
     ],
 )
 def test_extreme_loads_stable(loads: Dict[str, int]) -> None:
-    from services.math_core.optimizer import DimensionOptimizer
 
     D = DimensionOptimizer().optimize_dimensions(loads, {k: 1.0 for k in loads}, 1234)
     # Ensure mapping includes all keys and values are integers >= 0

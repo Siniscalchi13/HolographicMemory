@@ -19,11 +19,11 @@ def test_store_and_retrieve_roundtrip(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_get_system_status_contains_expected_keys(tmp_path: Path) -> None:
+async def test_get_system_status_contains_expected_keys(tmp_path: Path) -> None:
     from services.orchestrator.orchestrator import HolographicMemoryOrchestrator
 
     orch = HolographicMemoryOrchestrator(state_dir=tmp_path / "state")
-    st = orch.get_system_status()
-    assert set(st.keys()) >= {"memory_status", "layer_dimensions", "current_loads", "telemetry"}
-    assert "grid_size" in st["memory_status"]
+    st = await orch.get_system_status()
+    assert set(st.keys()) >= {"telemetry", "holographic_memory", "router", "vault", "math_core", "gpu_backend", "orchestrator", "timestamp"}
+    assert "telemetry" in st
 

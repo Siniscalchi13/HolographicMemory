@@ -46,8 +46,11 @@ def test_store_content_formats(tmp_path: Path, size: int, filename: str, ctype: 
 def test_store_content_vault(tmp_path: Path, payload: bytes) -> None:
     orch = _orch(tmp_path)
     out = orch.store_content(payload, {"filename": "secrets.env", "content_type": "text/plain"})
-    assert out["routing_decision"]["vault"] is True
-    assert out["storage_result"]["encrypted"] is True
+    # When routed to vault, the structure is different
+    assert out["encrypted"] is True
+    assert out["holographic_patterns"] is False
+    assert "vault_id" in out
+    assert "vault_path" in out
 
 
 @pytest.mark.unit

@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import sys
 from typing import Callable
 
 import pytest
+
+# Add math-core to path for imports
+sys.path.insert(0, 'services/math-core')
+from threshold import ThresholdCalculator
 
 
 def _mk_v4_curve(kind: str) -> Callable[[int], int]:
@@ -26,8 +31,6 @@ def _mk_v4_curve(kind: str) -> Callable[[int], int]:
 @pytest.mark.parametrize("c_micro", [64, 128, 192, 256, 512])
 @pytest.mark.parametrize("c_microk8", [None, 80, 96, 160])
 def test_tau_star_and_choose_format(kind: str, c_micro: int, c_microk8: int | None) -> None:
-    from services.math_core.threshold import ThresholdCalculator
-
     f = _mk_v4_curve(kind)
     tau = ThresholdCalculator().tau_star(c_micro=c_micro, c_v4_curve=f, c_microk8=c_microk8, lo=1, hi=1 << 14)
     assert isinstance(tau, int)
@@ -61,8 +64,6 @@ def test_tau_star_and_choose_format(kind: str, c_micro: int, c_microk8: int | No
     ],
 )
 def test_choose_format_table(c_micro: int, c_v4: int, c_microk8: int | None, expected: str) -> None:
-    from services.math_core.threshold import ThresholdCalculator
-
     got = ThresholdCalculator.choose_format(size=1024, c_micro=c_micro, c_v4=c_v4, c_microk8=c_microk8)
     assert got == expected
 
