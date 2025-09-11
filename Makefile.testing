@@ -1,0 +1,221 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# HolographicMemory Testing Framework
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Configuration                                                               │
+# └─────────────────────────────────────────────────────────────────────────────┘
+
+# Python Environment
+PY              ?= python3
+PIP             ?= $(PY) -m pip
+VENV_DIR        ?= venv313
+VENV_PY         ?= $(shell pwd)/$(VENV_DIR)/bin/python
+VENV_PIP        ?= $(VENV_PY) -m pip
+
+# Directories
+TEST_DIR        ?= tests
+REPORTS_DIR     ?= tests/reports
+LOGS_DIR        ?= logs
+COVERAGE_DIR    ?= $(REPORTS_DIR)/coverage
+HTML_DIR        ?= $(REPORTS_DIR)/html
+JUNIT_DIR       ?= $(REPORTS_DIR)/junit
+PERF_DIR        ?= $(REPORTS_DIR)/performance
+
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Test Arguments                                                              │
+# └─────────────────────────────────────────────────────────────────────────────┘
+
+PYTEST_ARGS     ?= -v --tb=short --strict-markers
+COVERAGE_ARGS   ?= --cov=services --cov-report=html:$(COVERAGE_DIR) --cov-report=xml:$(REPORTS_DIR)/coverage.xml
+HTML_ARGS       ?= --html=$(HTML_DIR)/pytest_report.html --self-contained-html
+JUNIT_ARGS      ?= --junitxml=$(JUNIT_DIR)/junit.xml
+PERF_ARGS       ?= --benchmark-only --benchmark-save=performance --benchmark-save-data
+
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Colors                                                                      │
+# └─────────────────────────────────────────────────────────────────────────────┘
+
+RED     = \033[0;31m
+GREEN   = \033[0;32m
+YELLOW  = \033[1;33m
+BLUE    = \033[0;34m
+PURPLE  = \033[0;35m
+CYAN    = \033[0;36m
+NC      = \033[0m
+
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Main Test Targets                                                           │
+# └─────────────────────────────────────────────────────────────────────────────┘
+
+.PHONY: test test-all test-unit test-integration test-e2e test-performance test-coverage test-html test-junit test-benchmark test-clean test-setup test-report test-open test-quick test-full test-ci
+
+test: test-setup test-quick
+	@echo "$(GREEN)✅ Quick test suite completed$(NC)"
+
+test-all: test-setup test-full test-report test-open
+	@echo "$(GREEN)✅ Complete test suite completed$(NC)"
+
+test-quick: test-unit test-coverage
+	@echo "$(GREEN)✅ Quick tests completed$(NC)"
+
+test-full: test-unit test-integration test-e2e test-performance test-benchmark
+	@echo "$(GREEN)✅ Full test suite completed$(NC)"
+
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Test Categories                                                             │
+# └─────────────────────────────────────────────────────────────────────────────┘
+
+test-unit:
+	@echo "$(BLUE)🧪 Running unit tests...$(NC)"
+	@mkdir -p $(LOGS_DIR) $(REPORTS_DIR)
+	@$(VENV_PY) -m pytest $(TEST_DIR)/unit/ $(PYTEST_ARGS) $(COVERAGE_ARGS) $(HTML_ARGS) $(JUNIT_ARGS) \
+		--log-file=$(LOGS_DIR)/unit_tests.log --log-level=INFO \
+		--capture=no --color=yes
+	@echo "$(GREEN)✅ Unit tests completed$(NC)"
+
+test-integration:
+	@echo "$(BLUE)🔗 Running integration tests...$(NC)"
+	@mkdir -p $(LOGS_DIR) $(REPORTS_DIR)
+	@$(VENV_PY) -m pytest $(TEST_DIR)/integration/ $(PYTEST_ARGS) $(HTML_ARGS) \
+		--log-file=$(LOGS_DIR)/integration_tests.log --log-level=INFO \
+		--capture=no --color=yes
+	@echo "$(GREEN)✅ Integration tests completed$(NC)"
+
+test-e2e:
+	@echo "$(BLUE)🌐 Running end-to-end tests...$(NC)"
+	@mkdir -p $(LOGS_DIR) $(REPORTS_DIR)
+	@$(VENV_PY) -m pytest $(TEST_DIR)/e2e/ $(PYTEST_ARGS) $(HTML_ARGS) \
+		--log-file=$(LOGS_DIR)/e2e_tests.log --log-level=INFO \
+		--capture=no --color=yes
+	@echo "$(GREEN)✅ End-to-end tests completed$(NC)"
+
+test-performance:
+	@echo "$(BLUE)⚡ Running performance tests...$(NC)"
+	@mkdir -p $(LOGS_DIR) $(REPORTS_DIR) $(PERF_DIR)
+	@$(VENV_PY) -m pytest $(TEST_DIR)/performance/ $(PYTEST_ARGS) $(PERF_ARGS) \
+		--log-file=$(LOGS_DIR)/performance_tests.log --log-level=INFO \
+		--capture=no --color=yes
+	@echo "$(GREEN)✅ Performance tests completed$(NC)"
+
+test-benchmark:
+	@echo "$(BLUE)📊 Running benchmark tests...$(NC)"
+	@mkdir -p $(LOGS_DIR) $(REPORTS_DIR)
+	@$(VENV_PY) -m pytest $(TEST_DIR)/benchmarks/ $(PYTEST_ARGS) $(PERF_ARGS) \
+		--log-file=$(LOGS_DIR)/benchmark_tests.log --log-level=INFO \
+		--capture=no --color=yes
+	@echo "$(GREEN)✅ Benchmark tests completed$(NC)"
+
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Coverage & Reporting                                                        │
+# └─────────────────────────────────────────────────────────────────────────────┘
+
+test-coverage:
+	@echo "$(BLUE)📈 Generating coverage report...$(NC)"
+	@mkdir -p $(COVERAGE_DIR)
+	@$(VENV_PY) -m pytest $(TEST_DIR)/unit/ $(COVERAGE_ARGS) \
+		--log-file=$(LOGS_DIR)/coverage.log --log-level=INFO
+	@echo "$(GREEN)✅ Coverage report generated$(NC)"
+
+test-html:
+	@echo "$(BLUE)📄 Generating HTML test report...$(NC)"
+	@mkdir -p $(HTML_DIR)
+	@$(VENV_PY) -m pytest $(TEST_DIR)/ $(PYTEST_ARGS) $(HTML_ARGS) \
+		--log-file=$(LOGS_DIR)/html_report.log --log-level=INFO
+	@echo "$(GREEN)✅ HTML test report generated$(NC)"
+
+test-junit:
+	@echo "$(BLUE)📋 Generating JUnit XML report...$(NC)"
+	@mkdir -p $(JUNIT_DIR)
+	@$(VENV_PY) -m pytest $(TEST_DIR)/ $(PYTEST_ARGS) $(JUNIT_ARGS) \
+		--log-file=$(LOGS_DIR)/junit_report.log --log-level=INFO
+	@echo "$(GREEN)✅ JUnit XML report generated$(NC)"
+
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Setup & Cleanup                                                             │
+# └─────────────────────────────────────────────────────────────────────────────┘
+
+test-setup:
+	@echo "$(YELLOW)🔧 Setting up test environment...$(NC)"
+	@mkdir -p $(LOGS_DIR) $(REPORTS_DIR) $(COVERAGE_DIR) $(HTML_DIR) $(JUNIT_DIR) $(PERF_DIR)
+	@$(VENV_PIP) install pytest pytest-cov pytest-html pytest-benchmark pytest-xdist
+	@$(VENV_PIP) install pytest-mock pytest-asyncio pytest-timeout
+	@echo "$(GREEN)✅ Test environment ready$(NC)"
+
+test-clean:
+	@echo "$(YELLOW)🧹 Cleaning test artifacts...$(NC)"
+	@rm -rf $(LOGS_DIR) $(REPORTS_DIR) .pytest_cache .coverage
+	@rm -rf **/__pycache__ **/*.pyc
+	@echo "$(GREEN)✅ Test artifacts cleaned$(NC)"
+
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Report Generation & Viewing                                                │
+# └─────────────────────────────────────────────────────────────────────────────┘
+
+test-report:
+	@echo "$(BLUE)📊 Generating comprehensive test report...$(NC)"
+	@mkdir -p $(HTML_DIR)
+	@$(VENV_PY) scripts/generate_test_summary.py
+	@echo "$(GREEN)✅ Test report generated$(NC)"
+
+test-open:
+	@echo "$(BLUE)🌐 Opening test reports in Chrome...$(NC)"
+	@echo "$(CYAN)📊 Opening Coverage Report...$(NC)"
+	@open -a "Google Chrome" $(COVERAGE_DIR)/index.html 2>/dev/null || \
+		open -a "Chrome" $(COVERAGE_DIR)/index.html 2>/dev/null || \
+		echo "$(YELLOW)⚠️  Chrome not found, please open $(COVERAGE_DIR)/index.html manually$(NC)"
+	@sleep 2
+	@echo "$(CYAN)📄 Opening Pytest HTML Report...$(NC)"
+	@open -a "Google Chrome" $(HTML_DIR)/pytest_report.html 2>/dev/null || \
+		open -a "Chrome" $(HTML_DIR)/pytest_report.html 2>/dev/null || \
+		echo "$(YELLOW)⚠️  Chrome not found, please open $(HTML_DIR)/pytest_report.html manually$(NC)"
+	@sleep 2
+	@echo "$(CYAN)📋 Opening Test Summary...$(NC)"
+	@$(VENV_PY) scripts/generate_test_summary.py
+	@open -a "Google Chrome" $(REPORTS_DIR)/index.html 2>/dev/null || \
+		open -a "Chrome" $(REPORTS_DIR)/index.html 2>/dev/null || \
+		echo "$(YELLOW)⚠️  Chrome not found, please open $(REPORTS_DIR)/index.html manually$(NC)"
+	@echo "$(GREEN)✅ All test reports opened in Chrome$(NC)"
+
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ CI/CD Integration                                                          │
+# └─────────────────────────────────────────────────────────────────────────────┘
+
+test-ci:
+	@echo "$(BLUE)🤖 Running CI test suite...$(NC)"
+	@$(MAKE) test-setup
+	@$(VENV_PY) -m pytest $(TEST_DIR)/ $(PYTEST_ARGS) $(COVERAGE_ARGS) $(JUNIT_ARGS) \
+		--log-file=$(LOGS_DIR)/ci_tests.log --log-level=INFO \
+		--capture=no --color=yes --maxfail=5
+	@echo "$(GREEN)✅ CI test suite completed$(NC)"
+
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Help                                                                        │
+# └─────────────────────────────────────────────────────────────────────────────┘
+
+test-help:
+	@echo "$(CYAN)╔══════════════════════════════════════════════════════════════╗$(NC)"
+	@echo "$(CYAN)║                HolographicMemory Testing Framework           ║$(NC)"
+	@echo "$(CYAN)╚══════════════════════════════════════════════════════════════╝$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Quick Commands:$(NC)"
+	@echo "  $(GREEN)make test$(NC)        - Quick test suite (unit + coverage)"
+	@echo "  $(GREEN)make test-all$(NC)    - Complete test suite with reports"
+	@echo "  $(GREEN)make test-open$(NC)   - Open reports in Chrome"
+	@echo ""
+	@echo "$(YELLOW)Test Categories:$(NC)"
+	@echo "  $(GREEN)test-unit$(NC)        - Unit tests only"
+	@echo "  $(GREEN)test-integration$(NC) - Integration tests only"
+	@echo "  $(GREEN)test-e2e$(NC)         - End-to-end tests only"
+	@echo "  $(GREEN)test-performance$(NC) - Performance tests only"
+	@echo ""
+	@echo "$(YELLOW)Reports & Utilities:$(NC)"
+	@echo "  $(GREEN)test-coverage$(NC)    - Generate coverage report"
+	@echo "  $(GREEN)test-report$(NC)      - Generate test summary"
+	@echo "  $(GREEN)test-clean$(NC)       - Clean test artifacts"
+	@echo "  $(GREEN)test-setup$(NC)       - Setup test environment"
+	@echo ""
+	@echo "$(YELLOW)Report Locations:$(NC)"
+	@echo "  📊 $(COVERAGE_DIR)/index.html"
+	@echo "  📄 $(HTML_DIR)/pytest_report.html"
+	@echo "  🏠 $(REPORTS_DIR)/index.html"

@@ -1,20 +1,34 @@
+# ═══════════════════════════════════════════════════════════════════════════════
 # HolographicMemory - Main Makefile
-# References dedicated Makefiles for different purposes
+# ═══════════════════════════════════════════════════════════════════════════════
 
-# Include dedicated Makefiles
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Include Dedicated Makefiles                                               │
+# └─────────────────────────────────────────────────────────────────────────────┘
+
 include Makefile.help
 include Makefile.dev
 include Makefile.prod
 include Makefile.lint
 include Makefile.syntax
+include Makefile.testing
 
-# Default target
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Default Target                                                             │
+# └─────────────────────────────────────────────────────────────────────────────┘
+
 .DEFAULT_GOAL := help
 
-# Main targets that delegate to specific Makefiles
-.PHONY: help setup test build native api soa clean dev prod lint syntax dev-verify launch-dev dev-all
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Target Declarations                                                        │
+# └─────────────────────────────────────────────────────────────────────────────┘
 
-# Development targets
+.PHONY: help setup test build native api soa clean dev prod lint syntax dev-verify launch-dev dev-all test-all test-quick test-unit test-integration test-e2e test-performance test-coverage test-html test-open test-clean test-ci
+
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Development Targets                                                        │
+# └─────────────────────────────────────────────────────────────────────────────┘
+
 setup: dev-setup
 test: dev-test
 build: dev-build
@@ -27,13 +41,38 @@ dev-kill: dev-kill
 dev-all: dev-all
 clean: dev-clean
 
-# Production targets
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Production Targets                                                         │
+# └─────────────────────────────────────────────────────────────────────────────┘
+
 deploy: prod-deploy
 release: prod-release
 
-# Quality targets
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Quality Targets                                                            │
+# └─────────────────────────────────────────────────────────────────────────────┘
+
 lint: lint-all
 syntax: syntax-check
 
-# Help target
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Testing Targets                                                            │
+# └─────────────────────────────────────────────────────────────────────────────┘
+
+test-all: test-all
+test-quick: test-quick
+test-unit: test-unit
+test-integration: test-integration
+test-e2e: test-e2e
+test-performance: test-performance
+test-coverage: test-coverage
+test-html: test-html
+test-open: test-open
+test-clean: test-clean
+test-ci: test-ci
+
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Help Target                                                                │
+# └─────────────────────────────────────────────────────────────────────────────┘
+
 help: help-main

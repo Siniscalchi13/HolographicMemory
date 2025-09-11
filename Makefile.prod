@@ -1,18 +1,30 @@
-# Makefile.prod - Production targets
+# ═══════════════════════════════════════════════════════════════════════════════
+# Makefile.prod - Production Targets
+# ═══════════════════════════════════════════════════════════════════════════════
 
-# Variables
-PY?=python3
-PIP?=$(PY) -m pip
-VENV_DIR?=venv
-VENV_PY?=$(VENV_DIR)/bin/python
-VENV_PIP?=$(VENV_PY) -m pip
-PROD_PORT?=8080
-PROD_HOST?=0.0.0.0
-DOCKER_REGISTRY?=holographicmemory
-VERSION?=$(shell git describe --tags --always --dirty)
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Configuration                                                               │
+# └─────────────────────────────────────────────────────────────────────────────┘
 
-# Production targets
+PY              ?= python3
+PIP             ?= $(PY) -m pip
+VENV_DIR        ?= venv
+VENV_PY         ?= $(VENV_DIR)/bin/python
+VENV_PIP        ?= $(VENV_PY) -m pip
+PROD_PORT       ?= 8080
+PROD_HOST       ?= 0.0.0.0
+DOCKER_REGISTRY ?= holographicmemory
+VERSION         ?= $(shell git describe --tags --always --dirty)
+
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Target Declarations                                                        │
+# └─────────────────────────────────────────────────────────────────────────────┘
+
 .PHONY: prod-deploy prod-release prod-test prod-benchmark prod-clean prod-docker
+
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ Deployment & Release                                                       │
+# └─────────────────────────────────────────────────────────────────────────────┘
 
 prod-deploy:
 	@echo "🚀 Deploying to production..."
