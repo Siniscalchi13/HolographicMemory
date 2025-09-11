@@ -273,7 +273,10 @@ class HolographicMemoryOrchestrator:
                 "math_core": self._get_math_core_status(),
                 "router": self._get_router_status(),
                 "vault": self._get_vault_status(),
-                "telemetry": self._get_telemetry_status()
+                "telemetry": self._get_telemetry_status(),
+                "current_loads": self.current_loads,
+                "layer_dimensions": self.layer_dimensions,
+                "memory_status": self._get_memory_status()
             }
             return status
         except Exception as e:
@@ -452,6 +455,18 @@ class HolographicMemoryOrchestrator:
             return {"status": "active", "module": "performance_tracker"}
         except ImportError:
             return {"status": "inactive", "error": "Module not available"}
+    
+    def _get_memory_status(self) -> Dict[str, Any]:
+        """Get holographic memory system status."""
+        try:
+            return {
+                "grid_size": getattr(self.memory, 'grid_size', 1024),
+                "use_gpu": getattr(self.memory, 'use_gpu', True),
+                "backend_type": type(self.memory.backend).__name__ if hasattr(self.memory, 'backend') else "unknown",
+                "state_dir": str(self.state_dir)
+            }
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
     
     def _get_ops_per_second(self) -> float:
         """Get real operations per second."""

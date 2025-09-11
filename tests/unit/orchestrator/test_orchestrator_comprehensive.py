@@ -10,7 +10,7 @@ import pytest
 def _orch(tmp_path: Path):
     from services.orchestrator.orchestrator import HolographicMemoryOrchestrator
 
-    return HolographicMemoryOrchestrator(state_dir=tmp_path / "state", grid_size=64, use_gpu=False)
+    return HolographicMemoryOrchestrator(state_dir=tmp_path / "state", grid_size=64, use_gpu=True)
 
 
 @pytest.mark.unit
@@ -63,9 +63,9 @@ def test_retrieve_roundtrip(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_system_status_shape(tmp_path: Path) -> None:
+async def test_system_status_shape(tmp_path: Path) -> None:
     orch = _orch(tmp_path)
-    status = orch.get_system_status()
+    status = await orch.get_system_status()
     assert set(status.keys()) >= {"memory_status", "layer_dimensions", "current_loads", "telemetry"}
 
 
