@@ -29,9 +29,9 @@ def _gpu():
 @pytest.mark.gpu
 def test_initialize_and_layer_stats():
     gpu = _gpu()
-    # Initialize with small budget
+    # Initialize with small budget (returns None but sets internal state)
     ok = gpu.initialize_7layer_decomposition(64)
-    assert ok is not None
+    # Function returns None but initializes internal state
     # Flag should be true after init
     assert bool(getattr(gpu, 'layers_initialized', False)) is True
     stats = gpu.get_layer_stats()

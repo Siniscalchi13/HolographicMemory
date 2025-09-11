@@ -39,7 +39,7 @@ def test_quantize_and_reconstruct():
     assert q is not None
     # Basic reconstruction call (phase is arbitrary random for test)
     phase = np.random.rand(n, d).astype(np.float32)
-    rec = gpu.gpu_holographic_wave_reconstruction(real, imag, phase, 0)
+    rec = gpu.gpu_holographic_wave_reconstruction(real.tolist(), imag.tolist(), phase.tolist(), 0)
     assert rec is not None
 
 
@@ -47,7 +47,8 @@ def test_quantize_and_reconstruct():
 @pytest.mark.gpu
 def test_quantization_statistics():
     gpu, _ = _gpu_with_params()
-    errs1 = np.random.rand(64).astype(np.float32)
-    errs2 = np.random.rand(64).astype(np.float32)
-    stats = gpu.gpu_quantization_statistics(errs1, errs2)
+    # Create 2D arrays as expected by the C++ function
+    errs1 = np.random.rand(8, 8).astype(np.float32)
+    errs2 = np.random.rand(8, 8).astype(np.float32)
+    stats = gpu.gpu_quantization_statistics(errs1.tolist(), errs2.tolist())
     assert stats is not None
