@@ -6,7 +6,9 @@ import pytest
 
 @pytest.mark.unit
 def test_calculate_optimal_dimension_thresholds():
-    from services.holographic-memory.core.holographicfs.memory import calculate_optimal_dimension
+    import sys
+    sys.path.insert(0, 'services/holographic-memory/core')
+    from holographicfs.memory import calculate_optimal_dimension
 
     assert calculate_optimal_dimension(1) == 8
     assert calculate_optimal_dimension(1024) == 16
@@ -18,7 +20,7 @@ def test_calculate_optimal_dimension_thresholds():
 
 @pytest.mark.unit
 def test_get_wave_data_from_bytes_shapes():
-    from services.holographic-memory.core.holographicfs.memory import Memory
+    from holographicfs.memory import Memory
 
     # Use Memory utility that only touches numpy path for get_wave_data_from_bytes
     m = Memory.__new__(Memory)  # bypass heavy init

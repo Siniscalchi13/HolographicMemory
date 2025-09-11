@@ -1,0 +1,10 @@
+secrets:
+  - "API_KEY=xyz"
+  - "password=secret"
+  - "Bearer abc.def.ghi"
+  - "ghp_abcdefghijklmnopqrstuvwxyz123456"
+clean:
+  - "hello"
+  - "notes only"
+  - "router config"
+

@@ -1,0 +1,8 @@
+scenarios:
+  - name: gpu_status_failure
+    target: _get_gpu_status
+  - name: memory_usage_failure
+    target: _get_memory_usage
+  - name: performance_metrics_failure
+    target: _get_performance_metrics
+

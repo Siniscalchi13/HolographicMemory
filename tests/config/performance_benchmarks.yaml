@@ -1,0 +1,11 @@
+benchmarks:
+  store_latency_small:
+    size: 64
+    repeat: 10
+  store_latency_medium:
+    size: 256
+    repeat: 10
+  store_latency_large:
+    size: 1024
+    repeat: 5
+

@@ -1,0 +1,6 @@
+metrics:
+  ops_per_second_min: 1000
+  latency_ms_max: 10
+  gpu_utilization_max: 95
+  error_rate_max: 1.0
+

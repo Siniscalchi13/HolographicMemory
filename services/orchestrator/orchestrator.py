@@ -25,6 +25,8 @@ sys.path.insert(0, str(_services_root / "math-core"))
 sys.path.insert(0, str(_services_root / "router"))
 sys.path.insert(0, str(_services_root / "vault"))
 sys.path.insert(0, str(_services_root / "telemetry"))
+sys.path.insert(0, str(_services_root / "holographic-memory" / "core"))
+sys.path.insert(0, str(_services_root / "holographic-memory" / "core" / "native" / "holographic" / "build"))
 
 from holographicfs.memory import Memory as HolographicMemory
 from optimizer import DimensionOptimizer
@@ -122,7 +124,10 @@ class HolographicMemoryOrchestrator:
         
         # Update load estimates
         for layer, weight in routing_decision.get("layers", []):
-            self.current_loads[layer] += 1
+            # Normalize layer name to match current_loads keys
+            normalized_layer = layer.capitalize()
+            if normalized_layer in self.current_loads:
+                self.current_loads[normalized_layer] += 1
         
         return {
             "doc_id": doc_id,
@@ -140,7 +145,7 @@ class HolographicMemoryOrchestrator:
         
         # Telemetry tracking
         retrieval_time = time.time() - start_time
-        self.telemetry.track_retrieval(doc_id, retrieval_time, len(content))
+        self.telemetry.track_retrieval()
         
         return {
             "doc_id": doc_id,

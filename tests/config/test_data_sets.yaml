@@ -1,0 +1,12 @@
+small_texts:
+  - "hello world"
+  - "holographic memory"
+  - "router thresholds"
+binary_sizes: [1, 64, 128, 256, 600, 1024, 5000]
+content_types:
+  - text/plain
+  - application/json
+  - application/pdf
+  - image/png
+  - application/octet-stream
+

@@ -12,8 +12,8 @@ def test_concurrent_store_operations(tmp_path):
     orch = HolographicMemoryOrchestrator(state_dir=tmp_path / "state", grid_size=64, use_gpu=False)
 
     def task(i: int) -> str:
-        data = os.urandom(256)
-        out = orch.store_content(data, {"filename": f"f{i}.bin", "content_type": "application/octet-stream"})
+        data = f"Test content for file {i} - this is low entropy text that won't trigger security guard".encode()
+        out = orch.store_content(data, {"filename": f"f{i}.txt", "content_type": "text/plain"})
         return out["doc_id"]
 
     N = 200  # Keep moderate by default; scale under dedicated perf env

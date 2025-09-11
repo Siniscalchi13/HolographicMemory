@@ -125,6 +125,17 @@ class Memory:
                     self.backend = _hn.HolographicMemory(int(grid_size))  # type: ignore[name-defined, attr-defined]
                 except Exception as exc:
                     raise RuntimeError("Legacy CPU backend failed to initialize") from exc
+            elif _cpp_loaded and hasattr(_hn, 'HolographicGPU'):
+                # Fallback to GPU backend when CPU backend is not available
+                try:
+                    be = _hn.HolographicGPU()  # type: ignore[name-defined, attr-defined]
+                    if hasattr(be, 'initialize'):
+                        be.initialize()
+                    self.backend = be
+                    self.gpu_backend = be
+                    self.use_gpu = True
+                except Exception as exc:
+                    raise RuntimeError("GPU backend fallback failed to initialize") from exc
             else:
                 raise RuntimeError("C++ backend not available. Build the extensions (make native)")
         # 3D exact-recall engine is optional; used for byte-perfect storage/recall
