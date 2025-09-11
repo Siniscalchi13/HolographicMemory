@@ -371,7 +371,7 @@
         }
 
         .loading {
-            opacity: 0.6;
+            /* Removed opacity change to prevent screen transparency issue */
             pointer-events: none;
         }
 
@@ -441,9 +441,9 @@
             <div class="metric-desc">Pattern encoding/decoding rate</div>
           </div>
           <div class="metric-card">
-            <h3>System Memory</h3>
+            <h3>SOA Memory</h3>
             <div class="metric-value" id="sysMemVal">–</div>
-            <div class="metric-desc">RAM usage for system operations</div>
+            <div class="metric-desc">RAM usage for SOA services only</div>
           </div>
         </section>
 
@@ -762,9 +762,43 @@
                             if (rx) rx.textContent = humanBytes(recv, true);
                             if (conns) conns.textContent = String(msg.connections ?? '–');
                             const gpuUtilVal = document.getElementById('gpuUtilVal');
+                            const gpuMemVal = document.getElementById('gpuMemVal');
+                            const opsVal = document.getElementById('opsVal');
                             const sysMemVal = document.getElementById('sysMemVal');
-                            if (gpuUtilVal) gpuUtilVal.textContent = `${gpuUtil}%`;
-                            if (sysMemVal) sysMemVal.textContent = `${((msg.memory?.used||0)/(1024**3)).toFixed(1)}GB`;
+                            
+                            if (gpuUtilVal) {
+                                if (msg.gpu?.available) {
+                                    gpuUtilVal.textContent = `${gpuUtil.toFixed(3)}%`;
+                                } else {
+                                    gpuUtilVal.textContent = 'Inactive';
+                                }
+                            }
+                            
+                            if (gpuMemVal) {
+                                if (msg.gpu?.available) {
+                                    const gpuMemUsed = msg.gpu.memory_used || 0;
+                                    const gpuMemTotal = msg.gpu.memory_total || 0;
+                                    gpuMemVal.textContent = `${gpuMemUsed.toFixed(1)}GB / ${gpuMemTotal.toFixed(1)}GB`;
+                                } else {
+                                    gpuMemVal.textContent = 'N/A';
+                                }
+                            }
+                            
+                            if (opsVal) {
+                                const opsPerSec = msg.holographic_ops?.ops_per_second || 0;
+                                if (opsPerSec >= 1000000) {
+                                    opsVal.textContent = `${(opsPerSec / 1000000).toFixed(1)}M`;
+                                } else if (opsPerSec >= 1000) {
+                                    opsVal.textContent = `${(opsPerSec / 1000).toFixed(1)}K`;
+                                } else {
+                                    opsVal.textContent = `${opsPerSec.toFixed(0)}`;
+                                }
+                            }
+                            
+                            if (sysMemVal) {
+                                const soaMemGB = msg.soa_memory?.used_gb || 0;
+                                sysMemVal.textContent = `${soaMemGB.toFixed(3)}GB`;
+                            }
                         }
                     } catch(_){}
                 };

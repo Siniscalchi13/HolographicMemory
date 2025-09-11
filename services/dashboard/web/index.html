@@ -566,8 +566,9 @@
                 }
                 let token = localStorage.getItem('terminalToken');
                 if (!token) {
-                    token = prompt('Enter terminal access token');
-                    if (token) localStorage.setItem('terminalToken', token);
+                    // Try to connect without token first (development mode)
+                    // If that fails, prompt for token
+                    token = null;
                 }
                 const proto = location.protocol === 'https:' ? 'wss' : 'ws';
                 ws = new WebSocket(`${proto}://localhost:${port}/ws${token ? `?token=${encodeURIComponent(token)}` : ''}`);
@@ -585,7 +586,20 @@
                         term.write(ev.data);
                     }
                 };
-                ws.onclose = () => { term.write('\r\n\u001b[31m[DISCONNECTED]\u001b[0m\r\n'); };
+                ws.onclose = (event) => { 
+                    if (event.code === 1008) {
+                        // Authentication failed, prompt for token
+                        term.write('\r\n\u001b[33m[AUTH REQUIRED]\u001b[0m Terminal access requires authentication.\r\n');
+                        const newToken = prompt('Enter terminal access token (or leave blank for dev mode):');
+                        if (newToken !== null) {
+                            localStorage.setItem('terminalToken', newToken);
+                            term.write('\u001b[32m[RETRYING]\u001b[0m Attempting to reconnect...\r\n');
+                            setTimeout(() => connectTerminalWS(), 1000);
+                        }
+                    } else {
+                        term.write('\r\n\u001b[31m[DISCONNECTED]\u001b[0m\r\n');
+                    }
+                };
                 term.onData(data => { if (ws && ws.readyState === 1) ws.send(data); });
             } catch (e) {
                 term.write(`\u001b[31m[ERROR]\u001b[0m ${e?.message||e}\r\n`);
@@ -650,7 +664,12 @@
             // Update GPU Status
             const gpuStatus = document.getElementById('gpuStatus');
             if (gpuStatus) {
-                gpuStatus.textContent = data.gpu_utilization ? `${data.gpu_utilization}%` : 'Active';
+                if (data.gpu?.available) {
+                    const platform = data.gpu.platform || 'unknown';
+                    gpuStatus.textContent = `${data.gpu.utilization || 0}% (${platform.toUpperCase()})`;
+                } else {
+                    gpuStatus.textContent = 'Inactive';
+                }
             }
             
             // Update Operations/sec (placeholder - would need real data)
