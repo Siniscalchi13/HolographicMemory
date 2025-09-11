@@ -113,12 +113,22 @@ class HolographicMemoryOrchestrator:
         
         # Step 4: GPU Memory storage
         doc_id = self._generate_document_id(content)
-        storage_result = self.memory.store_bytes(doc_id, content)
+        # Create temporary file for storage
+        import tempfile
+        from pathlib import Path
+        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+            tmp_file.write(content)
+            tmp_path = Path(tmp_file.name)
+        try:
+            storage_result = self.memory.store_file(tmp_path, stable_id=doc_id)
+        finally:
+            # Clean up temporary file
+            tmp_path.unlink(missing_ok=True)
         
         # Step 5: Telemetry tracking
         self.telemetry.track_compression(
             original=len(content),
-            stored=len(storage_result.get("encoded_data", b"")),
+            stored=len(content),  # For now, assume same size until we get actual compression data
             layer=routing_decision.get("primary_layer", "Knowledge")
         )
         

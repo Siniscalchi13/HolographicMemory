@@ -7,6 +7,7 @@ the SOA API (when available), and utilities for timeouts and retries.
 from __future__ import annotations
 
 import os
+import sys
 import typing as _t
 from pathlib import Path
 
@@ -18,49 +19,42 @@ pytest_plugins = ("tests.logging.plugin",)
 
 @pytest.fixture(autouse=True)
 def _isolate_hlog_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Isolate holographic data directory per test run.
-
-    Sets env vars used across services to point to a temporary directory to
-    avoid interfering with developer or CI machines.
-    """
+    """Isolate holographic data directory per test run and enable real GPU-backed memory if available."""
     data_dir = tmp_path / "holographic_data"
     data_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("HLOG_DATA_DIR", str(data_dir))
     monkeypatch.setenv("HOLOGRAPHIC_DATA_DIR", str(data_dir))
-    monkeypatch.setenv("HOLOGRAPHIC_USE_GPU", "false")
+    # Enable GPU usage by default; real engine will gracefully fall back if unavailable
+    monkeypatch.setenv("HOLOGRAPHIC_USE_GPU", "true")
     # Deterministic thresholds for router decisions
     monkeypatch.setenv("HOLO_MICRO_THRESHOLD", "256")
     monkeypatch.setenv("HOLO_MICRO_K8_MAX", "1024")
 
 
-class _FakeMemory:
-    def __init__(self, state_dir, grid_size: int = 64, use_gpu: bool = False) -> None:
-        self.state = {}
-        self.grid_size = int(grid_size)
-        self.use_gpu = bool(use_gpu)
-        self.backend = object()
-
-    def store_bytes(self, doc_id: str, content: bytes):
-        self.state[str(doc_id)] = bytes(content)
-        return {"ok": True, "encoded_data": content[:16]}
-
-    def retrieve_bytes(self, doc_id: str) -> bytes:
-        return self.state.get(str(doc_id), b"")
-
-
 @pytest.fixture(autouse=True, scope="session")
-def _patch_orchestrator_memory() -> None:
-    try:
-        import services.orchestrator.orchestrator as orch
-        # Direct patching for session scope
-        original = getattr(orch, "HolographicMemory", None)
-        orch.HolographicMemory = _FakeMemory
-        yield
-        # Restore original if it existed
-        if original is not None:
-            orch.HolographicMemory = original
-    except Exception:
-        yield
+def _enable_native_backends() -> None:
+    """Ensure native GPU/CPU backends are importable by extending sys.path to bundled libs.
+
+    Looks for prebuilt shared objects under services/holographic-memory/core/native/holographic/* and appends
+    their directories to sys.path so imports like `import holographic_gpu` succeed without system installation.
+    """
+    root = Path.cwd() / "services" / "holographic-memory" / "core" / "native" / "holographic"
+    candidates = []
+    for sub in ("build",):
+        p = root / sub
+        if p.exists():
+            candidates.append(p)
+    # Also search lib.* directories (e.g., lib.macosx-metal, lib.linux-cuda)
+    if root.exists():
+        for d in root.iterdir():
+            if d.is_dir() and d.name.startswith("lib."):
+                candidates.append(d)
+    for p in candidates:
+        sp = str(p)
+        if sp not in sys.path:
+            sys.path.insert(0, sp)
+    yield
+
 
 @pytest.fixture(scope="session")
 def test_config() -> dict[str, _t.Any]:
@@ -92,13 +86,11 @@ def fastapi_app():
     fixture should mark themselves with `contract` or `integration`).
     """
     try:
-        # Prefer the SOA app with orchestrator dep injection (underscore variant)
         from services.holographic_memory.api.app_soa import app  # type: ignore
         return app
     except Exception:
         pass
     try:
-        # Fallback: load module by path (hyphenated folder name)
         import runpy
         mod = runpy.run_path("services/holographic-memory/api/app_soa.py")
         app = mod.get("app")
