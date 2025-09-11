@@ -40,11 +40,12 @@ def _enable_native_backends() -> None:
     """
     root = Path.cwd() / "services" / "holographic-memory" / "core" / "native" / "holographic"
     candidates = []
+    # Prioritize build directory (Python 3.13 versions) over lib.* directories (Python 3.12 versions)
     for sub in ("build",):
         p = root / sub
         if p.exists():
             candidates.append(p)
-    # Also search lib.* directories (e.g., lib.macosx-metal, lib.linux-cuda)
+    # Also search lib.* directories (e.g., lib.macosx-metal, lib.linux-cuda) as fallback
     if root.exists():
         for d in root.iterdir():
             if d.is_dir() and d.name.startswith("lib."):
@@ -52,7 +53,7 @@ def _enable_native_backends() -> None:
     for p in candidates:
         sp = str(p)
         if sp not in sys.path:
-            sys.path.insert(0, sp)
+            sys.path.insert(0, sp)  # build directory will be inserted first, then lib.* directories
     yield
 
 
