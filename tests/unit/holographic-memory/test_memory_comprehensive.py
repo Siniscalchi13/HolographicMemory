@@ -24,32 +24,36 @@ def _mk_layer(n: int = 16) -> Tuple[List[int], List[int], float]:
 
 @pytest.mark.unit
 @pytest.mark.parametrize("n", [1, 2, 4, 8, 16, 32, 64])
-def test_write_hwp_v4_micro_roundtrip(n: int) -> None:
-    buf = io.BytesIO()
+def test_write_hwp_v4_micro_roundtrip(n: int, tmp_path) -> None:
     amps, phases, scale = _mk_layer(n)
+    test_file = tmp_path / f"test_{n}.hwp"
     write_hwp_v4_micro(
-        buf,
+        test_file,
         doc_id_hex="abcd1234",
         original_size=1024,
         dimension=64,
         layers_count=1
     )
-    raw = buf.getvalue()
+    raw = test_file.read_bytes()
     assert raw.startswith(b"H4M1")  # micro header
     assert len(raw) > 8
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize("n", [8, 16, 32, 64])
-def test_write_hwp_v4_micro_k8_header(n: int) -> None:
-    import sys
-sys.path.insert(0, 'services/holographic-memory/api')
-from hwp_v4 import write_hwp_v4_micro_k8
-
-    buf = io.BytesIO()
+def test_write_hwp_v4_micro_k8_header(n: int, tmp_path) -> None:
+    from hwp_v4 import write_hwp_v4_micro_k8
+    
     amps, phases, scale = _mk_layer(n)
-    write_hwp_v4_micro_k8(buf, list(range(n)), amps, phases, scale)
-    raw = buf.getvalue()
+    test_file = tmp_path / f"test_k8_{n}.hwp"
+    write_hwp_v4_micro_k8(
+        test_file,
+        doc_id_hex="abcd1234",
+        original_size=1024,
+        dimension=64,
+        layers_count=1
+    )
+    raw = test_file.read_bytes()
     assert raw.startswith(b"H4K8")
     assert len(raw) > 8
 
