@@ -43,9 +43,36 @@ dev:
 	$(MAKE) dev-native
 	@echo "✅ Development environment setup complete!"
 	@echo ""
-	@echo "🎯 Next step: Activate virtual environment and run verification"
-	@echo "   source venv313/bin/activate"
+	@echo "🎉 🚀 🌌 HOLOGRAPHIC MEMORY SOA SYSTEM READY! 🌌 🚀 🎉"
+	@echo "================================================================"
+	@echo ""
+	@echo "🎯 NEXT STEPS TO LAUNCH YOUR SOA SYSTEM:"
+	@echo ""
+	@echo "1️⃣  🔍 VERIFY EVERYTHING IS WORKING:"
 	@echo "   make dev-verify"
+	@echo ""
+	@echo "2️⃣  🐍 ACTIVATE YOUR VIRTUAL ENVIRONMENT:"
+	@echo "   source venv313/bin/activate"
+	@echo ""
+	@echo "3️⃣  🚀 LAUNCH THE SOA DASHBOARD:"
+	@echo "   make soa-start"
+	@echo ""
+	@echo "🎮 OR USE THE SIMPLE SCRIPT:"
+	@echo "   ./soa start"
+	@echo ""
+	@echo "🌐 MAIN DASHBOARD WILL OPEN AUTOMATICALLY!"
+	@echo "   🎯 Central Hub: http://localhost:[DYNAMIC_PORT]/soa_dashboard.html"
+	@echo ""
+	@echo "📋 Available Services (accessible from main dashboard):"
+	@echo "   • 🔧 API Server & Documentation"
+	@echo "   • 💻 Terminal Interface (Command-line)"
+	@echo "   • 📊 Analytics Dashboard (Charts & Metrics)"
+	@echo "   • 📄 API Status Page (Simple Status)"
+	@echo ""
+	@echo "💡 Run 'make soa-status' to see actual port assignments"
+	@echo ""
+	@echo "🎊 READY TO EXPERIENCE HOLOGRAPHIC MEMORY! 🎊"
+	@echo "================================================================"
 
 dev-verify:
 	@echo "🔍 Verifying development environment..."
@@ -63,8 +90,31 @@ dev-verify:
 	@$(VENV_PY) -c "import sys; sys.path.append('services/vault'); import vault_storage; print('✅ Vault service imported successfully')"
 	@echo "✅ Development environment verification complete!"
 	@echo ""
-	@echo "🚀 Next step: Launch development system"
-	@echo "   make launch-dev"
+	@echo "🎉 🎊 🌟 ALL SYSTEMS VERIFIED! 🌟 🎊 🎉"
+	@echo "================================================================"
+	@echo ""
+	@echo "🎯 READY TO LAUNCH YOUR SOA SYSTEM!"
+	@echo ""
+	@echo "🐍 STEP 1: ACTIVATE VIRTUAL ENVIRONMENT"
+	@echo "   source venv313/bin/activate"
+	@echo ""
+	@echo "🚀 STEP 2: LAUNCH THE SOA DASHBOARD"
+	@echo "   make soa-start"
+	@echo ""
+	@echo "🎮 OR USE THE SIMPLE SCRIPT:"
+	@echo "   ./soa start"
+	@echo ""
+	@echo "🌐 THEN OPEN YOUR BROWSER TO:"
+	@echo "   • 🖥️  Web Dashboard: http://localhost:[DYNAMIC_PORT]"
+	@echo "   • 🔧 API Server: http://localhost:[DYNAMIC_PORT]"
+	@echo "   • 🎨 Enhanced UI: http://localhost:[DYNAMIC_PORT]"
+	@echo "   • 📄 API Static: http://localhost:[DYNAMIC_PORT]"
+	@echo "   • 📚 API Docs: http://localhost:[DYNAMIC_PORT]/docs"
+	@echo ""
+	@echo "💡 Run 'make soa-status' to see actual port assignments"
+	@echo ""
+	@echo "🎊 YOUR HOLOGRAPHIC MEMORY SOA IS READY TO GO! 🎊"
+	@echo "================================================================"
 
 # ┌─────────────────────────────────────────────────────────────────────────────┐
 # │ Process Management                                                         │
@@ -75,7 +125,32 @@ dev-kill:
 	@-pkill -f "python.*main.py" 2>/dev/null || true
 	@-pkill -f "uvicorn.*app_soa" 2>/dev/null || true
 	@-pkill -f "python3 -m http.server" 2>/dev/null || true
+	@-pkill -f "python.*app.py" 2>/dev/null || true
 	@echo "✅ Existing processes stopped"
+
+soa-start:
+	@echo "🚀 Starting SOA system with intelligent process management..."
+	@$(VENV_PY) scripts/soa_manager.py start
+
+soa-stop:
+	@echo "🛑 Stopping SOA system..."
+	@$(VENV_PY) scripts/soa_manager.py stop
+
+soa-restart:
+	@echo "🔄 Restarting SOA system..."
+	@$(VENV_PY) scripts/soa_manager.py restart
+
+soa-status:
+	@echo "📊 SOA system status:"
+	@$(VENV_PY) scripts/soa_manager.py status
+
+soa-kill:
+	@echo "🛑 Emergency kill - stopping all HolographicMemory processes..."
+	@-pkill -f "main.py" 2>/dev/null || true
+	@-pkill -f "app_soa" 2>/dev/null || true
+	@-pkill -f "http.server" 2>/dev/null || true
+	@-pkill -f "app.py" 2>/dev/null || true
+	@echo "✅ All processes killed"
 
 # ┌─────────────────────────────────────────────────────────────────────────────┐
 # │ Application Launch                                                         │
@@ -121,9 +196,32 @@ dev-all:
 	$(MAKE) dev-verify
 	@echo ""
 	@echo "🚀 Step 5: Launching development system..."
-	@echo "⚠️  Note: You need to activate the virtual environment first:"
+	@echo ""
+	@echo "🎉 🚀 🌌 SETUP COMPLETE! READY TO LAUNCH! 🌌 🚀 🎉"
+	@echo "================================================================"
+	@echo ""
+	@echo "🎯 FINAL STEPS TO LAUNCH YOUR SOA SYSTEM:"
+	@echo ""
+	@echo "🐍 STEP 1: ACTIVATE VIRTUAL ENVIRONMENT"
 	@echo "   source venv313/bin/activate"
-	@echo "   make launch-dev"
+	@echo ""
+	@echo "🚀 STEP 2: LAUNCH THE SOA DASHBOARD"
+	@echo "   make soa-start"
+	@echo ""
+	@echo "🎮 OR USE THE SIMPLE SCRIPT:"
+	@echo "   ./soa start"
+	@echo ""
+	@echo "🌐 THEN OPEN YOUR BROWSER TO:"
+	@echo "   • 🖥️  Web Dashboard: http://localhost:[DYNAMIC_PORT]"
+	@echo "   • 🔧 API Server: http://localhost:[DYNAMIC_PORT]"
+	@echo "   • 🎨 Enhanced UI: http://localhost:[DYNAMIC_PORT]"
+	@echo "   • 📄 API Static: http://localhost:[DYNAMIC_PORT]"
+	@echo "   • 📚 API Docs: http://localhost:[DYNAMIC_PORT]/docs"
+	@echo ""
+	@echo "💡 Run 'make soa-status' to see actual port assignments"
+	@echo ""
+	@echo "🎊 YOUR HOLOGRAPHIC MEMORY SOA IS READY TO GO! 🎊"
+	@echo "================================================================"
 
 # ┌─────────────────────────────────────────────────────────────────────────────┐
 # │ Testing & Validation                                                       │
@@ -217,8 +315,68 @@ dev-demo:
 
 dev-clean:
 	@echo "🧹 Cleaning development artifacts..."
-	@rm -rf **/__pycache__ build dist .pytest_cache
+	@echo "   Cleaning Python cache files..."
+	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	@find . -name "*.pyc" -delete 2>/dev/null || true
+	@find . -name "*.pyo" -delete 2>/dev/null || true
+	@echo "   Cleaning build directories..."
+	@rm -rf build dist .pytest_cache
 	@rm -rf services/holographic-memory/core/*.egg-info
 	@rm -rf services/holographic-memory/core/native/holographic/build
 	@rm -rf htmlcov .coverage
+	@echo "   Cleaning SOA artifacts..."
+	@rm -f soa_config.json
+	@rm -rf dashboard/__pycache__
+	@rm -rf services/dashboard/__pycache__
+	@echo "   Cleaning test artifacts..."
+	@rm -rf tests/reports/html/*
+	@rm -rf tests/reports/junit/*
+	@rm -rf logs/*.log
+	@echo "   Cleaning temporary files..."
+	@rm -rf .DS_Store
+	@find . -name "*.tmp" -delete 2>/dev/null || true
+	@find . -name "*.log" -not -path "./logs/*" -delete 2>/dev/null || true
 	@echo "✅ Development cleanup complete!"
+
+clean-all:
+	@echo "🧹 COMPLETE SYSTEM CLEANUP - Fresh Start"
+	@echo "=========================================="
+	@echo "🛑 Step 1: Stopping all SOA processes..."
+	@$(MAKE) soa-kill
+	@echo ""
+	@echo "🗑️  Step 2: Removing virtual environment..."
+	@rm -rf venv313
+	@echo ""
+	@echo "🧹 Step 3: Cleaning all Python artifacts..."
+	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	@find . -name "*.pyc" -delete 2>/dev/null || true
+	@find . -name "*.pyo" -delete 2>/dev/null || true
+	@find . -name "*.pyd" -delete 2>/dev/null || true
+	@echo ""
+	@echo "🏗️  Step 4: Cleaning build directories..."
+	@rm -rf build dist .pytest_cache
+	@rm -rf services/holographic-memory/core/*.egg-info
+	@rm -rf services/holographic-memory/core/native/holographic/build
+	@rm -rf htmlcov .coverage
+	@echo ""
+	@echo "🌐 Step 5: Cleaning SOA artifacts..."
+	@rm -f soa_config.json
+	@rm -rf dashboard/__pycache__
+	@rm -rf services/dashboard/__pycache__
+	@echo ""
+	@echo "🧪 Step 6: Cleaning test artifacts..."
+	@rm -rf tests/reports/html/*
+	@rm -rf tests/reports/junit/*
+	@rm -rf logs/*.log
+	@echo ""
+	@echo "🗂️  Step 7: Cleaning temporary files..."
+	@rm -rf .DS_Store
+	@find . -name "*.tmp" -delete 2>/dev/null || true
+	@find . -name "*.log" -not -path "./logs/*" -delete 2>/dev/null || true
+	@find . -name "*.swp" -delete 2>/dev/null || true
+	@find . -name "*.swo" -delete 2>/dev/null || true
+	@find . -name "*~" -delete 2>/dev/null || true
+	@echo ""
+	@echo "✅ COMPLETE CLEANUP FINISHED!"
+	@echo "=========================================="
+	@echo "🎯 Ready for fresh start! Run 'make dev' to set up again."

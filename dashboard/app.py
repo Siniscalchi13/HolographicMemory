@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, send_from_directory
 import json
 import time
 from datetime import datetime
@@ -42,5 +42,17 @@ def api_metrics():
         'timestamp': datetime.now().isoformat()
     })
 
+@app.route('/assets/<path:filename>')
+def assets(filename: str):
+    """Serve SmartHaus assets from static/assets"""
+    return send_from_directory('static/assets', filename)
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    import sys
+    port = 5000
+    if len(sys.argv) > 1 and sys.argv[1] == '--port' and len(sys.argv) > 2:
+        try:
+            port = int(sys.argv[2])
+        except ValueError:
+            print(f"Invalid port: {sys.argv[2]}, using default 5000")
+    app.run(debug=True, host='0.0.0.0', port=port)

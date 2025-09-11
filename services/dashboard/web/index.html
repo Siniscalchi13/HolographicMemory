@@ -4,7 +4,94 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🌌 HolographicMemory SOA Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        /* SmartHaus Design System Variables */
+        :root {
+            /* Quantum Layer - Deep, Foundational */
+            --quantum-void: #000120;
+            --quantum-dark: #1A1F3A;
+            --quantum-blue: #1E3A8A;
+            --quantum-electric: #61dafb;
+            
+            /* Chemistry Layer - Binding, Energy */
+            --chemistry-purple: #6366F1;
+            --chemistry-magenta: #A855F7;
+            --chemistry-cyan: #06B6D4;
+            --chemistry-teal: #14B8A6;
+            
+            /* Biology Layer - Living, Adaptive */
+            --biology-emerald: #10B981;
+            --biology-gold: #F59E0B;
+            --biology-coral: #FB7185;
+            --biology-amber: #FCD34D;
+            
+            /* Mathematical Purity */
+            --pure-white: #FFFFFF;
+            --proof-gray-50: #FAFAFA;
+            --proof-gray-100: #F4F4F5;
+            --proof-gray-200: #E4E4E7;
+            --proof-gray-300: #D4D4D8;
+            --proof-gray-400: #A1A1AA;
+            --proof-gray-500: #71717A;
+            --proof-gray-600: #52525B;
+            --proof-gray-700: #3F3F46;
+            --proof-gray-800: #27272A;
+            --proof-gray-900: #18181B;
+            
+            /* Header Background Colors */
+            --header-bg: rgba(255, 255, 255, 0.95);
+            --header-bg-solid: #fafafa;
+            --header-bg-medium: #f5f5f5;
+            --header-bg-dark: #e5e5e5;
+            
+            /* Semantic Assignments */
+            --color-background: var(--header-bg-solid);
+            --color-surface: var(--header-bg-medium);
+            --color-border: var(--proof-gray-200);
+            --color-text-primary: var(--quantum-void);
+            --color-text-secondary: var(--quantum-blue);
+            --color-text-muted: var(--proof-gray-600);
+            
+            /* Spacing System */
+            --space-1: 0.25rem;
+            --space-2: 0.5rem;
+            --space-3: 0.75rem;
+            --space-4: 1rem;
+            --space-5: 1.25rem;
+            --space-6: 1.5rem;
+            --space-8: 2rem;
+            --space-10: 2.5rem;
+            --space-12: 3rem;
+            --space-16: 4rem;
+            --space-20: 5rem;
+            --space-24: 6rem;
+            --space-32: 8rem;
+            
+            /* Typography */
+            --font-size-xs: 0.75rem;
+            --font-size-sm: 0.875rem;
+            --font-size-base: 1rem;
+            --font-size-lg: 1.125rem;
+            --font-size-xl: 1.25rem;
+            --font-size-2xl: 1.5rem;
+            --font-size-3xl: 1.875rem;
+            --font-size-4xl: 2.25rem;
+            
+            /* Border Radius */
+            --radius-sm: 0.375rem;
+            --radius-md: 0.5rem;
+            --radius-lg: 0.75rem;
+            --radius-xl: 1rem;
+            --radius-full: 9999px;
+            
+            /* Shadows */
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
         * {
             margin: 0;
             padding: 0;
@@ -25,24 +112,49 @@
             padding: 20px;
         }
 
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-            padding: 20px;
-            border: 2px solid #00ff88;
-            border-radius: 10px;
-            background: rgba(0, 255, 136, 0.1);
+        .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 30px; padding: 16px 24px; border: 1px solid var(--color-border); border-radius: 12px; background: #fafafa; box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1); }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
         }
 
-        .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            text-shadow: 0 0 20px #00ff88;
+        .logo { height: 56px; width: 140px; object-fit: contain; }
+
+        .header-title h1 { font-family: 'Inter', sans-serif; font-size: 1.777rem; margin-bottom: 6px; color: #000120; text-shadow: none; }
+
+        .header-title p { font-family: 'Inter', sans-serif; font-size: 0.875rem; color: #52525B; opacity: 1; }
+
+        .header-right { display: flex; align-items: center; gap: 20px; }
+
+        .nav { display: flex; align-items: center; gap: 16px; }
+        .nav a { color: #111827; text-decoration: none; font-family: 'Inter', sans-serif; font-weight: 500; font-size: 0.875rem; padding: 6px 8px; border-radius: 6px; }
+        .nav a:hover { background: var(--proof-gray-100); }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: #10B981;
+            color: white;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
         }
 
-        .header p {
-            font-size: 1.2em;
-            opacity: 0.8;
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: white;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
         }
 
         .dashboard {
@@ -65,6 +177,8 @@
             border-radius: 10px;
             padding: 20px;
         }
+
+        .terminal-container { background: #000; border: 1px solid #333; border-radius: 8px; height: 420px; }
 
         .command-input {
             display: flex;
@@ -252,18 +366,36 @@
         .scrollbar::-webkit-scrollbar-thumb:hover {
             background: #00cc6a;
         }
+        
+        /* New full-width SmartHaus header + metrics dashboard */
+        :root { --header-height: 72px; }
+        body { padding-top: var(--header-height); }
+        .page-header { position: fixed; top:0; left:0; right:0; height: var(--header-height); background: var(--header-bg-solid); border-bottom:1px solid var(--color-border); box-shadow: var(--shadow-sm); z-index: 1000; }
+        .header-container { max-width: 120rem; margin: 0 auto; height: 100%; display:flex; align-items:center; justify-content:space-between; padding: 0 var(--space-8); }
+        .page-header .logo { height: 56px; width: 140px; object-fit: contain; }
+        .main-nav { display:flex; align-items:center; gap: var(--space-5); }
+        .main-nav a { color: var(--color-text-primary); text-decoration:none; font-weight:600; font-size: var(--font-size-sm); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); }
+        .main-nav a:hover { background: var(--proof-gray-100); }
+        .system-status { display:flex; align-items:center; gap: var(--space-2); background: var(--biology-emerald); color: white; padding: var(--space-2) var(--space-3); border-radius: var(--radius-full); font-size: var(--font-size-sm); }
+        .header { display: none !important; }
     </style>
 </head>
 <body>
-    <div class="connection-status" id="connectionStatus">
-        <span id="connectionText">Connecting...</span>
-    </div>
-
+    <!-- Full-width SmartHaus Header -->
+    <header class="page-header">
+      <div class="header-container">
+        <img src="/assets/images/smarthaus-logo-light.svg" alt="SmartHaus" class="logo">
+        <nav class="main-nav">
+          <a id="nav-dashboard" href="#">Dashboard</a>
+          <a id="nav-terminal" href="#">Terminal</a>
+          <a id="nav-analytics" href="#">Analytics</a>
+          <a id="nav-status" href="#">Status</a>
+          <a id="nav-docs" href="#">Docs</a>
+        </nav>
+        <div class="system-status"><span class="status-dot" style="width:8px;height:8px;border-radius:50%;background:white"></span> SOA System Online</div>
+      </div>
+    </header>
     <div class="container">
-        <div class="header">
-            <h1>🌌 HolographicMemory SOA Dashboard</h1>
-            <p>GPU-First Architecture | Mathematical Precision | Service Orchestration</p>
-        </div>
 
         <div class="status-grid">
             <div class="status-card">
@@ -315,31 +447,154 @@
             </div>
 
             <div class="main-content">
-                <div class="command-input">
-                    <input type="text" id="commandInput" placeholder="Enter SOA command (e.g., status, help, store 'Hello World')" 
-                           onkeypress="handleKeyPress(event)">
-                    <button onclick="executeCommand()">Execute</button>
-                </div>
-                
-                <div class="output scrollbar" id="output">
-                    <div class="output-line prompt">🌌 HolographicMemory SOA Command Center Ready!</div>
-                    <div class="output-line info">Type 'help' for available commands or use the quick commands on the left.</div>
-                    <div class="output-line info">Connecting to SOA system...</div>
-                </div>
+                <div id="realTerminal" class="terminal-container"></div>
+                <div class="output scrollbar" id="output" style="display:none"></div>
             </div>
         </div>
     </div>
 
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
     <script>
         let apiBaseUrl = 'http://localhost:8085';
         let isConnected = false;
+        let ws; let term; let fitAddon;
+        let mainDashboardPort = null;
+        
+        // Discover main dashboard port dynamically
+        async function discoverMainDashboardPort() {
+            const commonPorts = [8080, 8081, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089, 8090, 8091, 8092, 8093, 8094, 8095, 8100, 8101, 8102, 8103, 8104, 8105, 8106, 8107, 8108, 8109, 8110, 8111, 8112, 8113, 8114, 8115];
+            for (const port of commonPorts) {
+                try {
+                    const response = await fetch(`http://localhost:${port}/api/soa-config`, { 
+                        method: 'GET',
+                        timeout: 1000 
+                    });
+                    if (response.ok) {
+                        mainDashboardPort = port;
+                        return port;
+                    }
+                } catch (e) {
+                    // Continue to next port
+                }
+            }
+            return null;
+        }
+        
+        // Link header nav to discovered services (optional: expects SOA config if available)
+        (async function linkNav(){
+            try {
+                if (!mainDashboardPort) {
+                    mainDashboardPort = await discoverMainDashboardPort();
+                }
+                if (!mainDashboardPort) {
+                    console.warn('Could not discover main dashboard port');
+                    return;
+                }
+                const cfg = await fetch(`http://localhost:${mainDashboardPort}/api/soa-config`);
+                if (cfg.ok) {
+                    const data = await cfg.json();
+                    const navUrls = data.navigation_urls || {};
+                    
+                    // Wire all navigation links using the registry
+                    const navMap = [
+                        ['nav-dashboard', navUrls.dashboard],
+                        ['nav-terminal', navUrls.terminal],
+                        ['nav-analytics', navUrls.analytics],
+                        ['nav-status', navUrls.status],
+                        ['nav-docs', navUrls.docs],
+                    ];
+                    
+                    navMap.forEach(([id, url]) => {
+                        const el = document.getElementById(id);
+                        if (el && url) {
+                            el.href = url;
+                        }
+                    });
+                }
+            } catch (e) {
+                // ignore if SOA config not available
+            }
+        })();
 
         // Initialize dashboard
         document.addEventListener('DOMContentLoaded', function() {
             checkConnection();
             updateStatus();
             setInterval(updateStatus, 5000); // Update every 5 seconds
+            initXterm();
+            connectTerminalWS();
         });
+
+        function initXterm() {
+            term = new window.Terminal({
+                fontFamily: 'JetBrains Mono, SF Mono, Menlo, monospace',
+                fontSize: 13,
+                cursorBlink: true,
+                theme: { background: '#000000' }
+            });
+            fitAddon = new window.FitAddon.FitAddon();
+            term.loadAddon(fitAddon);
+            term.open(document.getElementById('realTerminal'));
+            fitAddon.fit();
+            window.addEventListener('resize', () => {
+                fitAddon.fit();
+                sendResize();
+            });
+            term.onResize(() => sendResize());
+        }
+
+        async function connectTerminalWS() {
+            // discover terminal service port from SOA config (CORS-enabled)
+            try {
+                if (!mainDashboardPort) {
+                    mainDashboardPort = await discoverMainDashboardPort();
+                }
+                if (!mainDashboardPort) {
+                    term.write('\u001b[33m[ERROR]\u001b[0m Could not discover main dashboard port.\r\n');
+                    return;
+                }
+                const resp = await fetch(`http://localhost:${mainDashboardPort}/api/soa-config`);
+                const data = await resp.json();
+                const port = (data.service_ports && data.service_ports.terminal_service) || null;
+                if (!port) {
+                    term.write('\u001b[33m[WARN]\u001b[0m No terminal service running.\r\n');
+                    return;
+                }
+                let token = localStorage.getItem('terminalToken');
+                if (!token) {
+                    token = prompt('Enter terminal access token');
+                    if (token) localStorage.setItem('terminalToken', token);
+                }
+                const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+                ws = new WebSocket(`${proto}://localhost:${port}/ws${token ? `?token=${encodeURIComponent(token)}` : ''}`);
+                ws.binaryType = 'arraybuffer';
+
+                ws.onopen = () => {
+                    term.write('\u001b[32m[CONNECTED]\u001b[0m Real shell ready.\r\n');
+                    term.focus();
+                    sendResize();
+                };
+                ws.onmessage = (ev) => {
+                    if (ev.data instanceof ArrayBuffer) {
+                        term.write(new Uint8Array(ev.data));
+                    } else {
+                        term.write(ev.data);
+                    }
+                };
+                ws.onclose = () => { term.write('\r\n\u001b[31m[DISCONNECTED]\u001b[0m\r\n'); };
+                term.onData(data => { if (ws && ws.readyState === 1) ws.send(data); });
+            } catch (e) {
+                term.write(`\u001b[31m[ERROR]\u001b[0m ${e?.message||e}\r\n`);
+            }
+        }
+
+        function sendResize(){
+            if (!term || !ws || ws.readyState !== 1) return;
+            const payload = JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows });
+            ws.send(payload);
+        }
 
         async function checkConnection() {
             try {
@@ -380,19 +635,24 @@
 
         async function executeCommand(cmd = null) {
             const input = document.getElementById('commandInput');
-            const command = cmd || input.value.trim();
-            
+            const command = (cmd || (input ? input.value.trim() : '')).trim();
             if (!command) return;
 
+            // If real terminal is connected, just send to shell
+            if (ws && ws.readyState === 1) {
+                ws.send(command + '\n');
+                return;
+            }
+
             addOutput(`SOA> ${command}`, 'prompt');
-            input.value = '';
+            if (input) input.value = '';
 
             if (!isConnected) {
                 addOutput('❌ Not connected to SOA system', 'error');
                 return;
             }
 
-            // Handle different commands
+            // Handle different commands (legacy simulated)
             switch (command.toLowerCase().split(' ')[0]) {
                 case 'help':
                     showHelp();

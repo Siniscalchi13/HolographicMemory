@@ -23,7 +23,7 @@ include Makefile.testing
 # │ Target Declarations                                                        │
 # └─────────────────────────────────────────────────────────────────────────────┘
 
-.PHONY: help setup test build native api soa clean dev prod lint syntax dev-verify launch-dev dev-all test-all test-quick test-unit test-integration test-e2e test-performance test-coverage test-html test-open test-clean test-ci
+.PHONY: help setup test build native api soa clean clean-all dev prod lint syntax dev-verify launch-dev dev-all test-all test-quick test-unit test-integration test-e2e test-performance test-coverage test-html test-open test-clean test-ci soa-start soa-stop soa-restart soa-status soa-kill
 
 # ┌─────────────────────────────────────────────────────────────────────────────┐
 # │ Development Targets                                                        │
@@ -34,12 +34,12 @@ test: dev-test
 build: dev-build
 native: dev-native
 api: dev-api
-soa: dev-soa
+soa: soa-start
 dev: dev-setup
 launch-dev: dev-launch
 dev-kill: dev-kill
 dev-all: dev-all
-clean: dev-clean
+clean: clean-all
 
 # ┌─────────────────────────────────────────────────────────────────────────────┐
 # │ Production Targets                                                         │

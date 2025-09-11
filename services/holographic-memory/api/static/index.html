@@ -3,89 +3,441 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HolographicMemory SOA System</title>
+    <title>SmartHaus HolographicMemory API</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
+        /* SmartHaus Design System Variables */
+        :root {
+            /* Quantum Layer - Deep, Foundational */
+            --quantum-void: #000120;
+            --quantum-dark: #1A1F3A;
+            --quantum-blue: #1E3A8A;
+            --quantum-electric: #61dafb;
+            
+            /* Chemistry Layer - Binding, Energy */
+            --chemistry-purple: #6366F1;
+            --chemistry-magenta: #A855F7;
+            --chemistry-cyan: #06B6D4;
+            --chemistry-teal: #14B8A6;
+            
+            /* Biology Layer - Living, Adaptive */
+            --biology-emerald: #10B981;
+            --biology-gold: #F59E0B;
+            --biology-coral: #FB7185;
+            --biology-amber: #FCD34D;
+            
+            /* Mathematical Purity */
+            --pure-white: #FFFFFF;
+            --proof-gray-50: #FAFAFA;
+            --proof-gray-100: #F4F4F5;
+            --proof-gray-200: #E4E4E7;
+            --proof-gray-300: #D4D4D8;
+            --proof-gray-400: #A1A1AA;
+            --proof-gray-500: #71717A;
+            --proof-gray-600: #52525B;
+            --proof-gray-700: #3F3F46;
+            --proof-gray-800: #27272A;
+            --proof-gray-900: #18181B;
+            
+            /* Header Background Colors */
+            --header-bg: rgba(255, 255, 255, 0.95);
+            --header-bg-solid: #fafafa;
+            --header-bg-medium: #f5f5f5;
+            --header-bg-dark: #e5e5e5;
+            
+            /* Graph Paper Background */
+            --graph-paper-bg: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23e5e7eb' fill-opacity='0.3'%3E%3Cpath d='M0 0h20v1H0zM0 0v20h1V0z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+
+            /* Semantic Assignments */
+            --color-background: var(--header-bg-solid);
+            --color-surface: var(--header-bg-medium);
+            --color-border: var(--proof-gray-200);
+            --color-text-primary: var(--quantum-void);
+            --color-text-secondary: var(--quantum-blue);
+            --color-text-muted: var(--proof-gray-600);
+            --color-accent: var(--quantum-electric);
+            --color-accent-secondary: var(--chemistry-purple);
+            --color-success: var(--biology-emerald);
+            --color-warning: var(--biology-gold);
+            --color-error: var(--biology-coral);
+            --color-deep: var(--quantum-void);
+            
+            /* Mathematical Spacing (Based on Fibonacci/Golden Ratio) */
+            --space-quantum: 0.125rem;
+            --space-1: 0.25rem;
+            --space-2: 0.5rem;
+            --space-3: 0.75rem;
+            --space-5: 1.25rem;
+            --space-8: 2rem;
+            --space-13: 3.25rem;
+            --space-21: 5.25rem;
+            --space-34: 8.5rem;
+            
+            /* Typography Scale (Perfect Fourth - 1.333) */
+            --font-size-xs: 0.75rem;
+            --font-size-sm: 0.875rem;
+            --font-size-base: 1rem;
+            --font-size-lg: 1.125rem;
+            --font-size-xl: 1.333rem;
+            --font-size-2xl: 1.777rem;
+            --font-size-3xl: 2.369rem;
+            --font-size-4xl: 3.157rem;
+            --font-size-5xl: 4.209rem;
+            
+            /* Font Families */
+            --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, monospace;
+            
+            /* Animation Timings (Fibonacci ms) */
+            --duration-instant: 89ms;
+            --duration-fast: 144ms;
+            --duration-normal: 233ms;
+            --duration-slow: 377ms;
+            --duration-slower: 610ms;
+            
+            /* Shadows - Layered Depth */
+            --shadow-quantum: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+            
+            /* Border Radius - Geometric Progression */
+            --radius-sm: 0.25rem;
+            --radius-md: 0.5rem;
+            --radius-lg: 1rem;
+            --radius-xl: 1.5rem;
+            --radius-full: 9999px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
+            font-family: var(--font-primary);
+            font-size: var(--font-size-base);
+            line-height: 1.6;
+            color: var(--color-text-primary);
+            background-color: var(--color-background);
+            background-image: var(--graph-paper-bg);
+            background-size: 20px 20px;
+            min-height: 100vh;
+            transition: background-color var(--duration-normal) ease;
+        }
+
+        .container {
+            max-width: 48rem;
             margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
+            padding: var(--space-8);
         }
+
+        /* SmartHaus Header Styling */
         .header {
-            text-align: center;
-            color: #333;
-            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--space-5) var(--space-8);
+            background-color: var(--header-bg-solid);
+            border-bottom: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            margin-bottom: var(--space-13);
+            box-shadow: var(--shadow-sm);
         }
-        .status {
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: var(--space-5);
+        }
+
+        .logo { height: 56px; width: 140px; object-fit: contain; }
+
+        .header-title {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .header h1 {
+            font-size: var(--font-size-2xl);
+            font-weight: 700;
+            color: var(--color-text-primary);
+            margin: 0;
+            line-height: 1.2;
+        }
+
+        .header-subtitle {
+            font-size: var(--font-size-sm);
+            color: var(--color-text-muted);
+            margin-top: var(--space-1);
+        }
+
+        .header-right { display: flex; align-items: center; gap: var(--space-5); }
+        .nav { display: flex; align-items: center; gap: var(--space-5); margin-right: var(--space-8); }
+        .nav a { color: var(--color-text-primary); text-decoration: none; font-weight: 500; font-size: var(--font-size-sm); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); transition: background-color var(--duration-fast) ease; }
+        .nav a:hover { background: var(--proof-gray-100); }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            padding: var(--space-2) var(--space-3);
+            background: var(--color-success);
+            color: white;
+            border-radius: var(--radius-full);
+            font-size: var(--font-size-sm);
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
             background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+            animation: pulse 2s infinite;
         }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .card {
+            background: var(--pure-white);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: var(--space-8);
+            margin-bottom: var(--space-8);
+            box-shadow: var(--shadow-sm);
+            transition: all var(--duration-normal) ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--color-accent);
+        }
+
+        .card h2 {
+            font-size: var(--font-size-xl);
+            font-weight: 600;
+            color: var(--color-text-primary);
+            margin-bottom: var(--space-5);
+        }
+
+        .card p {
+            color: var(--color-text-secondary);
+            line-height: 1.6;
+            margin-bottom: var(--space-5);
+        }
+
         .endpoint {
-            background: #e8f4f8;
-            padding: 15px;
-            border-radius: 5px;
-            margin: 10px 0;
-            border-left: 4px solid #2196F3;
+            background: var(--proof-gray-50);
+            padding: var(--space-5);
+            border-radius: var(--radius-md);
+            margin: var(--space-3) 0;
+            border-left: 4px solid var(--color-accent);
+            transition: all var(--duration-fast) ease;
         }
+
+        .endpoint:hover {
+            background: var(--proof-gray-100);
+            border-left-color: var(--color-accent-secondary);
+        }
+
         .method {
+            font-family: var(--font-mono);
+            font-weight: 600;
+            color: var(--color-accent);
+            background: var(--quantum-void);
+            color: var(--pure-white);
+            padding: var(--space-1) var(--space-3);
+            border-radius: var(--radius-sm);
+            font-size: var(--font-size-sm);
+            margin-right: var(--space-3);
+        }
+
+        .endpoint-path {
+            font-family: var(--font-mono);
+            color: var(--color-text-primary);
+            font-weight: 500;
+        }
+
+        .endpoint-description {
+            color: var(--color-text-muted);
+            font-size: var(--font-size-sm);
+            margin-top: var(--space-2);
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        li {
+            padding: var(--space-2) 0;
+            color: var(--color-text-secondary);
+            position: relative;
+            padding-left: var(--space-8);
+        }
+
+        li::before {
+            content: '→';
+            position: absolute;
+            left: 0;
+            color: var(--color-accent);
             font-weight: bold;
-            color: #1976D2;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: var(--space-21);
+            padding: var(--space-8);
+            border-top: 1px solid var(--color-border);
+            color: var(--color-text-muted);
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>🌌 HolographicMemory SOA System</h1>
-        <p>Advanced Holographic Memory with GPU Acceleration</p>
+    <div class="container">
+        <!-- SmartHaus Header -->
+        <div class="header">
+            <div class="header-left">
+                <img src="/assets/images/sh-logo-dark.svg" alt="SmartHaus" class="logo">
+                <div class="header-title">
+                    <h1>HolographicMemory API</h1>
+                    <div class="header-subtitle">Advanced Holographic Memory with GPU Acceleration</div>
+                </div>
+            </div>
+            <div class="header-right">
+                <nav class="nav">
+                    <a id="nav-dashboard" href="#">Dashboard</a>
+                    <a id="nav-terminal" href="#">Terminal</a>
+                    <a id="nav-analytics" href="#">Analytics</a>
+                    <a id="nav-status" href="#">Status</a>
+                    <a id="nav-docs" href="#">Docs</a>
+                </nav>
+                <div class="status-indicator">
+                    <div class="status-dot"></div>
+                    <span>API Online</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>✅ System Status: Running</h2>
+            <p>All SOA services are operational and ready for requests.</p>
+        </div>
+        
+        <div class="card">
+            <h2>🔗 Available Endpoints</h2>
+            
+            <div class="endpoint">
+                <span class="method">GET</span>
+                <span class="endpoint-path">/</span>
+                <div class="endpoint-description">This dashboard</div>
+            </div>
+            
+            <div class="endpoint">
+                <span class="method">POST</span>
+                <span class="endpoint-path">/store</span>
+                <div class="endpoint-description">Store content in holographic memory</div>
+            </div>
+            
+            <div class="endpoint">
+                <span class="method">GET</span>
+                <span class="endpoint-path">/recall/{id}</span>
+                <div class="endpoint-description">Recall content by ID</div>
+            </div>
+            
+            <div class="endpoint">
+                <span class="method">GET</span>
+                <span class="endpoint-path">/search</span>
+                <div class="endpoint-description">Search holographic memory</div>
+            </div>
+            
+            <div class="endpoint">
+                <span class="method">GET</span>
+                <span class="endpoint-path">/health</span>
+                <div class="endpoint-description">Health check</div>
+            </div>
+            
+            <div class="endpoint">
+                <span class="method">GET</span>
+                <span class="endpoint-path">/metrics</span>
+                <div class="endpoint-description">Prometheus metrics</div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>🚀 Features</h2>
+            <ul>
+                <li>GPU-accelerated holographic memory (Metal/CUDA/ROCm)</li>
+                <li>7-layer holographic decomposition</li>
+                <li>3D exact recall engine</li>
+                <li>SOA architecture with service orchestration</li>
+                <li>Real-time performance telemetry</li>
+                <li>Secure vault storage</li>
+            </ul>
+        </div>
+
+        <div class="footer">
+            <p><strong>HolographicMemory API</strong> | SmartHaus Group</p>
+            <p>Advanced holographic memory system with GPU acceleration</p>
+        </div>
     </div>
     
-    <div class="status">
-        <h2>✅ System Status: Running</h2>
-        <p>All SOA services are operational and ready for requests.</p>
-    </div>
-    
-    <div class="status">
-        <h2>🔗 Available Endpoints</h2>
-        
-        <div class="endpoint">
-            <span class="method">GET</span> / - This dashboard
-        </div>
-        
-        <div class="endpoint">
-            <span class="method">POST</span> /store - Store content in holographic memory
-        </div>
-        
-        <div class="endpoint">
-            <span class="method">GET</span> /recall/{id} - Recall content by ID
-        </div>
-        
-        <div class="endpoint">
-            <span class="method">GET</span> /search - Search holographic memory
-        </div>
-        
-        <div class="endpoint">
-            <span class="method">GET</span> /health - Health check
-        </div>
-        
-        <div class="endpoint">
-            <span class="method">GET</span> /metrics - Prometheus metrics
-        </div>
-    </div>
-    
-    <div class="status">
-        <h2>🚀 Features</h2>
-        <ul>
-            <li>GPU-accelerated holographic memory (Metal/CUDA/ROCm)</li>
-            <li>7-layer holographic decomposition</li>
-            <li>3D exact recall engine</li>
-            <li>SOA architecture with service orchestration</li>
-            <li>Real-time performance telemetry</li>
-            <li>Secure vault storage</li>
-        </ul>
-    </div>
+    <script>
+      // Discover main dashboard port dynamically
+      async function discoverMainDashboardPort() {
+        const commonPorts = [8080, 8081, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089, 8090, 8091, 8092, 8093, 8094, 8095, 8100, 8101, 8102, 8103, 8104, 8105, 8106, 8107, 8108, 8109, 8110, 8111, 8112, 8113, 8114, 8115];
+        for (const port of commonPorts) {
+          try {
+            const response = await fetch(`http://localhost:${port}/api/soa-config`, { 
+              method: 'GET',
+              timeout: 1000 
+            });
+            if (response.ok) {
+              return port;
+            }
+          } catch (e) {
+            // Continue to next port
+          }
+        }
+        return null;
+      }
+      
+      // Wire header nav using SOA config if available
+      (async function() {
+        try {
+          const mainDashboardPort = await discoverMainDashboardPort();
+          if (!mainDashboardPort) {
+            console.warn('Could not discover main dashboard port');
+            return;
+          }
+          const cfgResp = await fetch(`http://localhost:${mainDashboardPort}/api/soa-config`);
+          if (cfgResp.ok) {
+            const data = await cfgResp.json();
+            const ports = data.service_ports || {};
+            const navUrls = data.navigation_urls || {};
+            const el = (id) => document.getElementById(id);
+            
+            // Wire all navigation links using the registry
+            if (el('nav-dashboard') && navUrls.dashboard) el('nav-dashboard').href = navUrls.dashboard;
+            if (el('nav-terminal') && navUrls.terminal) el('nav-terminal').href = navUrls.terminal;
+            if (el('nav-analytics') && navUrls.analytics) el('nav-analytics').href = navUrls.analytics;
+            if (el('nav-status') && navUrls.status) el('nav-status').href = navUrls.status;
+            if (el('nav-docs') && navUrls.docs) el('nav-docs').href = navUrls.docs;
+          }
+        } catch (e) {
+          console.warn('Failed to wire navigation:', e);
+        }
+      })();
+    </script>
 </body>
 </html>

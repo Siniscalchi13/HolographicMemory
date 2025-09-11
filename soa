@@ -1,0 +1,49 @@
+#!/bin/bash
+# SOA Management Script
+# Quick commands for managing the HolographicMemory SOA system
+
+case "$1" in
+    start)
+        echo "🚀 Starting SOA system..."
+        make soa-start
+        ;;
+    stop)
+        echo "🛑 Stopping SOA system..."
+        make soa-stop
+        ;;
+    restart)
+        echo "🔄 Restarting SOA system..."
+        make soa-restart
+        ;;
+    status)
+        echo "📊 SOA system status:"
+        make soa-status
+        ;;
+    kill)
+        echo "🛑 Emergency kill - stopping all processes..."
+        make soa-kill
+        ;;
+    clean)
+        echo "🧹 Complete system cleanup - fresh start..."
+        make clean
+        ;;
+    *)
+        echo "🌌 HolographicMemory SOA Management"
+        echo ""
+        echo "Usage: ./soa [command]"
+        echo ""
+        echo "Commands:"
+        echo "  start    - Start the SOA system"
+        echo "  stop     - Stop the SOA system gracefully"
+        echo "  restart  - Restart the SOA system"
+        echo "  status   - Show system status"
+        echo "  kill     - Emergency kill all processes"
+        echo "  clean    - Complete cleanup (kill + clean + remove venv)"
+        echo ""
+        echo "Examples:"
+        echo "  ./soa start"
+        echo "  ./soa status"
+        echo "  ./soa clean    # Fresh start"
+        echo "  ./soa kill     # Emergency stop"
+        ;;
+esac

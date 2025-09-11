@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartHaus HolographicMemory SOA Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* SmartHaus Design System Variables */
+        :root {
+            /* Quantum Layer - Deep, Foundational */
+            --quantum-void: #000120;
+            --quantum-dark: #1A1F3A;
+            --quantum-blue: #1E3A8A;
+            --quantum-electric: #61dafb;
+            
+            /* Chemistry Layer - Binding, Energy */
+            --chemistry-purple: #6366F1;
+            --chemistry-magenta: #A855F7;
+            --chemistry-cyan: #06B6D4;
+            --chemistry-teal: #14B8A6;
+            
+            /* Biology Layer - Living, Adaptive */
+            --biology-emerald: #10B981;
+            --biology-gold: #F59E0B;
+            --biology-coral: #FB7185;
+            --biology-amber: #FCD34D;
+            
+            /* Mathematical Purity */
+            --pure-white: #FFFFFF;
+            --proof-gray-50: #FAFAFA;
+            --proof-gray-100: #F4F4F5;
+            --proof-gray-200: #E4E4E7;
+            --proof-gray-300: #D4D4D8;
+            --proof-gray-400: #A1A1AA;
+            --proof-gray-500: #71717A;
+            --proof-gray-600: #52525B;
+            --proof-gray-700: #3F3F46;
+            --proof-gray-800: #27272A;
+            --proof-gray-900: #18181B;
+            
+            /* Header Background Colors */
+            --header-bg: rgba(255, 255, 255, 0.95);
+            --header-bg-solid: #fafafa;
+            --header-bg-medium: #f5f5f5;
+            --header-bg-dark: #e5e5e5;
+            
+            /* Graph Paper Background */
+            --graph-paper-bg: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23e5e7eb' fill-opacity='0.3'%3E%3Cpath d='M0 0h20v1H0zM0 0v20h1V0z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+
+            /* Semantic Assignments */
+            --color-background: var(--header-bg-solid);
+            --color-surface: var(--header-bg-medium);
+            --color-border: var(--proof-gray-200);
+            --color-text-primary: var(--quantum-void);
+            --color-text-secondary: var(--quantum-blue);
+            --color-text-muted: var(--proof-gray-600);
+            --color-accent: var(--quantum-electric);
+            --color-accent-secondary: var(--chemistry-purple);
+            --color-success: var(--biology-emerald);
+            --color-warning: var(--biology-gold);
+            --color-error: var(--biology-coral);
+            --color-deep: var(--quantum-void);
+            
+            /* Mathematical Spacing (Based on Fibonacci/Golden Ratio) */
+            --space-quantum: 0.125rem;
+            --space-1: 0.25rem;
+            --space-2: 0.5rem;
+            --space-3: 0.75rem;
+            --space-5: 1.25rem;
+            --space-8: 2rem;
+            --space-13: 3.25rem;
+            --space-21: 5.25rem;
+            --space-34: 8.5rem;
+            
+            /* Typography Scale (Perfect Fourth - 1.333) */
+            --font-size-xs: 0.75rem;
+            --font-size-sm: 0.875rem;
+            --font-size-base: 1rem;
+            --font-size-lg: 1.125rem;
+            --font-size-xl: 1.333rem;
+            --font-size-2xl: 1.777rem;
+            --font-size-3xl: 2.369rem;
+            --font-size-4xl: 3.157rem;
+            --font-size-5xl: 4.209rem;
+            
+            /* Font Families */
+            --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, monospace;
+            
+            /* Animation Timings (Fibonacci ms) */
+            --duration-instant: 89ms;
+            --duration-fast: 144ms;
+            --duration-normal: 233ms;
+            --duration-slow: 377ms;
+            --duration-slower: 610ms;
+            
+            /* Shadows - Layered Depth */
+            --shadow-quantum: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+            
+            /* Border Radius - Geometric Progression */
+            --radius-sm: 0.25rem;
+            --radius-md: 0.5rem;
+            --radius-lg: 1rem;
+            --radius-xl: 1.5rem;
+            --radius-full: 9999px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-primary);
+            font-size: var(--font-size-base);
+            line-height: 1.6;
+            color: var(--color-text-primary);
+            background-color: var(--color-background);
+            background-image: var(--graph-paper-bg);
+            background-size: 20px 20px;
+            min-height: 100vh;
+            overflow-x: hidden;
+            transition: background-color var(--duration-normal) ease;
+        }
+
+        .container {
+            max-width: 120rem;
+            margin: 0 auto;
+            padding: var(--space-5);
+        }
+
+        /* SmartHaus Header Styling */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--space-5) var(--space-8);
+            background-color: var(--header-bg-solid);
+            border-bottom: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            margin-bottom: var(--space-13);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: var(--space-5);
+        }
+
+        .logo {
+            height: 56px;
+            width: 140px;
+            object-fit: contain;
+        }
+
+        .header-title {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .header h1 {
+            font-size: var(--font-size-2xl);
+            font-weight: 700;
+            color: var(--color-text-primary);
+            margin: 0;
+            line-height: 1.2;
+        }
+
+        .header-subtitle {
+            font-size: var(--font-size-sm);
+            color: var(--color-text-muted);
+            margin-top: var(--space-1);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: var(--space-5);
+        }
+
+        .nav {
+            display: flex;
+            align-items: center;
+            gap: var(--space-5);
+            margin-right: var(--space-8);
+        }
+
+        .nav a {
+            color: var(--color-text-primary);
+            text-decoration: none;
+            font-weight: 500;
+            font-size: var(--font-size-sm);
+            padding: var(--space-2) var(--space-3);
+            border-radius: var(--radius-sm);
+            transition: background-color var(--duration-fast) ease;
+        }
+
+        .nav a:hover { background: var(--proof-gray-100); }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            padding: var(--space-2) var(--space-3);
+            background: var(--color-success);
+            color: white;
+            border-radius: var(--radius-full);
+            font-size: var(--font-size-sm);
+            font-weight: 500;
+        }
+
+        .realtime-metrics { display:flex; align-items:center; gap: var(--space-5); color: var(--color-text-muted); font-size: var(--font-size-sm); }
+        .metric-pill { background: var(--proof-gray-100); border:1px solid var(--color-border); padding: var(--space-2) var(--space-3); border-radius: var(--radius-full); }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: white;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: var(--space-8);
+            margin-bottom: var(--space-13);
+        }
+
+        .service-card {
+            background: var(--pure-white);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: var(--space-8);
+            transition: all var(--duration-normal) ease;
+            position: relative;
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .service-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--color-accent);
+        }
+
+        .service-header {
+            display: flex;
+            align-items: center;
+            gap: var(--space-5);
+            margin-bottom: var(--space-5);
+        }
+
+        .service-icon {
+            font-size: var(--font-size-3xl);
+            color: var(--color-accent);
+        }
+
+        .service-title {
+            font-size: var(--font-size-xl);
+            font-weight: 600;
+            color: var(--color-text-primary);
+        }
+
+        .service-description {
+            color: var(--color-text-secondary);
+            margin-bottom: var(--space-8);
+            line-height: 1.6;
+        }
+
+        .service-actions {
+            display: flex;
+            gap: var(--space-3);
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--space-3) var(--space-5);
+            font-size: var(--font-size-sm);
+            font-weight: 500;
+            line-height: 1;
+            color: var(--color-accent);
+            background: transparent;
+            border: 2px solid var(--color-accent);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all var(--duration-fast) ease;
+            text-decoration: none;
+            gap: var(--space-2);
+        }
+
+        .btn:hover {
+            background: var(--color-accent);
+            color: var(--pure-white);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(97, 218, 251, 0.3);
+        }
+
+        .btn-primary {
+            background: var(--quantum-void);
+            color: var(--pure-white);
+            border-color: var(--quantum-void);
+        }
+
+        .btn-primary:hover {
+            background: var(--color-accent);
+            border-color: var(--color-accent);
+            color: var(--quantum-void);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 1, 32, 0.3);
+        }
+
+        .port-info {
+            background: var(--proof-gray-50);
+            padding: var(--space-3) var(--space-5);
+            border-radius: var(--radius-md);
+            margin-top: var(--space-5);
+            font-size: var(--font-size-sm);
+            border: 1px solid var(--color-border);
+            color: var(--color-text-muted);
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: var(--space-21);
+            padding: var(--space-8);
+            border-top: 1px solid var(--color-border);
+            color: var(--color-text-muted);
+        }
+
+        .refresh-btn {
+            position: fixed;
+            bottom: var(--space-8);
+            right: var(--space-8);
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--quantum-void);
+            color: var(--pure-white);
+            border: none;
+            font-size: var(--font-size-lg);
+            cursor: pointer;
+            box-shadow: var(--shadow-lg);
+            transition: all var(--duration-normal) ease;
+        }
+
+        .refresh-btn:hover {
+            background: var(--color-accent);
+            color: var(--quantum-void);
+            transform: scale(1.1);
+            box-shadow: var(--shadow-xl);
+        }
+
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        @media (max-width: 768px) {
+            .services-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .status-bar {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+        /* New full-width SmartHaus header + metrics dashboard */
+        :root { --header-height: 72px; }
+        body { padding-top: var(--header-height); }
+        .page-header { position: fixed; top:0; left:0; right:0; height: var(--header-height); background: var(--header-bg-solid); border-bottom:1px solid var(--color-border); box-shadow: var(--shadow-sm); z-index: 1000; }
+        .header-container { max-width: 120rem; margin: 0 auto; height: 100%; display:flex; align-items:center; justify-content:space-between; padding: 0 var(--space-8); }
+        .page-header .logo { height: 56px; width: 140px; object-fit: contain; }
+        .main-nav { display:flex; align-items:center; gap: var(--space-5); }
+        .main-nav a { color: var(--color-text-primary); text-decoration:none; font-weight:600; font-size: var(--font-size-sm); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); }
+        .main-nav a:hover { background: var(--proof-gray-100); }
+        .system-status { display:flex; align-items:center; gap: var(--space-2); background: var(--biology-emerald); color: white; padding: var(--space-2) var(--space-3); border-radius: var(--radius-full); font-size: var(--font-size-sm); }
+        .header { display: none !important; }
+        .metrics-dashboard { max-width: 120rem; margin: var(--space-8) auto; display:grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--space-8); }
+        .metric-card { background: white; border:1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--space-8); box-shadow: var(--shadow-sm); }
+        .metric-card h3 { font-size: var(--font-size-lg); margin-bottom: var(--space-3); }
+        .metric-value { font-size: var(--font-size-2xl); font-weight: 700; color: var(--color-text-primary); }
+        .metric-desc { color: var(--color-text-muted); font-size: var(--font-size-sm); margin-top: var(--space-2); }
+    </style>
+</head>
+<body>
+    <!-- Full-width SmartHaus Header -->
+    <header class="page-header">
+      <div class="header-container">
+        <img src="/assets/images/smarthaus-logo-light.svg" alt="SmartHaus" class="logo">
+        <nav class="main-nav">
+          <a id="nav-dashboard" href="#">Dashboard</a>
+          <a id="nav-terminal" href="#">Terminal</a>
+          <a id="nav-analytics" href="#">Analytics</a>
+          <a id="nav-status" href="#">Status</a>
+          <a id="nav-docs" href="#">Docs</a>
+        </nav>
+        <div class="system-status"><span class="status-dot" style="width:8px;height:8px;border-radius:50%;background:white"></span> SOA System Online</div>
+      </div>
+    </header>
+    <div class="container">
+        <!-- Metrics Dashboard -->
+        <section class="metrics-dashboard">
+          <div class="metric-card">
+            <h3>GPU Utilization</h3>
+            <div class="metric-value" id="gpuUtilVal">–%</div>
+            <div class="metric-desc">Metal/CUDA/ROCm shader pipeline usage</div>
+          </div>
+          <div class="metric-card">
+            <h3>GPU Memory</h3>
+            <div class="metric-value" id="gpuMemVal">–</div>
+            <div class="metric-desc">VRAM usage for holographic operations</div>
+          </div>
+          <div class="metric-card">
+            <h3>Holographic Ops/sec</h3>
+            <div class="metric-value" id="opsVal">–</div>
+            <div class="metric-desc">Pattern encoding/decoding rate</div>
+          </div>
+          <div class="metric-card">
+            <h3>System Memory</h3>
+            <div class="metric-value" id="sysMemVal">–</div>
+            <div class="metric-desc">RAM usage for system operations</div>
+          </div>
+        </section>
+
+        <div class="services-grid">
+            <!-- API Server -->
+            <div class="service-card">
+                <div class="service-header">
+                    <div class="service-icon">🔧</div>
+                    <div class="service-title">API Server</div>
+                    <div class="service-status" id="status_api" style="margin-left:auto;font-weight:600;color:var(--biology-emerald)">Checking...</div>
+                </div>
+                <div class="service-description">
+                    Main FastAPI server providing REST endpoints for holographic memory operations, data storage, and retrieval.
+                </div>
+                <div class="service-metrics" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin:12px 0;">
+                    <div class="metric">Uptime: <span id="uptime_api">–</span></div>
+                    <div class="metric">Latency: <span id="latency_api">–</span></div>
+                    <div class="metric">Port: <span id="api-port">Loading...</span></div>
+                </div>
+                <div class="service-actions">
+                    <a href="#" id="api-link" class="btn btn-primary" target="_blank">
+                        🚀 Open API Server
+                    </a>
+                    <a href="#" id="api-docs-link" class="btn" target="_blank">
+                        📚 API Documentation
+                    </a>
+                    <button class="btn" onclick="serviceControl('api','restart')">🔄 Restart</button>
+                </div>
+            </div>
+
+            <!-- Terminal Interface -->
+            <div class="service-card">
+                <div class="service-header">
+                    <div class="service-icon">💻</div>
+                    <div class="service-title">Terminal Interface</div>
+                    <div class="service-status" id="status_terminal_interface" style="margin-left:auto;font-weight:600;color:var(--biology-emerald)">Checking...</div>
+                </div>
+                <div class="service-description">
+                    Command-line interface for power users with interactive commands and system administration tools.
+                </div>
+                <div class="service-metrics" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin:12px 0;">
+                    <div class="metric">Uptime: <span id="uptime_terminal_interface">–</span></div>
+                    <div class="metric">Latency: <span id="latency_terminal_interface">–</span></div>
+                    <div class="metric">Port: <span id="terminal_interface-port">Loading...</span></div>
+                </div>
+                <div class="service-actions">
+                    <a href="#" id="terminal_interface-link" class="btn btn-primary" target="_blank">
+                        💻 Open Terminal
+                    </a>
+                    <button class="btn" onclick="serviceControl('terminal_service','stop')">⏹️ Stop</button>
+                    <button class="btn" onclick="serviceControl('terminal_service','start')">▶️ Start</button>
+                </div>
+            </div>
+
+            <!-- Analytics Dashboard -->
+            <div class="service-card">
+                <div class="service-header">
+                    <div class="service-icon">📊</div>
+                    <div class="service-title">Analytics Dashboard</div>
+                    <div class="service-status" id="status_analytics_dashboard" style="margin-left:auto;font-weight:600;color:var(--biology-emerald)">Checking...</div>
+                </div>
+                <div class="service-description">
+                    Charts, metrics, and visualizations for system performance monitoring and data analysis.
+                </div>
+                <div class="service-metrics" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin:12px 0;">
+                    <div class="metric">Uptime: <span id="uptime_analytics_dashboard">–</span></div>
+                    <div class="metric">Latency: <span id="latency_analytics_dashboard">–</span></div>
+                    <div class="metric">Port: <span id="analytics_dashboard-port">Loading...</span></div>
+                </div>
+                <div class="service-actions">
+                    <a href="#" id="analytics_dashboard-link" class="btn btn-primary" target="_blank">
+                        📊 Open Analytics
+                    </a>
+                    <button class="btn" onclick="serviceControl('analytics_dashboard','restart')">🔄 Restart</button>
+                </div>
+            </div>
+
+            <!-- API Status Page -->
+            <div class="service-card">
+                <div class="service-header">
+                    <div class="service-icon">📄</div>
+                    <div class="service-title">API Status Page</div>
+                    <div class="service-status" id="status_api_status" style="margin-left:auto;font-weight:600;color:var(--biology-emerald)">Checking...</div>
+                </div>
+                <div class="service-description">
+                    Simple status page with API endpoints overview and system information.
+                </div>
+                <div class="service-metrics" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin:12px 0;">
+                    <div class="metric">Uptime: <span id="uptime_api_status">–</span></div>
+                    <div class="metric">Latency: <span id="latency_api_status">–</span></div>
+                    <div class="metric">Port: <span id="api_status-port">Loading...</span></div>
+                </div>
+                <div class="service-actions">
+                    <a href="#" id="api_status-link" class="btn btn-primary" target="_blank">
+                        📄 Open Status Page
+                    </a>
+                    <button class="btn" onclick="serviceControl('api_status','restart')">🔄 Restart</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p><strong>HolographicMemory SOA System</strong> | SmartHaus Group</p>
+            <p>All services running with dynamic port assignment</p>
+        </div>
+    </div>
+
+    <button class="refresh-btn" onclick="refreshServices()" title="Refresh Service Status">
+        🔄
+    </button>
+
+    <script>
+        let serviceConfig = null;
+
+        async function loadServiceConfig() {
+            try {
+                // Try to load from the SOA config file
+                const response = await fetch('/api/soa-config');
+                if (response.ok) {
+                    serviceConfig = await response.json();
+                } else {
+                    // Fallback: try to detect services
+                    await detectServices();
+                }
+            } catch (error) {
+                console.log('Could not load SOA config, detecting services...');
+                await detectServices();
+            }
+            updateServiceLinks();
+        }
+
+        async function detectServices() {
+            // Try common port ranges to detect running services
+            const commonPorts = [8080, 8081, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089];
+            const detectedServices = {};
+
+            for (const port of commonPorts) {
+                try {
+                    const response = await fetch(`http://localhost:${port}/`, { 
+                        method: 'HEAD',
+                        mode: 'no-cors',
+                        timeout: 1000 
+                    });
+                    detectedServices[port] = true;
+                } catch (error) {
+                    // Service not running on this port
+                }
+            }
+
+            // Assign detected ports to services
+            const ports = Object.keys(detectedServices).map(Number).sort();
+            serviceConfig = {
+                service_ports: {
+                    api: ports[0] || 8080,
+                    dashboard: ports[1] || 8081,
+                    enhanced_dashboard: ports[2] || 8082,
+                    api_static: ports[3] || 8083
+                }
+            };
+        }
+
+        function updateServiceLinks() {
+            if (!serviceConfig || !serviceConfig.service_ports) {
+                // Show loading state
+                document.querySelectorAll('.port-info span').forEach(span => {
+                    span.textContent = 'Detecting...';
+                });
+                return;
+            }
+
+            const ports = serviceConfig.service_ports;
+
+            // Update API Server
+            if (ports.api) {
+                document.getElementById('api-port').textContent = ports.api;
+                document.getElementById('api-link').href = `http://localhost:${ports.api}`;
+                document.getElementById('api-docs-link').href = `http://localhost:${ports.api}/docs`;
+                const docs = document.getElementById('nav-docs');
+                if (docs) docs.href = `http://localhost:${ports.api}/docs`;
+                setStatus('api', true);
+                setUptime('api');
+                probeLatency('api', ports.api, '/healthz');
+            }
+
+            // Update Dashboard link (self-reference)
+            if (ports.main_dashboard) {
+                const dashboard = document.getElementById('nav-dashboard');
+                if (dashboard) dashboard.href = `http://localhost:${ports.main_dashboard}/soa_dashboard.html`;
+            }
+
+            // Update Terminal Interface
+            if (ports.terminal_interface) {
+                document.getElementById('terminal_interface-port').textContent = ports.terminal_interface;
+                document.getElementById('terminal_interface-link').href = `http://localhost:${ports.terminal_interface}`;
+                const term = document.getElementById('nav-terminal');
+                if (term) term.href = `http://localhost:${ports.terminal_interface}`;
+                setStatus('terminal_interface', true);
+                setUptime('terminal_interface');
+                probeLatency('terminal_interface', ports.terminal_interface, '/');
+            }
+
+            // Update Analytics Dashboard
+            if (ports.analytics_dashboard) {
+                document.getElementById('analytics_dashboard-port').textContent = ports.analytics_dashboard;
+                document.getElementById('analytics_dashboard-link').href = `http://localhost:${ports.analytics_dashboard}`;
+                const ana = document.getElementById('nav-analytics');
+                if (ana) ana.href = `http://localhost:${ports.analytics_dashboard}`;
+                setStatus('analytics_dashboard', true);
+                setUptime('analytics_dashboard');
+                probeLatency('analytics_dashboard', ports.analytics_dashboard, '/');
+            }
+
+            // Update API Status Page
+            if (ports.api_status) {
+                document.getElementById('api_status-port').textContent = ports.api_status;
+                document.getElementById('api_status-link').href = `http://localhost:${ports.api_status}`;
+                const st = document.getElementById('nav-status');
+                if (st) st.href = `http://localhost:${ports.api_status}`;
+                setStatus('api_status', true);
+                setUptime('api_status');
+                probeLatency('api_status', ports.api_status, '/');
+            }
+
+            // Update timestamp
+            document.getElementById('timestamp').textContent = new Date().toLocaleTimeString();
+        }
+
+        async function refreshServices() {
+            document.body.classList.add('loading');
+            await loadServiceConfig();
+            document.body.classList.remove('loading');
+        }
+
+        async function serviceControl(name, action) {
+            try {
+                const resp = await fetch(`/api/services/${name}/${action}`, { method: 'POST' });
+                if (resp.ok) {
+                    const res = await resp.json();
+                    alert(`${name} ${action}: ${res.ok ? 'OK' : 'Failed'}`);
+                } else {
+                    alert(`${name} ${action}: HTTP ${resp.status}`);
+                }
+            } catch (e) {
+                alert(`${name} ${action}: ${e}`);
+            }
+        }
+
+        // Load services on page load
+        document.addEventListener('DOMContentLoaded', loadServiceConfig);
+
+        // Auto-refresh every 30 seconds
+        setInterval(refreshServices, 30000);
+
+        function setStatus(key, ok){
+            const el = document.getElementById(`status_${key}`);
+            if (!el) return;
+            el.textContent = ok ? '🟢 Running' : '🔴 Stopped';
+            el.style.color = ok ? 'var(--biology-emerald)' : 'var(--biology-coral)';
+        }
+        function setUptime(key){
+            try {
+                const svc = (serviceConfig.services||{})[key];
+                const started = svc?.started_at;
+                const el = document.getElementById(`uptime_${key}`);
+                if (el) el.textContent = started ? formatUptime((Date.now()/1000)-started) : '–';
+            } catch(_){}
+        }
+        function probeLatency(key, port, path){
+            const el = document.getElementById(`latency_${key}`);
+            if (!el) return;
+            const t0 = performance.now();
+            fetch(`http://localhost:${port}${path}`, {mode:'no-cors'}).finally(()=>{
+                const dt = performance.now() - t0;
+                el.textContent = `${Math.round(dt)}ms`;
+            });
+        }
+        function formatUptime(s){
+            s = Math.max(0, Math.floor(s));
+            const h = Math.floor(s/3600); s%=3600;
+            const m = Math.floor(s/60); const sec = s%60;
+            return `${h}h ${m}m ${sec}s`;
+        }
+
+        // Metrics WebSocket
+        (async function metricsWS(){
+            try {
+                const resp = await fetch('/api/soa-config');
+                const data = await resp.json();
+                const port = data?.service_ports?.metrics_service;
+                if (!port) return;
+                const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+                const ws = new WebSocket(`${proto}://localhost:${port}/ws`);
+                ws.onmessage = (e) => {
+                    try {
+                        const msg = JSON.parse(e.data);
+                        if (msg.type === 'metrics') {
+                            const cpu = document.getElementById('cpuVal');
+                            const mem = document.getElementById('memVal');
+                            const gpu = document.getElementById('gpuVal');
+                            const disk = document.getElementById('diskVal');
+                            const tx = document.getElementById('txVal');
+                            const rx = document.getElementById('rxVal');
+                            const conns = document.getElementById('connVal');
+                            const cpuVal = (msg.cpu ?? msg.cpu_percent ?? 0).toFixed ? (msg.cpu ?? 0).toFixed(0) : String(msg.cpu ?? msg.cpu_percent ?? '–');
+                            if (cpu) cpu.textContent = cpuVal;
+                            const memPercent = msg.memory?.percent ?? msg.memory_percent ?? '–';
+                            if (mem) mem.textContent = String(memPercent);
+                            const gpuUtil = msg.gpu?.utilization ?? 0;
+                            if (gpu) gpu.textContent = String(gpuUtil);
+                            const diskPercent = msg.disk?.percent ?? msg.disk_percent ?? '–';
+                            if (disk) disk.textContent = String(diskPercent);
+                            const sent = msg.network?.bytes_sent ?? msg.net_sent ?? 0;
+                            const recv = msg.network?.bytes_recv ?? msg.net_recv ?? 0;
+                            if (tx) tx.textContent = humanBytes(sent, true);
+                            if (rx) rx.textContent = humanBytes(recv, true);
+                            if (conns) conns.textContent = String(msg.connections ?? '–');
+                            const gpuUtilVal = document.getElementById('gpuUtilVal');
+                            const sysMemVal = document.getElementById('sysMemVal');
+                            if (gpuUtilVal) gpuUtilVal.textContent = `${gpuUtil}%`;
+                            if (sysMemVal) sysMemVal.textContent = `${((msg.memory?.used||0)/(1024**3)).toFixed(1)}GB`;
+                        }
+                    } catch(_){}
+                };
+            } catch (e) { /* ignore */ }
+        })();
+
+        function humanBytes(n, short=false){
+            const units = ['B','KB','MB','GB','TB'];
+            let i=0, v=n;
+            while (v>=1024 && i<units.length-1) { v/=1024; i++; }
+            return short? `${v.toFixed(1)}${units[i]}` : `${v.toFixed(1)} ${units[i]}`;
+        }
+    </script>
+</body>
+</html>

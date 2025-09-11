@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="56" viewBox="0 0 140 56" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <style>
+      .text { font: 700 24px 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; fill: #021c4b; }
+      .mark { fill: #021c4b; }
+    </style>
+  </defs>
+  <rect width="140" height="56" fill="transparent"/>
+  <g transform="translate(10,12)">
+    <rect class="mark" x="0" y="0" width="20" height="20" rx="3"/>
+    <rect class="mark" x="26" y="10" width="10" height="10" rx="2"/>
+    <text class="text" x="42" y="20">SmartHaus</text>
+  </g>
+</svg>

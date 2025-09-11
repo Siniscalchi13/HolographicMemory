@@ -1,0 +1,60 @@
+{
+  "timestamp": "2025-09-11T09:27:13.897556",
+  "registry_version": "1.0",
+  "services": {
+    "main_dashboard": {
+      "name": "SOA Dashboard Hub",
+      "port": 8110,
+      "running": true,
+      "started_at": 1757597222.818614,
+      "url": "http://localhost:8110/soa_dashboard.html",
+      "api_url": "http://localhost:8110/api/soa-config"
+    },
+    "api": {
+      "name": "API Server",
+      "port": 8113,
+      "running": true,
+      "started_at": 1757597225.829279,
+      "url": "http://localhost:8113",
+      "docs_url": "http://localhost:8113/docs",
+      "health_url": "http://localhost:8113/healthz"
+    },
+    "terminal_service": {
+      "name": "Terminal Service",
+      "port": 8115,
+      "running": true,
+      "started_at": 1757597227.838557,
+      "ws_url": "ws://localhost:8115/ws",
+      "health_url": "http://localhost:8115/healthz"
+    },
+    "terminal_interface": {
+      "name": "Terminal Interface",
+      "port": 8116,
+      "running": true,
+      "started_at": 1757597228.854866,
+      "url": "http://localhost:8116"
+    },
+    "metrics_service": {
+      "name": "Metrics Service",
+      "port": 8117,
+      "running": true,
+      "started_at": 1757597230.869077,
+      "ws_url": "ws://localhost:8117/ws",
+      "health_url": "http://localhost:8117/healthz"
+    },
+    "analytics_dashboard": {
+      "name": "Analytics Dashboard",
+      "port": 8118,
+      "running": true,
+      "started_at": 1757597232.8848388,
+      "url": "http://localhost:8118"
+    },
+    "api_status": {
+      "name": "API Status Page",
+      "port": 8119,
+      "running": true,
+      "started_at": 1757597233.897027,
+      "url": "http://localhost:8119"
+    }
+  }
+}

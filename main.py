@@ -7,6 +7,7 @@ TAI-style service orchestration and startup
 import asyncio
 import sys
 import os
+import importlib.util
 from pathlib import Path
 
 # Add services to Python path
@@ -20,8 +21,14 @@ async def start_services():
     # Import services
     try:
         from services.orchestrator.orchestrator import HolographicMemoryOrchestrator
-        from services.holographic_memory.api.app_soa import app as api_app
         import uvicorn
+        
+        # Import app_soa using importlib since the directory has hyphens
+        app_soa_path = Path(__file__).parent / "services" / "holographic-memory" / "api" / "app_soa.py"
+        spec = importlib.util.spec_from_file_location("app_soa", app_soa_path)
+        app_soa_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(app_soa_module)
+        api_app = app_soa_module.app
         
         # Initialize orchestrator
         state_dir = Path(__file__).parent / "data" / "production"
