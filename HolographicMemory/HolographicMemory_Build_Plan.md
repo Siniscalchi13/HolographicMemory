@@ -135,6 +135,14 @@ RS(255,223): n=255, k=223, t=16 symbol correction
 **Last Updated**: September 12, 2025
 **Next Milestone**: Complete ECC tests + documentation and achieve BER=0 across corpus; then begin Phase 3.5 multiplexing validation
 
+**CRITICAL STATUS UPDATE**: ECC decode/correction implementation is COMPLETE and integrated:
+- ✅ RS(255,223) GPU decode with BM/Chien/Forney algorithms implemented
+- ✅ Python binding `gpu_rs_decode()` available in `gpu_binding.cpp`
+- ✅ Recall integration complete in `memory.py` with error handling
+- ✅ Container header extensions with ECC metadata (ecc_scheme, ecc_k, ecc_r, parity blobs)
+- ✅ Host-side C++ implementation for predictable performance on 223-byte blocks
+- ⏳ ECC tests and documentation still pending (Phase 3b completion)
+
 **Immediate Next Steps**:
 1. Add ECC tests: bit-perfect recall + error injection (1–16 symbols), >16 -> fail
 2. Author documentation/ecc_design.md (parameters, limits, ops guidance)
