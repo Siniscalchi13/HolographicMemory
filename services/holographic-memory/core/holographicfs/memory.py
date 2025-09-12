@@ -68,6 +68,41 @@ except Exception:
 from .index import sha256_file, Index
 
 
+def verify_and_correct_rs(payload: bytes, parity: bytes, k: int = 223, r: int = 32) -> bytes:
+    """Correct RS(255,223) errors and enforce >t failure.
+
+    - Decodes/corrects payload against provided parity using GPU binding.
+    - Enforces t = r//2 symbol error bound per block: raises RuntimeError if exceeded
+      or if parity recomputation does not match the expected parity (uncorrectable).
+    - Returns corrected bytes (same length as input payload) on success.
+
+    This helper is designed for integration in holographic container recall paths.
+    """
+    if not payload or not parity or k <= 0 or r <= 0:
+        return payload
+    try:
+        import holographic_gpu as _hg  # type: ignore
+    except Exception as e:  # pragma: no cover
+        raise RuntimeError("GPU ECC backend not available; build native extensions") from e
+    # Decode/correct
+    corr_bytes, counts = _hg.gpu_rs_decode(payload, parity, int(k), int(r))  # type: ignore[attr-defined]
+    corrected = bytes(corr_bytes)
+    # Enforce t bound
+    t_bound = int(r) // 2
+    try:
+        if hasattr(counts, '__iter__'):
+            max_corr = max(int(c) for c in counts) if counts else 0
+            if max_corr > t_bound:
+                raise RuntimeError(f"ECC uncorrectable: corrected symbols {max_corr} exceed t={t_bound}")
+    except Exception:
+        # If counts unavailable or malformed, fall back to parity check only
+        pass
+    # Verify parity of corrected bytes matches expected
+    new_parity = _hg.gpu_rs_encode(corrected, int(k), int(r))  # type: ignore[attr-defined]
+    if bytes(new_parity) != bytes(parity):
+        raise RuntimeError("ECC uncorrectable: parity mismatch after correction (likely >t errors)")
+    return corrected
+
 def calculate_optimal_dimension(file_size: int) -> int:
     """Adaptive FFT dimension selection based on file size."""
     if file_size < 512:

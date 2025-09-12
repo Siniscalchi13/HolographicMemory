@@ -1,89 +1,40 @@
-# TAI Calculus Suite — Proofs Index (v1)
+# HolographicMemory — Proofs Index (current)
 
-This index is the authoritative map of mathematical results to their formalizations and code/test anchors. Each item has a stable ID, a precise statement, status, and references.
+Legend: [I] Informal (Markdown), [F] Formal (Coq), [T] Tested (unit/property)
 
-Legend: [I] Informal (paper/Markdown), [F] Formal (Coq), [T] Tested (property/unit tests)
+Scope note: This index reflects proofs present in this repository. Some formal items are axiomatic. Unrelated summaries (e.g., AIUCP “42 proofs”) are out of scope for HolographicMemory.
 
-## Quantum Measurement Calculus (QMC)
+## Holographic Memory (HMC)
 
-- QMC-1: Unitary norm preservation [I][F][T]
-  - Statement: For any unitary U and state ψ in C^n, ||Uψ||₂ = ||ψ||₂.
-  - Code: `services/aiucp/quantum_core/mathematical_implementation.py:148`
-  - Tests: `tests/test_quantum_math_core.py:17`
-  - Formal: `proofs/coq/QMC_Core.v` (unitary_preserves_snorm)
+- HMC-FFT: FFT norm preservation [I][F]
+  - Statement: With unitary normalization, DFT preserves ℓ² norm.
+  - Formal: `documentation/proofs/coq/HMC_FFT.v` (fft_preserves_snorm; relies on axiom FFT_is_unitary)
 
-- QMC-2: Projective measurement completeness [I][F][T]
-  - Statement: For Hermitian observable with orthonormal eigenvectors v_i, probabilities p_i = |⟨v_i, ψ⟩|² sum to 1.
-  - Code: `services/aiucp/quantum_core/mathematical_implementation.py:82`
-  - Tests: `tests/test_quantum_math_core.py:31`
-  - Formal: `proofs/coq/QMC_Core.v` (projective_measurement_completeness, via Parseval axiom)
+- HMC-Corr: Correlation bounded by one [I][F]
+  - Statement: For normalized vectors, |⟨x,y⟩| ≤ 1.
+  - Formal: `documentation/proofs/coq/HMC_Correlation.v` (correlation_bounded_by_one; uses axiom abs_ip_cs)
 
-- QMC-3: POVM validity [I][F][T]
-  - Statement: For a POVM {E_k} with ΣE_k=I and E_k ≥ 0, Σ_k ⟨ψ|E_k|ψ⟩ = 1.
-  - Code: `services/aiucp/quantum_core/mathematical_implementation.py:141`
-  - Tests: `tests/test_quantum_math_core.py:78`
-  - Formal: `proofs/coq/QMC_POVM.v` (povm_probabilities_sum_to_one)
+- HMC-ExactRecall: Exact recall for block writes [F]
+  - Statement: Under fit precondition, read-after-write returns the written block exactly.
+  - Formal: `documentation/proofs/coq/HolographicExactRecall.v` (exact_recall; fully proven)
 
-- QMC-4: Tsirelson bound (CHSH) [I][F][T]
-  - Statement: The CHSH parameter satisfies S ≤ 2√2 with equality at optimal angles.
-  - Code: `services/aiucp/quantum_core/mathematical_implementation.py:222`
-  - Tests: `tests/test_quantum_math_core.py:58`
-  - Formal: `proofs/coq/QMC_CHSH.v` (chsh_upper_bound, chsh_reaches_bound)
+## 7‑Layer and Control (selected)
 
-## Holographic Memory Calculus (HMC)
+- HM_7Layer: Layer properties [F]
+  - File: `documentation/proofs/coq/HM_7Layer.v` (status: present; coverage TBD)
 
-- HMC-1: Holographic wave reconstruction phase preservation [I][F][T]
-  - Statement: For complex coefficients z = |z|e^(iφ), holographic wave reconstruction preserves phase φ with error < 0.1 radians.
-  - Code: `services/holographic-memory/core/native/holographic/metal/holographic_memory.metal:gpu_holographic_wave_reconstruction`
-  - Tests: `services/holographic-memory/core/native/holographic/test_mathematical_validation.py:15`
-  - Formal: `proofs/coq/HMC_WaveReconstruction.v` (phase_preservation_bound)
-  - Empirical: 0.000000 radian error achieved in validation tests
+- Budget/Policy/Ordering [F]
+  - Files: `ACLTtermination.v`, `BudgetMonotonicity.v`, `DeterministicReplay.v`, `EventOrder.v`, `MSC_Selection.v`, `PolicyNonEscalation.v`, `TokenBucket.v`, `WALDurability.v`
+  - Note: Outside core holographic wave math; status varies by file.
 
-- HMC-2: FFT unitarity and norm preservation [I][F][T]
-  - Statement: The discrete Fourier transform (with orthonormal normalization) preserves the ℓ² norm.
-  - Code: `services/holographic-memory/core/native/holographic/metal/holographic_memory.metal:gpu_holographic_quantize`
-  - Tests: `services/holographic-memory/core/native/holographic/test_mathematical_validation.py:44`
-  - Formal: `proofs/coq/HMC_FFT.v` (fft_preserves_snorm)
+## Quantum (ancillary examples)
 
-- HMC-3: Wave interference superposition principle [I][F][T]
-  - Statement: For holographic field ψ = Σᵢ αᵢe^(iφᵢ), reconstruction preserves both amplitude |αᵢ| and phase φᵢ.
-  - Code: `services/holographic-memory/core/native/holographic/gpu_binding.cpp:gpu_holographic_wave_reconstruction`
-  - Tests: `services/holographic-memory/core/native/holographic/test_mathematical_validation.py:15`
-  - Formal: `proofs/coq/HMC_WaveInterference.v` (superposition_preservation)
-
-- HMC-4: Correlation search normalization [I][F][T]
-  - Statement: With normalized vectors, similarity |⟨q, d⟩| ∈ [0,1].
-  - Code: `services/holographic-memory/core/native/holographic/metal/holographic_memory.metal:holographic_similarity_search`
-  - Tests: `services/holographic-memory/core/native/holographic/test_mathematical_validation.py:44`
-  - Formal: `proofs/coq/HMC_Correlation.v` (correlation_bounded_by_one)
-
-## Model Selection Calculus (MSC)
-
-- MSC-1: Score monotonicity in competence [I][F][T]
-  - Statement: Holding cost and penalties fixed, J increases monotonically with competence.
-  - Code: `services/aiucp/verbum-field-engine/selection.py:94`
-  - Tests: `services/aiucp/verbum-field-engine/tests/test_selection.py:14`
-  - Formal: `proofs/coq/MSC_Selection.v` (J_monotone_in_comp)
-
-- MSC-2: Capacity overflow penalty [I][F]
-  - Statement: If τ > L_m then ∂J/∂τ ≤ −η < 0 (penalizes over-context).
-  - Code: `services/aiucp/verbum-field-engine/selection.py:137`
-  - Tests: (to add)
-  - Formal: `proofs/coq/MSC_Selection.v` (J_decreases_with_tau_above_Lm)
-
-## AIUCP Orchestration Calculus (AIOC)
-
-- AIOC-1: Replay determinism under fixed catalog [F]
-  - Statement: Given deterministic adapters and fixed inputs, transcript is unique.
-  - Formal: `proofs/coq/DeterministicReplay.v`
-  - Code: Event-sourced orchestrator (design), tests: (to add)
-
-## Policy & Privacy Calculus (PPC)
-
-- PPC-1: Non-escalation of privileges via joins [F]
-  - Statement: Effective capability from base and grants never exceeds cap when each grant ≤ cap.
-  - Formal: `proofs/coq/PolicyNonEscalation.v`
+- QMC-Core/POVM/CHSH [F]
+  - Files: `QMC_Core.v`, `QMC_POVM.v`, `QMC_CHSH.v`
+  - Note: Demonstrative; not required for computational holography pipeline.
 
 ---
 
-Status rolls up into CI: Coq build + Python tests. New items will be appended with IDs and references as they are formalized.
+Status and CI
+- Coq modules compile status and axiom usage to be reported via CI.
+- Axioms to be documented per file and minimized over time (replace with constructive proofs where feasible).
