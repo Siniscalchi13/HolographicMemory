@@ -163,9 +163,15 @@ def write_hwp_v4(
         phs_q = L.get("phs_q", [])
         for p in phs_q:
             b.write(struct.pack('<H', int(p) & 0x03FF))
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_path, 'wb') as f:
-        f.write(b.getvalue())
+    # Handle both file paths and BytesIO objects
+    if hasattr(out_path, 'parent'):
+        # It's a Path object - create directory and write to file
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(out_path, 'wb') as f:
+            f.write(b.getvalue())
+    else:
+        # It's BytesIO or similar - write directly to the object
+        out_path.write(b.getvalue())
 
 
 def write_hwp_v4_micro(
