@@ -1,0 +1,121 @@
+{
+  "results": [
+    {
+      "kind": "text",
+      "size_bytes": 102400,
+      "k": 1,
+      "profile": "light",
+      "error_rate": 0.0001,
+      "trials": 2,
+      "success_rate": 0.0,
+      "parity_overhead": 8.0,
+      "avg_flips": 10.0
+    },
+    {
+      "kind": "text",
+      "size_bytes": 102400,
+      "k": 1,
+      "profile": "moderate",
+      "error_rate": 0.0005,
+      "trials": 2,
+      "success_rate": 0.0,
+      "parity_overhead": 8.0,
+      "avg_flips": 51.0
+    },
+    {
+      "kind": "text",
+      "size_bytes": 102400,
+      "k": 1,
+      "profile": "heavy",
+      "error_rate": 0.001,
+      "trials": 2,
+      "success_rate": 0.0,
+      "parity_overhead": 8.0,
+      "avg_flips": 102.0
+    },
+    {
+      "kind": "text",
+      "size_bytes": 102400,
+      "k": 2,
+      "profile": "light",
+      "error_rate": 0.0001,
+      "trials": 2,
+      "success_rate": 0.0,
+      "parity_overhead": 16.0,
+      "avg_flips": 10.0
+    },
+    {
+      "kind": "text",
+      "size_bytes": 102400,
+      "k": 2,
+      "profile": "moderate",
+      "error_rate": 0.0005,
+      "trials": 2,
+      "success_rate": 0.0,
+      "parity_overhead": 16.0,
+      "avg_flips": 51.0
+    },
+    {
+      "kind": "text",
+      "size_bytes": 102400,
+      "k": 2,
+      "profile": "heavy",
+      "error_rate": 0.001,
+      "trials": 2,
+      "success_rate": 0.0,
+      "parity_overhead": 16.0,
+      "avg_flips": 102.0
+    },
+    {
+      "kind": "text",
+      "size_bytes": 102400,
+      "k": 3,
+      "profile": "light",
+      "error_rate": 0.0001,
+      "trials": 2,
+      "success_rate": 0.0,
+      "parity_overhead": 24.0,
+      "avg_flips": 10.0
+    },
+    {
+      "kind": "text",
+      "size_bytes": 102400,
+      "k": 3,
+      "profile": "moderate",
+      "error_rate": 0.0005,
+      "trials": 2,
+      "success_rate": 0.0,
+      "parity_overhead": 24.0,
+      "avg_flips": 51.0
+    },
+    {
+      "kind": "text",
+      "size_bytes": 102400,
+      "k": 3,
+      "profile": "heavy",
+      "error_rate": 0.001,
+      "trials": 2,
+      "success_rate": 0.0,
+      "parity_overhead": 24.0,
+      "avg_flips": 102.0
+    }
+  ],
+  "recommendations": {
+    "text": {
+      "heavy": null,
+      "light": null,
+      "moderate": null
+    }
+  },
+  "presets": {
+    "balanced": {
+      "redundancy": 3
+    },
+    "high_reliability": {
+      "redundancy": 5
+    },
+    "low_overhead": {
+      "redundancy": 2
+    }
+  }
+}

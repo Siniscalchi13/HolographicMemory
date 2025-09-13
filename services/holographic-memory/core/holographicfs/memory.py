@@ -6,6 +6,12 @@ from pathlib import Path
 from typing import Optional, Dict, List, Tuple, Any
 import json as _json
 import time as _time
+import threading as _threading
+
+try:
+    import psutil as _psutil  # type: ignore
+except Exception:  # pragma: no cover - optional at runtime
+    _psutil = None  # type: ignore
 
 # Build profile flags
 _HOLO_BUILD_PROFILE = os.environ.get("HOLO_BUILD_PROFILE", os.environ.get("HLOG_PROFILE", "dev")).strip().lower()
@@ -134,6 +140,144 @@ def _get_wave_binding():
     raise RuntimeError('Wave ECC binding not available in holographic_gpu')
 
 
+# ----------------- Wave ECC metrics (production observability) -----------------
+class _WaveECCMetrics:
+    """Thread-safe accumulator for Wave ECC observability.
+
+    Metrics are updated in verify_and_correct_rs() and exposed via stats().
+    Optional JSONL telemetry to `./logs/wave_ecc_metrics.jsonl` is enabled when
+    env `HOLO_WAVE_ECC_TELEMETRY=1`.
+    """
+
+    def __init__(self) -> None:
+        self._lock = _threading.Lock()
+        # Counters
+        self.total_encode_ops = 0
+        self.total_decode_ops = 0
+        self.total_bytes_encoded = 0
+        self.total_bytes_decoded = 0
+        self.total_parity_bytes = 0
+        self.errors_detected = 0
+        self.decode_success = 0
+        self.decode_fail = 0
+        # Timing (ms)
+        self.last_encode_ms: float | None = None
+        self.last_decode_ms: float | None = None
+        self.avg_encode_ms: float | None = None
+        self.avg_decode_ms: float | None = None
+        self._alpha = 0.2  # EMA smoothing
+        # Telemetry control
+        self._telemetry = os.environ.get("HOLO_WAVE_ECC_TELEMETRY", "0").strip() in ("1", "true", "on")
+        self._telemetry_path = Path.cwd() / "logs" / "wave_ecc_metrics.jsonl"
+        self._telemetry_started = False
+
+    def _emit(self, record: Dict[str, Any]) -> None:
+        if not self._telemetry:
+            return
+        try:
+            p = self._telemetry_path
+            p.parent.mkdir(parents=True, exist_ok=True)
+            with p.open("a", encoding="utf-8") as f:
+                f.write(_json.dumps(record) + "\n")
+        except Exception:
+            pass
+
+    def _proc_sample(self) -> Dict[str, Any]:
+        proc = None
+        try:
+            if _psutil is not None:
+                proc = _psutil.Process()
+        except Exception:
+            proc = None
+        if not proc:
+            return {"rss_mb": None, "cpu_pct": None}
+        try:
+            mi = proc.memory_info()
+            rss_mb = round(mi.rss / (1024 * 1024), 2)
+        except Exception:
+            rss_mb = None
+        cpu_pct = None
+        try:
+            cpu_pct = proc.cpu_percent(interval=0.0)
+        except Exception:
+            pass
+        return {"rss_mb": rss_mb, "cpu_pct": cpu_pct}
+
+    def record_encode(self, data_len: int, parity_len: int, ms: float) -> None:
+        with self._lock:
+            self.total_encode_ops += 1
+            self.total_bytes_encoded += int(data_len)
+            self.total_parity_bytes += int(parity_len)
+            self.last_encode_ms = float(ms)
+            if self.avg_encode_ms is None:
+                self.avg_encode_ms = float(ms)
+            else:
+                self.avg_encode_ms = (1 - self._alpha) * float(self.avg_encode_ms) + self._alpha * float(ms)
+            rec = {
+                "ts": _time.time(),
+                "event": "encode",
+                "data_bytes": int(data_len),
+                "parity_bytes": int(parity_len),
+                "latency_ms": float(ms),
+            }
+            rec.update(self._proc_sample())
+        self._emit(rec)
+
+    def record_decode(self, data_len: int, errors: int, success: bool, ms: float) -> None:
+        with self._lock:
+            self.total_decode_ops += 1
+            self.total_bytes_decoded += int(data_len)
+            self.errors_detected += int(errors)
+            if success:
+                self.decode_success += 1
+            else:
+                self.decode_fail += 1
+            self.last_decode_ms = float(ms)
+            if self.avg_decode_ms is None:
+                self.avg_decode_ms = float(ms)
+            else:
+                self.avg_decode_ms = (1 - self._alpha) * float(self.avg_decode_ms) + self._alpha * float(ms)
+            rec = {
+                "ts": _time.time(),
+                "event": "decode",
+                "data_bytes": int(data_len),
+                "errors_detected": int(errors),
+                "success": bool(success),
+                "latency_ms": float(ms),
+            }
+            rec.update(self._proc_sample())
+        self._emit(rec)
+
+    def snapshot(self) -> Dict[str, Any]:
+        with self._lock:
+            total_ops = self.total_encode_ops + self.total_decode_ops
+            success_rate = None
+            if (self.decode_success + self.decode_fail) > 0:
+                success_rate = round(100.0 * self.decode_success / (self.decode_success + self.decode_fail), 2)
+            overhead = None
+            if self.total_bytes_encoded > 0:
+                overhead = round(self.total_parity_bytes / max(1, self.total_bytes_encoded), 3)
+            return {
+                "total_encode_ops": self.total_encode_ops,
+                "total_decode_ops": self.total_decode_ops,
+                "total_bytes_encoded": self.total_bytes_encoded,
+                "total_bytes_decoded": self.total_bytes_decoded,
+                "total_parity_bytes": self.total_parity_bytes,
+                "errors_detected": self.errors_detected,
+                "decode_success": self.decode_success,
+                "decode_fail": self.decode_fail,
+                "decode_success_rate_pct": success_rate,
+                "avg_encode_ms": self.avg_encode_ms,
+                "avg_decode_ms": self.avg_decode_ms,
+                "last_encode_ms": self.last_encode_ms,
+                "last_decode_ms": self.last_decode_ms,
+                "avg_parity_overhead": overhead,
+            }
+
+
+__wave_metrics = _WaveECCMetrics()
+
+
 def verify_and_correct_rs(payload: bytes, parity: bytes, k: int = 3, r: int = 0) -> bytes:
     """ECC verify/correct helper (Wave ECC backend).
 
@@ -148,13 +292,20 @@ def verify_and_correct_rs(payload: bytes, parity: bytes, k: int = 3, r: int = 0)
         return payload
     if not _cpp_loaded:
         raise RuntimeError("GPU ECC backend not available; build native extensions")
-    # Wave ECC decode/correct via already-imported native module
+    # Wave ECC decode/correct via already-imported native module (GPU-only)
     _hgw = _get_wave_binding()
+    t0 = _time.perf_counter()
     decoded_bytes, errors_detected = _hgw.wave_ecc_decode(payload, parity, int(k), int(r))  # type: ignore[attr-defined]
+    dec_ms = ( _time.perf_counter() - t0 ) * 1000.0
     corrected = bytes(decoded_bytes)
     # Parity re-validation to ensure integrity
+    t1 = _time.perf_counter()
     new_parity = _hgw.wave_ecc_encode(corrected, int(k), int(r))  # type: ignore[attr-defined]
-    if bytes(new_parity) != bytes(parity):
+    enc_ms = ( _time.perf_counter() - t1 ) * 1000.0
+    ok = bytes(new_parity) == bytes(parity)
+    __wave_metrics.record_decode(len(payload), int(errors_detected), ok, dec_ms)
+    __wave_metrics.record_encode(len(corrected), len(new_parity or b""), enc_ms)
+    if not ok:
         raise RuntimeError(
             f"ECC uncorrectable: parity mismatch after correction (errors_detected={int(errors_detected)})"
         )
@@ -512,12 +663,29 @@ class Memory:
         return []
 
     def stats(self) -> Dict:
+        base: Dict[str, Any] = {}
         if _cpp_loaded and hasattr(self.backend, "get_stats"):
             try:
-                return dict(self.backend.get_stats())  # type: ignore[attr-defined]
+                base = dict(self.backend.get_stats())  # type: ignore[attr-defined]
             except Exception:  # pylint: disable=broad-except
-                pass
-        return {}
+                base = {}
+        # Attach Wave ECC metrics and GPU availability info
+        try:
+            plats = []
+            try:
+                plats = getattr(_hn, 'available_platforms', lambda: [])() if _cpp_loaded else []  # type: ignore[attr-defined]
+            except Exception:
+                plats = []
+            base.update({
+                "gpu": {
+                    "available": bool(self.use_gpu),
+                    "platforms": plats,
+                },
+                "wave_ecc_metrics": __wave_metrics.snapshot(),
+            })
+        except Exception:
+            pass
+        return base
 
     # ----------------- GPU helpers (optional) -----------------
     def store_batch_gpu(self, batch_data: List[List[float]]) -> List[List[float]]:

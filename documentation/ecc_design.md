@@ -67,3 +67,12 @@ This document describes the Wave-based ECC used in HolographicMemory containers:
 - Formalize similarity thresholds and adaptive view selection policies
 - Extend HGMC3 validation with Wave ECC parity streams
 - Micro-benchmarks for parity overhead and throughput vs. R and dimension
+
+## Phase 3.5: Production Metrics & Observability
+- Stats exposure: `HoloFS.stats()` now returns a nested `wave_ecc_metrics` dict with:
+  - `total_encode_ops`, `total_decode_ops`, `errors_detected`, `decode_success`, `decode_fail`
+  - `decode_success_rate_pct`, `avg_encode_ms`, `avg_decode_ms`, `avg_parity_overhead`
+  - `last_encode_ms`, `last_decode_ms`
+- GPU info: `stats()["gpu"] = {"available": bool, "platforms": [...]}`
+- Telemetry: set `HOLO_WAVE_ECC_TELEMETRY=1` to append JSONL to `logs/wave_ecc_metrics.jsonl` for dashboards
+- Dashboard: open `dashboard/wave_ecc_monitor.html` and either connect to `/api/*` endpoints or load the JSONL file manually.

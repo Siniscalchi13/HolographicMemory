@@ -7,9 +7,9 @@ CXX_DEFINES = -DPLATFORM_METAL
 
 CXX_INCLUDES = -F/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks
 
-CXX_FLAGSarm64 = -std=gnu++17 -arch arm64 -O3 -DNDEBUG
+CXX_FLAGSarm64 = -DPLATFORM_METAL -std=gnu++17 -arch arm64 -O3 -DNDEBUG
 
-CXX_FLAGS = -std=gnu++17 -arch arm64 -O3 -DNDEBUG
+CXX_FLAGS = -DPLATFORM_METAL -std=gnu++17 -arch arm64 -O3 -DNDEBUG
 
 OBJCXX_DEFINES = -DPLATFORM_METAL
 

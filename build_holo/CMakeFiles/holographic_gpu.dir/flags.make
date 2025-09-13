@@ -7,9 +7,9 @@ CXX_DEFINES = -DPLATFORM_METAL -Dholographic_gpu_EXPORTS
 
 CXX_INCLUDES = -F/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks -isystem /opt/homebrew/include -isystem /opt/homebrew/opt/python@3.13/Frameworks/Python.framework/Versions/3.13/include/python3.13
 
-CXX_FLAGSarm64 = -std=gnu++17 -arch arm64 -fPIC -fvisibility=hidden -O3 -DNDEBUG -flto
+CXX_FLAGSarm64 = -DPLATFORM_METAL -std=gnu++17 -arch arm64 -fPIC -fvisibility=hidden -O3 -DNDEBUG -flto
 
-CXX_FLAGS = -std=gnu++17 -arch arm64 -fPIC -fvisibility=hidden -O3 -DNDEBUG -flto
+CXX_FLAGS = -DPLATFORM_METAL -std=gnu++17 -arch arm64 -fPIC -fvisibility=hidden -O3 -DNDEBUG -flto
 
 OBJCXX_DEFINES = -DPLATFORM_METAL -Dholographic_gpu_EXPORTS
 

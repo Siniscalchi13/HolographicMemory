@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wave ECC Monitor</title>
+  <style>
+    :root { --bg:#0b0f14; --fg:#ecf2f8; --muted:#8aa0b7; --accent:#3ecf8e; --warn:#f5a524; --bad:#ef4444; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; background:var(--bg); color:var(--fg);} 
+    header { padding:16px 24px; border-bottom:1px solid #1c2430; display:flex; align-items:center; gap:12px; }
+    header h1 { font-size:18px; margin:0; }
+    header .pill { padding:4px 8px; border-radius:999px; background:#13202e; color:var(--muted); font-size:12px; }
+    main { padding:20px; display:grid; gap:16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .card { background:#0f1621; border:1px solid #1c2430; border-radius:12px; padding:16px; }
+    .kpi { font-size:28px; font-weight:600; margin:4px 0; }
+    .label { color:var(--muted); font-size:12px; }
+    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    button, input[type="file"]::file-selector-button { background:#16263a; color:var(--fg); border:1px solid #223044; padding:8px 12px; border-radius:8px; cursor:pointer; }
+    button:hover { background:#1a2d46; }
+    .good { color: var(--accent);} .warn{ color: var(--warn);} .bad{ color: var(--bad);} 
+    canvas { width:100%; height:140px; background:#0c141f; border-radius:8px; border:1px solid #1c2430; }
+    small { color:var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Wave ECC Monitor</h1>
+    <span class="pill" id="gpu-pill">GPU: unknown</span>
+    <span class="pill" id="status-pill">Status: idle</span>
+    <div class="row" style="margin-left:auto">
+      <button id="connect">Connect API</button>
+      <input id="file" type="file" accept=".json,.jsonl" />
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <div class="label">Encode Ops</div>
+      <div class="kpi" id="enc-ops">0</div>
+      <div class="label">Avg Encode (ms): <span id="enc-avg">-</span></div>
+    </section>
+    <section class="card">
+      <div class="label">Decode Ops</div>
+      <div class="kpi" id="dec-ops">0</div>
+      <div class="label">Avg Decode (ms): <span id="dec-avg">-</span></div>
+    </section>
+    <section class="card">
+      <div class="label">Errors Detected</div>
+      <div class="kpi" id="errors">0</div>
+      <div class="label">Decode Success Rate</div>
+      <div class="kpi" id="success-rate">-</div>
+    </section>
+    <section class="card">
+      <div class="label">Parity Overhead (avg)</div>
+      <div class="kpi" id="overhead">-</div>
+      <div class="label">Process RSS (MB): <span id="rss">-</span>, CPU%: <span id="cpu">-</span></div>
+    </section>
+    <section class="card" style="grid-column:1/-1">
+      <div class="label">Latency (ms)</div>
+      <canvas id="chart"></canvas>
+      <small>Loads live from /api/metrics if available; or drop JSON/JSONL from logs.</small>
+    </section>
+  </main>
+
+  <script>
+    const gpuPill = document.getElementById('gpu-pill');
+    const statusPill = document.getElementById('status-pill');
+    const encOps = document.getElementById('enc-ops');
+    const encAvg = document.getElementById('enc-avg');
+    const decOps = document.getElementById('dec-ops');
+    const decAvg = document.getElementById('dec-avg');
+    const errors = document.getElementById('errors');
+    const successRate = document.getElementById('success-rate');
+    const overhead = document.getElementById('overhead');
+    const rss = document.getElementById('rss');
+    const cpu = document.getElementById('cpu');
+    const cvs = document.getElementById('chart');
+    const ctx = cvs.getContext('2d');
+    const points = [];
+
+    function draw(){
+      const w = cvs.clientWidth, h = cvs.clientHeight;
+      const dpr = window.devicePixelRatio || 1;
+      if (cvs.width !== w*dpr || cvs.height !== h*dpr){ cvs.width = w*dpr; cvs.height = h*dpr; }
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0,0,w,h);
+      ctx.strokeStyle = '#223044'; ctx.beginPath();
+      for(let y=0;y<h;y+=20){ ctx.moveTo(0,y); ctx.lineTo(w,y);} ctx.stroke();
+      if(points.length<2) return;
+      const xs = points.map(p=>p.t), ys = points.map(p=>p.v);
+      const tmin = Math.min(...xs), tmax = Math.max(...xs);
+      const ymin = 0, ymax = Math.max(10, Math.max(...ys));
+      ctx.strokeStyle = '#3ecf8e'; ctx.lineWidth = 2; ctx.beginPath();
+      points.forEach((p,i)=>{
+        const x = ( (p.t - tmin) / Math.max(1, tmax - tmin) ) * (w-20) + 10;
+        const y = h - ( (p.v - ymin) / Math.max(1, ymax - ymin) ) * (h-20) - 10;
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      });
+      ctx.stroke();
+    }
+
+    function updateStats(m){
+      const s = m.wave_ecc_metrics || m;
+      encOps.textContent = s.total_encode_ops ?? 0;
+      encAvg.textContent = s.avg_encode_ms?.toFixed(2) ?? '-';
+      decOps.textContent = s.total_decode_ops ?? 0;
+      decAvg.textContent = s.avg_decode_ms?.toFixed(2) ?? '-';
+      errors.textContent = s.errors_detected ?? 0;
+      const rate = s.decode_success_rate_pct;
+      successRate.textContent = rate!=null ? rate.toFixed(2)+'%' : '-';
+      overhead.textContent = s.avg_parity_overhead!=null ? s.avg_parity_overhead.toFixed(3) : '-';
+    }
+
+    function updateProc(m){
+      const gpu = (m.gpu && m.gpu.available) ? 'available' : 'unavailable';
+      gpuPill.textContent = `GPU: ${gpu}`;
+      const rssMb = (m.rss_mb ?? m.process_end?.rss_mb ?? m.process_start?.rss_mb);
+      const cpuPct = (m.cpu_pct ?? m.process_end?.cpu_pct ?? m.process_start?.cpu_pct);
+      rss.textContent = (rssMb!=null) ? rssMb : '-';
+      cpu.textContent = (cpuPct!=null) ? cpuPct : '-';
+    }
+
+    async function poll(){
+      try{
+        const res = await fetch('/api/metrics');
+        const j = await res.json();
+        // Expect shape similar to flask app; adapt if needed
+        statusPill.textContent = 'Status: live';
+        statusPill.classList.remove('warn');
+        updateProc(j);
+        // Synthesize a point from cpu_usage or gpu_usage as proxy
+        const v = (j.gpu_usage ?? j.cpu_usage ?? 0);
+        points.push({ t: performance.now(), v: v });
+        if(points.length>200) points.shift();
+        draw();
+      }catch(e){
+        statusPill.textContent = 'Status: offline';
+        statusPill.classList.add('warn');
+      }
+      requestAnimationFrame(poll);
+    }
+
+    document.getElementById('connect').onclick = async ()=>{
+      // Try to call HoloFS stats via a local endpoint if present
+      try{
+        const res = await fetch('/api/status');
+        const j = await res.json();
+        gpuPill.textContent = `GPU: ${j?.gpu?.available ? 'available' : 'unavailable'}`;
+      }catch(e){ /* noop */ }
+      poll();
+    };
+
+    document.getElementById('file').onchange = async (ev)=>{
+      const f = ev.target.files[0]; if(!f) return;
+      const txt = await f.text();
+      const lines = txt.split(/\n/).filter(Boolean);
+      // Try JSONL then JSON
+      let objs = [];
+      try{ objs = lines.map(l=>JSON.parse(l)); }catch{ try{ objs=[JSON.parse(txt)]; }catch{ objs=[]; } }
+      const last = objs[objs.length-1] || {};
+      updateStats(last);
+      updateProc(last);
+      statusPill.textContent = 'Status: file-loaded';
+      statusPill.classList.remove('warn');
+      // Fill chart with latencies if present
+      points.length=0;
+      for(const o of objs.slice(-200)){
+        const v = (o.latency_ms ?? o.decode_ms ?? o.encode_ms);
+        if(typeof v === 'number') points.push({ t: performance.now()+v, v: v });
+      }
+      draw();
+    };
+
+    // Provide a small demo snapshot when opened via file://
+    (function demo(){
+      const demo = { wave_ecc_metrics:{ total_encode_ops:12, total_decode_ops:12, errors_detected:3, decode_success_rate_pct:100, avg_encode_ms:1.7, avg_decode_ms:2.1, avg_parity_overhead:0.35 }, gpu:{available:true} };
+      updateStats(demo);
+      updateProc(demo);
+      for(let i=0;i<40;i++){ points.push({ t: performance.now()+i*50, v: (Math.sin(i/4)*2+4) }); }
+      draw();
+    })();
+  </script>
+</body>
+</html>
+

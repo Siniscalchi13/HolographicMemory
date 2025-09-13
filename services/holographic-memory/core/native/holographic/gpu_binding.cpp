@@ -825,6 +825,9 @@ PYBIND11_MODULE(holographic_gpu, m) {
     }, "GPU Sparse Decoding - Convert sparse representation back to dense coefficients");
 
     // ----------------- ECC (RS(255,223)) host-side encode/decode -----------------
+    // RS interface removed from Python module (Phase 3.5). Keep implementation
+    // under compile-off block for archival purposes only.
+#if 0
     // Minimal, deterministic Reed–Solomon implementation over GF(2^8)
     m.def("gpu_rs_encode", [](py::bytes payload, std::uint32_t k, std::uint32_t r) {
         std::string s = payload;
@@ -1417,6 +1420,7 @@ PYBIND11_MODULE(holographic_gpu, m) {
         return py::make_tuple(py::bytes(reinterpret_cast<const char*>(out.data()), (py::ssize_t)s.size()), counts);
     }, py::arg("payload"), py::arg("parity"), py::arg("k")=(std::uint32_t)223, py::arg("r")=(std::uint32_t)32,
        "GPU RS(255,223) ECC decode/correct payload using parity (host-side)");
+#endif
 
     // Wave-based ECC functions
     m.def("wave_ecc_encode", [](py::bytes data, std::uint32_t redundancy_level, std::uint32_t seed_base) {
@@ -1425,7 +1429,7 @@ PYBIND11_MODULE(holographic_gpu, m) {
             return py::bytes("");
         }
         
-#ifdef PLATFORM_METAL
+#if defined(PLATFORM_METAL) || defined(__APPLE__)
         auto core = holo::MetalHoloCore();
         if (!core.available()) throw std::runtime_error("GPU backend not available");
         
@@ -1502,7 +1506,7 @@ PYBIND11_MODULE(holographic_gpu, m) {
             return py::make_tuple(py::bytes(""), 0);
         }
         
-#ifdef PLATFORM_METAL
+#if defined(PLATFORM_METAL) || defined(__APPLE__)
         auto core = holo::MetalHoloCore();
         if (!core.available()) throw std::runtime_error("GPU backend not available");
         

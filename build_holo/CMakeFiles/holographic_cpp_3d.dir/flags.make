@@ -6,7 +6,7 @@ CXX_DEFINES = -Dholographic_cpp_3d_EXPORTS
 
 CXX_INCLUDES = -I/opt/homebrew/Cellar/fftw/3.3.10_2/include -isystem /opt/homebrew/include -isystem /opt/homebrew/opt/python@3.13/Frameworks/Python.framework/Versions/3.13/include/python3.13
 
-CXX_FLAGSarm64 = -std=gnu++17 -arch arm64 -fPIC -fvisibility=hidden -O3 -DNDEBUG -flto
+CXX_FLAGSarm64 = -DPLATFORM_METAL -std=gnu++17 -arch arm64 -fPIC -fvisibility=hidden -O3 -DNDEBUG -flto
 
-CXX_FLAGS = -std=gnu++17 -arch arm64 -fPIC -fvisibility=hidden -O3 -DNDEBUG -flto
+CXX_FLAGS = -DPLATFORM_METAL -std=gnu++17 -arch arm64 -fPIC -fvisibility=hidden -O3 -DNDEBUG -flto
 
