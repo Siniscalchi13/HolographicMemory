@@ -60,6 +60,11 @@
       <canvas id="chart"></canvas>
       <small>Loads live from /api/metrics if available; or drop JSON/JSONL from logs.</small>
     </section>
+    <section class="card" style="grid-column:1/-1">
+      <div class="label">7-Layer Breakdown</div>
+      <div id="layers-flex" class="row" style="gap:8px; align-items:stretch; flex-wrap:wrap"></div>
+      <small>Drop a JSON with a top-level "layers" object or a container_map.json to populate.</small>
+    </section>
   </main>
 
   <script>
@@ -77,6 +82,7 @@
     const cvs = document.getElementById('chart');
     const ctx = cvs.getContext('2d');
     const points = [];
+    const layersFlex = document.getElementById('layers-flex');
 
     function draw(){
       const w = cvs.clientWidth, h = cvs.clientHeight;
@@ -120,6 +126,36 @@
       cpu.textContent = (cpuPct!=null) ? cpuPct : '-';
     }
 
+    function renderLayers(layers){
+      if(!layers) return;
+      // Accept shape {"0":{...},...,"6":{...}, chunk_counts?:{}}
+      const order = ["0","1","2","3","4","5","6"];
+      const names = {"0":"Identity","1":"Knowledge","2":"Experience","3":"Preference","4":"Context","5":"Wisdom","6":"Vault"};
+      const counts = layers.chunk_counts || {};
+      layersFlex.innerHTML = '';
+      for(const k of order){
+        const L = layers[k] || {};
+        const snr = Number(L.current_snr ?? 0);
+        const target = Number(L.target_snr ?? 0);
+        const used = Number(L.capacity_used ?? 0);
+        const dim = Number(L.dimension ?? 0);
+        const cc = Number(counts[k] ?? 0);
+        const box = document.createElement('div');
+        box.className = 'card';
+        box.style.minWidth = '220px';
+        box.innerHTML = `
+          <div class="label">${names[k] ?? ('Layer '+k)}</div>
+          <div class="kpi">${cc} <span class="label">chunks</span></div>
+          <div class="label">D: <b>${dim}</b> | SNR: <b>${snr.toFixed(2)}</b> / ${target.toFixed(2)}</div>
+          <div class="label">Capacity used: <b>${(used*100).toFixed(1)}%</b></div>
+          <div style="margin-top:8px; background:#0c141f; border:1px solid #1c2430; border-radius:6px; height:8px; overflow:hidden;">
+            <div style="height:100%; width:${Math.max(0, Math.min(100, used*100))}%; background:${used>1? 'var(--bad)': used>0.8? 'var(--warn)': 'var(--accent)'}"></div>
+          </div>
+        `;
+        layersFlex.appendChild(box);
+      }
+    }
+
     async function poll(){
       try{
         const res = await fetch('/api/metrics');
@@ -160,6 +196,21 @@
       const last = objs[objs.length-1] || {};
       updateStats(last);
       updateProc(last);
+      if(last.layers){ renderLayers(last.layers); }
+      // If a container_map.json was dropped, synthesize minimal layers with chunk_counts
+      try{
+        const root = JSON.parse(txt);
+        if(root && !root.layers && typeof root === 'object' && !Array.isArray(root)){
+          const counts = {"0":0,"1":0,"2":0,"3":0,"4":0,"5":0,"6":0};
+          for(const key of Object.keys(root)){
+            const ent = root[key];
+            const cl = ent && ent.chunk_layers; if(Array.isArray(cl)){
+              cl.forEach(v=>{ const kk = String((Number(v)||0)%7); counts[kk] = (counts[kk]||0)+1; });
+            }
+          }
+          renderLayers({ chunk_counts: counts });
+        }
+      }catch{}
       statusPill.textContent = 'Status: file-loaded';
       statusPill.classList.remove('warn');
       // Fill chart with latencies if present
@@ -182,4 +233,3 @@
   </script>
 </body>
 </html>
-

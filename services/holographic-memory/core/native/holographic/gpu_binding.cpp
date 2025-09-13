@@ -168,6 +168,56 @@ public:
 #endif
     }
 
+    // Encode bytes with explicit 7-layer routing and per-layer alpha scaling
+    py::tuple encode_superpose_bytes_layered(py::bytes data,
+                                             std::uint32_t chunk_size,
+                                             std::uint32_t seed_base,
+                                             const std::vector<std::uint32_t>& chunk_layers,
+                                             const std::vector<float>& layer_alpha_scales) {
+#ifdef PLATFORM_METAL
+        std::string s = data;
+        if (s.empty()) return py::make_tuple(std::vector<float>{}, 0u, std::vector<std::uint32_t>{}, std::vector<std::uint32_t>{});
+        auto core = holo::MetalHoloCore();
+        if (!core.available()) throw std::runtime_error("GPU backend not available");
+        if (!layers_initialized_) initialize_7layer_decomposition((std::size_t)s.size());
+        // Default alphas = 1.0 if not provided
+        std::array<float,7> alphas{}; alphas.fill(1.0f);
+        for (std::size_t i=0;i<layer_alpha_scales.size() && i<7;i++) alphas[i] = layer_alpha_scales[i];
+        // Prepare outputs
+        std::vector<float> psi; psi.assign(s.size(), 0.0f);
+        std::vector<std::uint32_t> seeds;
+        std::vector<std::uint32_t> sizes;
+        const std::uint32_t dim = (std::uint32_t)s.size();
+        // Update layer load estimates based on routing map
+        {
+            std::array<double,7> incr{}; incr.fill(0.0);
+            for (auto L : chunk_layers) incr[(std::size_t)(L % 7u)] += 1.0;
+            for (std::size_t k=0;k<7;k++) layers_[k].load_estimate = std::max(1.0, layers_[k].load_estimate + incr[k]);
+            update_layer_snrs();
+        }
+        for (std::size_t off = 0, idx = 0; off < s.size(); off += chunk_size, ++idx) {
+            std::size_t clen = std::min<std::size_t>(chunk_size, s.size() - off);
+            std::vector<float> chunk(clen);
+            for (std::size_t i = 0; i < clen; ++i) chunk[i] = (float)((unsigned char)s[off + i]) / 255.0f;
+            std::vector<float> sig(dim, 0.0f); std::copy(chunk.begin(), chunk.end(), sig.begin());
+            std::vector<float> re, im; core.fft_transform(sig, re, im);
+            std::uint32_t seed = seed_base ^ (std::uint32_t)idx;
+            std::vector<float> re2, im2; core.apply_codebook(re, im, re2, im2, seed);
+            std::vector<float> t; core.ifft_transform(re2, im2, t);
+            // Per-chunk layer selection and alpha scaling
+            std::uint32_t L = (idx < chunk_layers.size()) ? (chunk_layers[idx] % 7u) : 1u;
+            float a = alphas[(std::size_t)L];
+            if (a != 1.0f) for (auto &v : t) v *= a;
+            core.accumulate_add_time(psi, t);
+            seeds.push_back(seed);
+            sizes.push_back((std::uint32_t)clen);
+        }
+        return py::make_tuple(psi, dim, seeds, sizes);
+#else
+        (void)data; (void)chunk_size; (void)seed_base; (void)chunk_layers; (void)layer_alpha_scales; throw std::runtime_error("GPU platform not supported");
+#endif
+    }
+
     // Decode bytes from time-domain psi using seeded conjugate codebook correlation
     py::bytes decode_superposed_bytes(const std::vector<float>& psi_time,
                                       std::uint32_t dim,
@@ -210,10 +260,12 @@ public:
     void initialize_7layer_decomposition(std::size_t total_budget) {
         total_budget_ = total_budget ? total_budget : 1024;
         static const char* NAMES[7] = {"Identity","Knowledge","Experience","Preference","Context","Wisdom","Vault"};
+        static const double W[7] = {1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4};
+        static const double T[7] = {10.0, 8.0, 6.0, 5.0, 4.0, 3.0, 2.0};
         for (std::size_t k = 0; k < 7; ++k) {
             layers_[k].name = NAMES[k];
-            layers_[k].importance_weight = (k==1?1.3:(k==4?1.1:1.0));
-            layers_[k].target_snr = 1.0;
+            layers_[k].importance_weight = W[k];
+            layers_[k].target_snr = T[k];
             layers_[k].load_estimate = std::max(1.0, layers_[k].importance_weight * 100.0);
         }
         optimize_layer_dimensions();
@@ -266,15 +318,23 @@ public:
     }
 
     bool enforce_capacity_theorem() {
+        const std::size_t MAX_ITERATIONS = 10;  // Prevent infinite loops
         bool rebalanced = false;
-        for (std::size_t k = 0; k < 7; ++k) {
-            double required = layers_[k].target_snr * layers_[k].target_snr * layers_[k].load_estimate;
-            if (double(layers_[k].dimension) < required) {
-                layers_[k].dimension = static_cast<std::size_t>(std::ceil(required));
-                rebalanced = true;
+        
+        for (std::size_t iteration = 0; iteration < MAX_ITERATIONS; ++iteration) {
+            bool changed = false;
+            for (std::size_t k = 0; k < 7; ++k) {
+                double required = layers_[k].target_snr * layers_[k].target_snr * layers_[k].load_estimate;
+                if (double(layers_[k].dimension) < required) {
+                    layers_[k].dimension = static_cast<std::size_t>(std::ceil(required));
+                    changed = true;
+                    rebalanced = true;
+                }
             }
-        }
-        if (rebalanced) {
+            
+            if (!changed) break;  // No more changes needed
+            
+            // Rebalance if over budget
             std::size_t used = 0; for (auto& L : layers_) used += L.dimension;
             if (used > total_budget_) {
                 double scale = double(total_budget_) / double(used);
@@ -400,8 +460,8 @@ public:
         
         if (!backend_) throw std::runtime_error("GPU backend not initialized");
         
-        // For now, return a placeholder implementation
-        // TODO: Implement actual GPU quantization through the backend
+        // Placeholder implementation - CPU-based quantization
+        // Note: GPU quantization will be implemented in future phases
         std::vector<std::vector<float>> result;
         result.reserve(input_real.size());
         
@@ -442,8 +502,8 @@ public:
         
         if (!backend_) throw std::runtime_error("GPU backend not initialized");
         
-        // For now, return a placeholder implementation
-        // TODO: Implement actual GPU quantization through the backend
+        // Placeholder implementation - CPU-based quantization
+        // Note: GPU quantization will be implemented in future phases
         std::vector<std::vector<float>> quantized_real, quantized_imag;
         std::vector<std::vector<float>> phase_errors, amplitude_errors;
         
@@ -727,6 +787,9 @@ PYBIND11_MODULE(holographic_gpu, m) {
         // Holographic superposition encode/decode
         .def("encode_superpose_bytes", &HolographicGPUWrapper::encode_superpose_bytes,
              py::arg("data"), py::arg("chunk_size") = (std::uint32_t)4096, py::arg("seed_base") = (std::uint32_t)0)
+        .def("encode_superpose_bytes_layered", &HolographicGPUWrapper::encode_superpose_bytes_layered,
+             py::arg("data"), py::arg("chunk_size") = (std::uint32_t)4096, py::arg("seed_base") = (std::uint32_t)0,
+             py::arg("chunk_layers"), py::arg("layer_alpha_scales"))
         .def("decode_superposed_bytes", &HolographicGPUWrapper::decode_superposed_bytes,
              py::arg("psi_time"), py::arg("dim"), py::arg("seeds"), py::arg("sizes"))
         .def("batch_encode", &HolographicGPUWrapper::batch_encode, py::arg("batch"), py::arg("pattern_dim"))

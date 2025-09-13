@@ -33,31 +33,35 @@ try:
         ap = str(_alt_build)
         if ap not in sys.path:
             sys.path.insert(0, ap)
-    # Then also include the in-tree native build dir if present
+    # Then also include the in-tree native build dir if present (but with lower priority)
     _cpp_dir = _pkg_root / "native" / "holographic" / "build"
     if _cpp_dir.exists():
         p = str(_cpp_dir)
         if p not in sys.path:
             # Insert after top-level build_holo if both exist
             sys.path.insert(1 if sys.path and sys.path[0] == str(_alt_build) else 0, p)
-    import holographic_gpu as _hn  # type: ignore
-    # If the imported binding lacks Wave ECC, try to force-load from build_holo explicitly
-    if not hasattr(_hn, 'wave_ecc_encode') and _alt_build.exists():
+    
+    # Try to import from build_holo first, then fallback to in-tree build
+    _hn = None
+    if _alt_build.exists():
         try:
             import importlib.util as _ilu
             import glob as _glob
-            cand = None
             for fn in _glob.glob(str(_alt_build / 'holographic_gpu*.so')):
-                cand = fn; break
-            if cand:
-                spec = _ilu.spec_from_file_location('holographic_gpu_wave', cand)
+                spec = _ilu.spec_from_file_location('holographic_gpu', fn)
                 if spec and spec.loader:
                     mod = _ilu.module_from_spec(spec)
                     spec.loader.exec_module(mod)  # type: ignore[assignment]
-                    if hasattr(mod, 'wave_ecc_encode'):
+                    if hasattr(mod, 'wave_ecc_encode') and hasattr(mod, 'wave_ecc_decode'):
                         _hn = mod  # type: ignore[assignment]
+                        break
         except Exception:
             pass
+    
+    # Fallback to regular import if build_holo loading failed
+    if _hn is None:
+        import holographic_gpu as _hn  # type: ignore
+    # Wave ECC loading is now handled above
     _cpp_loaded = True
 except Exception:
     try:
@@ -519,7 +523,10 @@ class Memory:
                 db = _json.loads(mpath.read_text(encoding='utf-8'))
         except Exception:
             db = {}
-        db[str(doc_id)] = {"filename": filename, "dimension": int(dim), "container": f"{doc_id}.hgc"}
+        # Maintain backward-compatible minimal record; layered metadata may be attached by caller
+        entry = db.get(str(doc_id), {})
+        entry.update({"filename": filename, "dimension": int(dim), "container": f"{doc_id}.hgc"})
+        db[str(doc_id)] = entry
         tmp = mpath.with_suffix(".tmp")
         tmp.write_text(_json.dumps(db, indent=2), encoding='utf-8')
         os.replace(tmp, mpath)
@@ -562,7 +569,137 @@ class Memory:
         g = _hn.HolographicGPU()  # type: ignore[attr-defined]
         if hasattr(g, 'initialize'):
             _ = g.initialize()  # type: ignore[attr-defined]
-        psi, dim, seeds, sizes = g.encode_superpose_bytes(data, 4096, seed_base)  # type: ignore[attr-defined]
+        # Initialize 7-layer decomposition to match content dimension
+        try:
+            if hasattr(g, 'initialize_7layer_decomposition'):
+                g.initialize_7layer_decomposition(len(data))  # type: ignore[attr-defined]
+            # Phase 4 polish: enforce capacity theorem and refresh SNRs before routing
+            if hasattr(g, 'update_layer_snrs'):
+                g.update_layer_snrs()  # type: ignore[attr-defined]
+            if hasattr(g, 'enforce_capacity_theorem'):
+                try:
+                    _ = g.enforce_capacity_theorem()  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+            if hasattr(g, 'update_layer_snrs'):
+                g.update_layer_snrs()  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+        # --- Phase 4: 7-layer routing for bytes ---
+        # Decide per-chunk layer routing and per-layer alpha scaling
+        def _route_layers_for_file(fname: str, raw: bytes, nchunks: int) -> tuple[list[int], list[float]]:
+            # Simple deterministic heuristics (aligned with api/router_layers.py)
+            name = str(fname).lower()
+            ext = name.rsplit('.', 1)[-1] if '.' in name else ''
+            scores = {
+                'identity': 0.0,
+                'knowledge': 0.6,
+                'experience': 0.0,
+                'preference': 0.0,
+                'context': 0.2,
+                'wisdom': 0.0,
+                'vault': 0.0,
+            }
+            # Vault triggers
+            for kw in ('secret', 'key', 'password', 'token', 'cert'):
+                if kw in name:
+                    scores = {k: 0.0 for k in scores}; scores['vault'] = 1.0; break
+            # Extension-based hints
+            if ext in ('pdf','txt','md','doc','docx','rtf','tex'):
+                scores['knowledge'] += 0.4
+            if ext in ('log','csv','tsv'):
+                scores['experience'] += 0.4
+            if ext in ('ini','cfg','conf','yaml','yml','toml','json'):
+                scores['preference'] += 0.6
+            if ext in ('png','jpg','jpeg','gif','bmp','tiff'):
+                scores['context'] += 0.3
+            # Content heuristics (cheap)
+            txt = ''
+            try:
+                txt = raw[:8192].decode('utf-8', errors='ignore')
+            except Exception:
+                txt = ''
+            import re as _re
+            if _re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", txt or ''):
+                scores['identity'] += 0.8
+            if _re.search(r"\b\w+ed\b", txt or '') or _re.search(r"\b20\d{2}\b", txt or ''):
+                scores['experience'] += 0.6
+            if 'verified' in (txt or '').lower() or 'checksum' in (txt or '').lower():
+                scores['wisdom'] += 0.7
+            # Normalize and pick top-2
+            pos = [(k,v) for k,v in scores.items() if v>0.0]
+            if not pos:
+                pos = [('knowledge', 1.0)]
+            pos.sort(key=lambda kv: kv[1], reverse=True)
+            top = pos[:2]
+            s = sum(w for _,w in top)
+            if s <= 0:
+                top = [('knowledge', 1.0)]; s = 1.0
+            norm = [(k, w/s) for k,w in top]
+            name_to_idx = {'identity':0,'knowledge':1,'experience':2,'preference':3,'context':4,'wisdom':5,'vault':6}
+            # Allocate chunks proportionally
+            alloc = [0]*7
+            rem = nchunks
+            for k,w in norm:
+                c = int(round(w * nchunks))
+                alloc[name_to_idx[k]] += c; rem -= c
+            # Fix rounding by assigning remaining to highest weight
+            if rem != 0:
+                top_idx = name_to_idx[norm[0][0]]
+                alloc[top_idx] += rem
+            # Build chunk_layers round-robin among selected layers
+            selected = [name_to_idx[k] for k,_ in norm]
+            chunk_layers = []
+            ptrs = {i:0 for i in selected}
+            # Create lists per layer
+            layers_flat: list[int] = []
+            for i in range(7):
+                layers_flat.extend([i]*alloc[i])
+            # Deterministic shuffling by seed
+            import random as _rnd
+            r = _rnd.Random(seed_base)
+            r.shuffle(layers_flat)
+            chunk_layers = layers_flat[:nchunks]
+            # Alpha scaling from backend SNRs
+            alphas = [1.0]*7
+            try:
+                if hasattr(g, 'get_layer_stats'):
+                    st = g.get_layer_stats()  # type: ignore[attr-defined]
+                    amin = float(os.environ.get('LAYER_ALPHA_MIN','0.5'))
+                    amax = float(os.environ.get('LAYER_ALPHA_MAX','2.0'))
+                    for i in range(7):
+                        li = st.get(str(i), {})
+                        cur = float(li.get('current_snr', 1.0) or 1.0)
+                        tgt = float(li.get('target_snr', 1.0) or 1.0)
+                        a = tgt / max(1e-6, cur)
+                        if not (a == a):  # NaN guard
+                            a = 1.0
+                        a = max(amin, min(amax, a))
+                        alphas[i] = a
+            except Exception:
+                pass
+            return chunk_layers, alphas
+
+        # Build chunk routing (we don't know chunk count until GPU splits, approximate by len/4096)
+        approx_chunks = max(1, (len(data) + 4095)//4096)
+        chunk_layers, alpha_scales = _route_layers_for_file(filename, data, approx_chunks)
+        # Optional: enforce capacity before encode using the final pre-computed routing plan
+        try:
+            if hasattr(g, 'enforce_capacity_theorem'):
+                _ = g.enforce_capacity_theorem()  # type: ignore[attr-defined]
+            if hasattr(g, 'update_layer_snrs'):
+                g.update_layer_snrs()  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        # Execute layered encode if available; else fallback
+        try:
+            if hasattr(g, 'encode_superpose_bytes_layered'):
+                psi, dim, seeds, sizes = g.encode_superpose_bytes_layered(data, 4096, seed_base, list(map(int, chunk_layers)), list(map(float, alpha_scales)))  # type: ignore[attr-defined]
+            else:
+                psi, dim, seeds, sizes = g.encode_superpose_bytes(data, 4096, seed_base)  # type: ignore[attr-defined]
+        except Exception:
+            psi, dim, seeds, sizes = g.encode_superpose_bytes(data, 4096, seed_base)  # type: ignore[attr-defined]
         psi_arr = _np.asarray(psi, dtype=_np.float32)
         # ECC parity per original chunk (Wave ECC)
         # Map header fields as follows for compatibility:
@@ -600,7 +737,24 @@ class Memory:
                 if pb:
                     f.write(pb)
             f.write(psi_arr.tobytes(order='C'))
+        # Register container and attach layered metadata to map for telemetry
         self._register_container(doc_id, filename, int(dim))
+        try:
+            # Attach layered metadata into container map (non-invasive)
+            mpath = self._container_map_path()
+            db = {}
+            if mpath.exists():
+                db = _json.loads(mpath.read_text(encoding='utf-8'))
+            ent = db.get(str(doc_id), {})
+            ent['layer_alpha_scales'] = list(map(float, alpha_scales)) if 'alpha_scales' in locals() else []
+            ent['chunk_layers'] = list(map(int, chunk_layers)) if 'chunk_layers' in locals() else []
+            ent['ecc'] = {"scheme": int(ecc_scheme), "k": int(ecc_k), "r": int(ecc_r)}
+            db[str(doc_id)] = ent
+            tmp = mpath.with_suffix('.tmp')
+            tmp.write_text(_json.dumps(db, indent=2), encoding='utf-8')
+            os.replace(tmp, mpath)
+        except Exception:
+            pass
         self._store_dimension_mapping(doc_id, int(dim))
         return doc_id
 
@@ -669,6 +823,13 @@ class Memory:
                 base = dict(self.backend.get_stats())  # type: ignore[attr-defined]
             except Exception:  # pylint: disable=broad-except
                 base = {}
+        # Include 7-layer telemetry if available
+        try:
+            if _cpp_loaded and hasattr(self.backend, "get_layer_stats"):
+                layers = self.backend.get_layer_stats()  # type: ignore[attr-defined]
+                base["layers"] = dict(layers) if isinstance(layers, dict) else layers
+        except Exception:
+            pass
         # Attach Wave ECC metrics and GPU availability info
         try:
             plats = []
@@ -683,6 +844,24 @@ class Memory:
                 },
                 "wave_ecc_metrics": __wave_metrics.snapshot(),
             })
+        except Exception:
+            pass
+        # Aggregate per-layer chunk counts from container map (observability)
+        try:
+            mpath = self._container_map_path()
+            if mpath.exists():
+                db = _json.loads(mpath.read_text(encoding='utf-8'))
+                counts = {str(i): 0 for i in range(7)}
+                for ent in db.values():
+                    cl = ent.get('chunk_layers') or []
+                    for v in cl:
+                        k = str(int(v) % 7)
+                        counts[k] = counts.get(k, 0) + 1
+                base.setdefault('layers', {})
+                if isinstance(base['layers'], dict):
+                    base['layers']['chunk_counts'] = counts
+                else:
+                    base['layers'] = {"chunk_counts": counts}
         except Exception:
             pass
         return base
