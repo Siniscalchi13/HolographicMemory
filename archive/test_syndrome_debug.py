@@ -43,3 +43,4 @@ decoded3, counts3 = hg.gpu_rs_decode(corrupted3, parity3, k, r)
 print(f"Corrupted: {corrupted3.hex()}")
 print(f"Decoded: {decoded3[:1].hex()}")
 print(f"Correction count: {list(counts3)}")
+# Archived: legacy RS(255,223) syndrome test retained for reference only.

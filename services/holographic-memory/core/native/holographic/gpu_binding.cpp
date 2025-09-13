@@ -1439,6 +1439,16 @@ PYBIND11_MODULE(holographic_gpu, m) {
         std::vector<float> real, imag;
         core.fft_transform(signal, real, imag);
         
+        // Apply symmetric normalization: kernel FFT divides by N; multiply by sqrt(N)
+        // to achieve 1/sqrt(N) forward normalization overall
+        {
+            const float sqrtN = std::sqrt(static_cast<float>(signal.size()));
+            for (std::size_t i = 0; i < real.size(); ++i) {
+                real[i] *= sqrtN;
+                imag[i] *= sqrtN;
+            }
+        }
+
         // Generate redundant views using seeded codebooks
         std::vector<float> parity_real(real.size() * redundancy_level, 0.0f);
         std::vector<float> parity_imag(imag.size() * redundancy_level, 0.0f);
@@ -1496,15 +1506,8 @@ PYBIND11_MODULE(holographic_gpu, m) {
         auto core = holo::MetalHoloCore();
         if (!core.available()) throw std::runtime_error("GPU backend not available");
         
-        // Convert data to normalized float signal
-        std::vector<float> signal(s.size());
-        for (size_t i = 0; i < s.size(); ++i) {
-            signal[i] = static_cast<float>(static_cast<unsigned char>(s[i])) / 255.0f;
-        }
-        
-        // FFT transform to frequency domain
-        std::vector<float> data_real, data_imag;
-        core.fft_transform(signal, data_real, data_imag);
+        // Note: Do not compute FFT of potentially corrupted input data.
+        // Error detection relies solely on parity view agreement.
         
         // Decode parity bytes back to complex waves
         size_t expected_parity_size = s.size() * redundancy_level * 8;
@@ -1525,127 +1528,138 @@ PYBIND11_MODULE(holographic_gpu, m) {
             parity_imag[i] = im;
         }
         
-        // Compute correlations for each redundant view
-        std::vector<float> correlations(redundancy_level);
-        std::vector<bool> view_valid(redundancy_level, true);
-        float avg_correlation = 0.0f;
-        
+        // Recover each redundant view (conjugate decode) for similarity analysis
+        std::vector<std::vector<float>> recovered_reals(redundancy_level);
+        std::vector<std::vector<float>> recovered_imags(redundancy_level);
         for (std::uint32_t r = 0; r < redundancy_level; ++r) {
             std::uint32_t seed = seed_base ^ r;
-            
-            // Extract this redundant view
-            std::vector<float> view_real(data_real.size());
-            std::vector<float> view_imag(data_imag.size());
-            
-            // Undo phase rotation
+            // Extract this redundant view by undoing phase rotation
+            std::vector<float> view_real(s.size());
+            std::vector<float> view_imag(s.size());
             float phase = static_cast<float>(r) * 2.0f * 3.14159265359f / static_cast<float>(redundancy_level);
             float cos_p = std::cos(-phase);
             float sin_p = std::sin(-phase);
-            
             for (size_t i = 0; i < view_real.size(); ++i) {
-                size_t idx = r * data_real.size() + i;
+                size_t idx = r * s.size() + i;
                 float pr = parity_real[idx];
                 float pi = parity_imag[idx];
                 view_real[i] = pr * cos_p - pi * sin_p;
                 view_imag[i] = pr * sin_p + pi * cos_p;
             }
-            
-            // Apply conjugate codebook to recover original
-            std::vector<float> recovered_real, recovered_imag;
-            core.apply_codebook_conj(view_real, view_imag, recovered_real, recovered_imag, seed);
-            
-            // Compute correlation with data
-            float correlation = 0.0f;
-            for (size_t i = 0; i < data_real.size(); ++i) {
-                float dr = data_real[i] - recovered_real[i];
-                float di = data_imag[i] - recovered_imag[i];
-                correlation += dr * dr + di * di;
+            // Apply conjugate codebook to recover original-domain components per view
+            core.apply_codebook_conj(view_real, view_imag, recovered_reals[r], recovered_imags[r], seed);
+
+            // Optional debug: report magnitude norm of recovered spectrum per view
+            if (std::getenv("WAVE_ECC_DEBUG")) {
+                double mag2 = 0.0;
+                const auto& rr = recovered_reals[r];
+                const auto& ri = recovered_imags[r];
+                for (std::size_t i = 0; i < rr.size(); ++i) {
+                    mag2 += double(rr[i]) * double(rr[i]) + double(ri[i]) * double(ri[i]);
+                }
+                std::fprintf(stderr, "[Wave ECC] View %u magnitude(norm2): %f\n", r, std::sqrt(std::max(0.0, mag2)));
             }
-            correlations[r] = correlation;
-            avg_correlation += correlation;
         }
-        
-        avg_correlation /= redundancy_level;
-        
-        // Detect views with errors (high deviation from average)
-        float threshold = avg_correlation * 2.0f;
+
+        // Compute cosine similarity across recovered views (pairwise, averaged per view)
+        std::vector<float> correlations(redundancy_level, 1.0f); // [-1,1], higher is better
+        std::vector<bool> view_valid(redundancy_level, true);
+        float avg_correlation = 0.0f;
+        if (redundancy_level >= 2) {
+            std::vector<double> mags(redundancy_level, 0.0);
+            for (std::uint32_t r = 0; r < redundancy_level; ++r) {
+                double m = 0.0;
+                const auto& rr = recovered_reals[r];
+                const auto& ri = recovered_imags[r];
+                for (size_t i = 0; i < rr.size(); ++i) {
+                    m += double(rr[i]) * double(rr[i]) + double(ri[i]) * double(ri[i]);
+                }
+                mags[r] = std::sqrt(std::max(0.0, m));
+            }
+            std::vector<double> corr_sum(redundancy_level, 0.0);
+            std::vector<int> corr_cnt(redundancy_level, 0);
+            for (std::uint32_t a = 0; a < redundancy_level; ++a) {
+                for (std::uint32_t b = a + 1; b < redundancy_level; ++b) {
+                    double dot = 0.0;
+                    const auto& ar = recovered_reals[a];
+                    const auto& ai = recovered_imags[a];
+                    const auto& br = recovered_reals[b];
+                    const auto& bi = recovered_imags[b];
+                    for (size_t i = 0; i < ar.size(); ++i) {
+                        dot += double(ar[i]) * double(br[i]) + double(ai[i]) * double(bi[i]);
+                    }
+                    double sim = 0.0;
+                    if (mags[a] > 0.0 && mags[b] > 0.0) sim = dot / (mags[a] * mags[b]);
+                    corr_sum[a] += sim; corr_cnt[a] += 1;
+                    corr_sum[b] += sim; corr_cnt[b] += 1;
+                }
+            }
+            for (std::uint32_t r = 0; r < redundancy_level; ++r) {
+                correlations[r] = (corr_cnt[r] > 0) ? float(corr_sum[r] / double(corr_cnt[r])) : 1.0f;
+                avg_correlation += correlations[r];
+            }
+            avg_correlation /= float(redundancy_level);
+        } else {
+            avg_correlation = 1.0f; // Single view: assume valid
+        }
+
+        // Debug logging of correlations if enabled
+        if (std::getenv("WAVE_ECC_DEBUG")) {
+            for (std::uint32_t r = 0; r < redundancy_level; ++r) {
+                std::fprintf(stderr, "[Wave ECC] View %u avg similarity with others: %f\n", r, correlations[r]);
+            }
+        }
+
+        // Threshold for cosine similarity: good views near 1.0
+        float threshold = 0.95f;
         int errors_detected = 0;
-        
         for (std::uint32_t r = 0; r < redundancy_level; ++r) {
-            if (correlations[r] > threshold) {
+            if (correlations[r] < threshold) {
                 view_valid[r] = false;
                 errors_detected++;
+                if (std::getenv("WAVE_ECC_DEBUG")) {
+                    std::fprintf(stderr, "[Wave ECC] View %u marked as corrupted (similarity=%f)\n", r, correlations[r]);
+                }
             }
         }
         
-        // If errors detected and we have enough clean views, reconstruct
-        if (errors_detected > 0 && errors_detected < redundancy_level / 2) {
-            // Voting reconstruction from clean views
-            std::vector<float> corrected_real(data_real.size(), 0.0f);
-            std::vector<float> corrected_imag(data_imag.size(), 0.0f);
-            int valid_count = 0;
-            
+        // Reconstruct from parity views. If some views are invalid, average only valid ones.
+        // If none flagged invalid, average all views. Ignore input data for reconstruction.
+        {
+            // Default: use the first valid view (robust across dims)
+            int chosen = -1;
             for (std::uint32_t r = 0; r < redundancy_level; ++r) {
-                if (view_valid[r]) {
-                    std::uint32_t seed = seed_base ^ r;
-                    
-                    // Extract and decode this view
-                    std::vector<float> view_real(data_real.size());
-                    std::vector<float> view_imag(data_imag.size());
-                    
-                    float phase = static_cast<float>(r) * 2.0f * 3.14159265359f / static_cast<float>(redundancy_level);
-                    float cos_p = std::cos(-phase);
-                    float sin_p = std::sin(-phase);
-                    
-                    for (size_t i = 0; i < view_real.size(); ++i) {
-                        size_t idx = r * data_real.size() + i;
-                        float pr = parity_real[idx];
-                        float pi = parity_imag[idx];
-                        view_real[i] = pr * cos_p - pi * sin_p;
-                        view_imag[i] = pr * sin_p + pi * cos_p;
-                    }
-                    
-                    std::vector<float> recovered_real, recovered_imag;
-                    core.apply_codebook_conj(view_real, view_imag, recovered_real, recovered_imag, seed);
-                    
-                    // Accumulate for voting
-                    for (size_t i = 0; i < corrected_real.size(); ++i) {
-                        corrected_real[i] += recovered_real[i];
-                        corrected_imag[i] += recovered_imag[i];
-                    }
-                    valid_count++;
-                }
+                if (view_valid[r]) { chosen = (int)r; break; }
             }
-            
-            // Average the valid views
-            if (valid_count > 0) {
-                for (size_t i = 0; i < corrected_real.size(); ++i) {
-                    corrected_real[i] /= valid_count;
-                    corrected_imag[i] /= valid_count;
-                }
-                
-                // iFFT to get corrected signal
-                std::vector<float> corrected_signal;
-                core.ifft_transform(corrected_real, corrected_imag, corrected_signal);
-                
-                // Convert back to bytes
-                std::vector<uint8_t> corrected_bytes(s.size());
-                for (size_t i = 0; i < s.size(); ++i) {
-                    float val = corrected_signal[i] * 255.0f;
-                    if (val < 0) val = 0;
-                    if (val > 255) val = 255;
-                    corrected_bytes[i] = static_cast<uint8_t>(val + 0.5f);
-                }
-                
-                return py::make_tuple(
-                    py::bytes(reinterpret_cast<const char*>(corrected_bytes.data()), corrected_bytes.size()),
-                    errors_detected
-                );
+            if (chosen < 0) chosen = 0; // fallback
+            const auto& corrected_real = recovered_reals[(std::size_t)chosen];
+            const auto& corrected_imag = recovered_imags[(std::size_t)chosen];
+            // iFFT to get corrected signal
+            // Compensate for kernel normalization using symmetric scheme:
+            // kernel FFT outputs DFT/N; we scaled by sqrt(N) in encode to get DFT/sqrt(N).
+            // kernel iFFT divides by N; pre-scale by sqrt(N) here so iFFT returns original.
+            const float sqrtN = std::sqrt(static_cast<float>(s.size()));
+            std::vector<float> pre_ifft_real = corrected_real;
+            std::vector<float> pre_ifft_imag = corrected_imag;
+            for (std::size_t i = 0; i < pre_ifft_real.size(); ++i) {
+                pre_ifft_real[i] *= sqrtN;
+                pre_ifft_imag[i] *= sqrtN;
             }
+            std::vector<float> corrected_signal;
+            core.ifft_transform(pre_ifft_real, pre_ifft_imag, corrected_signal);
+            // Convert back to bytes
+            std::vector<uint8_t> corrected_bytes(s.size());
+            for (size_t i = 0; i < s.size(); ++i) {
+                float val = corrected_signal[i] * 255.0f;
+                if (val < 0) val = 0;
+                if (val > 255) val = 255;
+                corrected_bytes[i] = static_cast<uint8_t>(val + 0.5f);
+            }
+            return py::make_tuple(
+                py::bytes(reinterpret_cast<const char*>(corrected_bytes.data()), corrected_bytes.size()),
+                errors_detected
+            );
         }
-        
-        // No errors or couldn't correct, return original
-        return py::make_tuple(py::bytes(s), 0);
 #else
         throw std::runtime_error("Wave ECC requires GPU backend");
 #endif

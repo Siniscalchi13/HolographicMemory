@@ -64,3 +64,4 @@ data5[k + 10] ^= 0xFF
 decoded5, counts5 = hg.gpu_rs_decode(bytes(data5), parity5, k, r)
 print(f"Data matches: {decoded5[:size5] == bytes(range(size5 % 256) for _ in range(size5))}")
 print(f"Correction counts: {list(counts5)}")
+# Archived: legacy RS(255,223) simple test retained for reference only.

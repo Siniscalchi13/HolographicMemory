@@ -98,3 +98,4 @@ if __name__ == "__main__":
     else:
         print("TEST FAILED ❌")
         sys.exit(1)
+# Archived: legacy RS(255,223) tail-block test retained for reference only.

@@ -56,3 +56,4 @@ if tail_decoded[:57] == bytes(range(57)):
     print("✅ SUCCESS: Tail error corrected!")
 else:
     print("❌ FAILURE: Tail error not corrected")
+# Archived: legacy RS(255,223) debug test retained for reference only.

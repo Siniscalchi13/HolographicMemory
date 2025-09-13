@@ -20,16 +20,13 @@ SNR and Capacity
 - SNR_k ≈ sqrt(D_k / N_k); D_k* = M · (α_k² / N_k) / Σ_j (α_j² / N_j)
   - Host-side 7-layer state and calculations: `services/holographic-memory/core/native/holographic/gpu_binding.cpp:236`
 
-ECC RS(255,223)
-- Encode parity (GPU kernel):
-  - `services/holographic-memory/core/native/holographic/metal/holographic_memory.metal:144`
-  - Host driver: `services/holographic-memory/core/native/holographic/metal/MetalBackend.mm:560`
-  - Python binding: `services/holographic-memory/core/native/holographic/gpu_binding.cpp:852`
-- Decode/correct (BM/Chien/Forney, host-side):
-  - `services/holographic-memory/core/native/holographic/metal/MetalBackend.mm:694`
-  - Python binding: `services/holographic-memory/core/native/holographic/gpu_binding.cpp:867`
+Wave ECC (redundancy-based)
+- Encode parity views (FFT/codebook/iFFT per view):
+  - Python binding: `services/holographic-memory/core/native/holographic/gpu_binding.cpp:1422` (wave_ecc_encode)
+- Decode/verify (conj correlation, similarity screening, parity recheck):
+  - Python binding: `services/holographic-memory/core/native/holographic/gpu_binding.cpp:1497` (wave_ecc_decode)
 - Recall integration and ECC application per chunk:
-  - `services/holographic-memory/core/holographicfs/memory.py:504`
+  - `services/holographic-memory/core/holographicfs/memory.py:549`
 
 Containers and Compression
 - HGMC2/HGMC3 write/read + ECC metadata and parity blobs:

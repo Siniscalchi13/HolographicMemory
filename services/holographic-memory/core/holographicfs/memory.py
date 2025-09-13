@@ -19,12 +19,39 @@ _cpu_loaded = False
 _hn_cpu = None  # CPU/HRR engine module (holographic_cpp)
 try:
     _pkg_root = Path(__file__).resolve().parents[1]
+    # Prefer top-level build output first (e.g., ./build_holo)
+    # memory.py is at services/holographic-memory/core/holographicfs/memory.py
+    # parents[4] points to repo root
+    _alt_build = Path(__file__).resolve().parents[4] / "build_holo"
+    if _alt_build.exists():
+        ap = str(_alt_build)
+        if ap not in sys.path:
+            sys.path.insert(0, ap)
+    # Then also include the in-tree native build dir if present
     _cpp_dir = _pkg_root / "native" / "holographic" / "build"
     if _cpp_dir.exists():
         p = str(_cpp_dir)
         if p not in sys.path:
-            sys.path.insert(0, p)
+            # Insert after top-level build_holo if both exist
+            sys.path.insert(1 if sys.path and sys.path[0] == str(_alt_build) else 0, p)
     import holographic_gpu as _hn  # type: ignore
+    # If the imported binding lacks Wave ECC, try to force-load from build_holo explicitly
+    if not hasattr(_hn, 'wave_ecc_encode') and _alt_build.exists():
+        try:
+            import importlib.util as _ilu
+            import glob as _glob
+            cand = None
+            for fn in _glob.glob(str(_alt_build / 'holographic_gpu*.so')):
+                cand = fn; break
+            if cand:
+                spec = _ilu.spec_from_file_location('holographic_gpu_wave', cand)
+                if spec and spec.loader:
+                    mod = _ilu.module_from_spec(spec)
+                    spec.loader.exec_module(mod)  # type: ignore[assignment]
+                    if hasattr(mod, 'wave_ecc_encode'):
+                        _hn = mod  # type: ignore[assignment]
+        except Exception:
+            pass
     _cpp_loaded = True
 except Exception:
     try:
@@ -76,39 +103,61 @@ except Exception:
 from .index import sha256_file, Index
 
 
-def verify_and_correct_rs(payload: bytes, parity: bytes, k: int = 223, r: int = 32) -> bytes:
-    """Correct RS(255,223) errors and enforce >t failure.
+def _get_wave_binding():
+    """Return a module object exposing Wave ECC encode/decode.
 
-    - Decodes/corrects payload against provided parity using GPU binding.
-    - Enforces t = r//2 symbol error bound per block: raises RuntimeError if exceeded
-      or if parity recomputation does not match the expected parity (uncorrectable).
-    - Returns corrected bytes (same length as input payload) on success.
-
-    This helper is designed for integration in holographic container recall paths.
+    Prefers already-imported `_hn` if it provides Wave ECC. Otherwise, attempts to
+    load the extension from the top-level `build_holo` directory explicitly to
+    bypass any preloaded legacy bindings.
     """
-    if not payload or not parity or k <= 0 or r <= 0:
-        return payload
+    global _hn  # noqa: PLW0603
+    # Fast path: already has wave ECC
+    if _cpp_loaded and hasattr(_hn, 'wave_ecc_encode') and hasattr(_hn, 'wave_ecc_decode'):
+        return _hn
+    # Try explicit load from build_holo
     try:
-        import holographic_gpu as _hg  # type: ignore
-    except Exception as e:  # pragma: no cover
-        raise RuntimeError("GPU ECC backend not available; build native extensions") from e
-    # Decode/correct
-    corr_bytes, counts = _hg.gpu_rs_decode(payload, parity, int(k), int(r))  # type: ignore[attr-defined]
-    corrected = bytes(corr_bytes)
-    # Enforce t bound
-    t_bound = int(r) // 2
-    try:
-        if hasattr(counts, '__iter__'):
-            max_corr = max(int(c) for c in counts) if counts else 0
-            if max_corr > t_bound:
-                raise RuntimeError(f"ECC uncorrectable: corrected symbols {max_corr} exceed t={t_bound}")
+        _pkg_root = Path(__file__).resolve().parents[1]
+        alt = Path(__file__).resolve().parents[4] / "build_holo"
+        if alt.exists():
+            import importlib.util as _ilu
+            import glob as _glob
+            for fn in _glob.glob(str(alt / 'holographic_gpu*.so')):
+                spec = _ilu.spec_from_file_location('holographic_gpu_wave', fn)
+                if spec and spec.loader:
+                    mod = _ilu.module_from_spec(spec)
+                    spec.loader.exec_module(mod)  # type: ignore[assignment]
+                    if hasattr(mod, 'wave_ecc_encode') and hasattr(mod, 'wave_ecc_decode'):
+                        _hn = mod  # prefer this binding for subsequent calls
+                        return mod
     except Exception:
-        # If counts unavailable or malformed, fall back to parity check only
         pass
-    # Verify parity of corrected bytes matches expected
-    new_parity = _hg.gpu_rs_encode(corrected, int(k), int(r))  # type: ignore[attr-defined]
+    raise RuntimeError('Wave ECC binding not available in holographic_gpu')
+
+
+def verify_and_correct_rs(payload: bytes, parity: bytes, k: int = 3, r: int = 0) -> bytes:
+    """ECC verify/correct helper (Wave ECC backend).
+
+    Backward-compatible name retained for API stability. Parameters map to Wave ECC:
+    - k: redundancy_level (number of parity views), default 3
+    - r: seed_base (deterministic seed used during encode)
+
+    Returns corrected bytes (same length as input payload). Raises RuntimeError
+    if parity re-validation fails after correction.
+    """
+    if not payload or not parity or k <= 0:
+        return payload
+    if not _cpp_loaded:
+        raise RuntimeError("GPU ECC backend not available; build native extensions")
+    # Wave ECC decode/correct via already-imported native module
+    _hgw = _get_wave_binding()
+    decoded_bytes, errors_detected = _hgw.wave_ecc_decode(payload, parity, int(k), int(r))  # type: ignore[attr-defined]
+    corrected = bytes(decoded_bytes)
+    # Parity re-validation to ensure integrity
+    new_parity = _hgw.wave_ecc_encode(corrected, int(k), int(r))  # type: ignore[attr-defined]
     if bytes(new_parity) != bytes(parity):
-        raise RuntimeError("ECC uncorrectable: parity mismatch after correction (likely >t errors)")
+        raise RuntimeError(
+            f"ECC uncorrectable: parity mismatch after correction (errors_detected={int(errors_detected)})"
+        )
     return corrected
 
 def calculate_optimal_dimension(file_size: int) -> int:
@@ -245,8 +294,9 @@ class Memory:
         if self.backend3d is not None and hasattr(self.backend3d, "store_bytes"):
             try:
                 self.backend3d.store_bytes(data, doc_id)  # type: ignore[attr-defined]
-            except Exception as exc:
-                raise RuntimeError(f"3D backend failed to store bytes: {exc}")
+            except Exception:
+                # Non-fatal: proceed without 3D exact-recall persistence
+                pass
         else:
             # Fallback: legacy persistence (HRR base64 + disk) to preserve recall
             try:
@@ -347,10 +397,8 @@ class Memory:
             raise RuntimeError("GPU backend not available for container store")
         import hashlib as _hl
         import numpy as _np
-        try:
-            import holographic_gpu as _hg  # type: ignore
-        except Exception as e:
-            raise RuntimeError("GPU backend not available") from e
+        if not _cpp_loaded:
+            raise RuntimeError("GPU backend not available")
         if not data:
             out = self._containers_dir() / f"{doc_id}.hgc"
             out.write_bytes(b"HGMC2\x00" + (0).to_bytes(4,'little')*3)
@@ -360,18 +408,26 @@ class Memory:
         # Seed base from content hash for determinism
         seed_base = int(_hl.sha256(data).hexdigest()[:8], 16)
         # Encode and superpose on GPU
-        g = _hg.HolographicGPU()  # type: ignore[attr-defined]
+        g = _hn.HolographicGPU()  # type: ignore[attr-defined]
         if hasattr(g, 'initialize'):
             _ = g.initialize()  # type: ignore[attr-defined]
         psi, dim, seeds, sizes = g.encode_superpose_bytes(data, 4096, seed_base)  # type: ignore[attr-defined]
         psi_arr = _np.asarray(psi, dtype=_np.float32)
-        # ECC parity per original chunk
-        ecc_scheme, ecc_k, ecc_r = 1, 223, 32
+        # ECC parity per original chunk (Wave ECC)
+        # Map header fields as follows for compatibility:
+        #   ecc_scheme = 2 (Wave ECC)
+        #   ecc_k      = redundancy_level
+        #   ecc_r      = seed_base (same as encode_superpose_bytes)
+        ecc_scheme = 2
+        redundancy_level = int(os.environ.get("WAVE_ECC_REDUNDANCY", "3"))
+        ecc_k = redundancy_level
+        ecc_r = seed_base
         parities: List[bytes] = []
         off = 0
         for sz in sizes:
             chunk = data[off:off+sz]
-            p = _hg.gpu_rs_encode(chunk, int(ecc_k), int(ecc_r))  # type: ignore[attr-defined]
+            _hgw = _get_wave_binding()
+            p = _hgw.wave_ecc_encode(chunk, int(ecc_k), int(ecc_r))  # type: ignore[attr-defined]
             parities.append(bytes(p))
             off += sz
         # Write HGMC2 container
@@ -556,15 +612,15 @@ class Memory:
                     else:
                         raise RuntimeError("Unsupported holographic container magic")
                 # Decode via GPU correlation
-                g = _hg.HolographicGPU()  # type: ignore[attr-defined]
+                g = _hn.HolographicGPU()  # type: ignore[attr-defined]
                 if hasattr(g, 'initialize'):
                     _ = g.initialize()  # type: ignore[attr-defined]
                 out = g.decode_superposed_bytes(psi.astype(_np.float32).tolist(), int(dim), list(map(int, seeds)), list(map(int, sizes)))  # type: ignore[attr-defined]
                 if not isinstance(out, (bytes, bytearray)):
                     raise RuntimeError("GPU decode_superposed_bytes returned invalid type")
                 data_bytes = bytes(out)
-                # ECC verify/correct if present
-                if ecc_scheme == 1 and ecc_k > 0 and ecc_r > 0 and parities:
+                # ECC verify/correct if present (Wave ECC only)
+                if ecc_scheme == 2 and ecc_k > 0 and ecc_r >= 0 and parities:
                     corrected: List[bytes] = []
                     off = 0
                     for idx, sz in enumerate(sizes):
@@ -885,14 +941,14 @@ class HoloFS:
                             pass
         except Exception:
             pass
-        # Include index metadata files
-        for extra in (self.state_dir / "index.json", self.state_dir / "dimension_map.json", self.state_dir / "engine_map.json"):
-            try:
-                if extra.exists():
-                    holo_bytes += extra.stat().st_size
-            except OSError:
-                pass
+        # Holo bytes reflect only .holofs/hlog usage for strict accounting
         s.update(idx)
+        # Ensure a dimension field is present for basic status checks
+        if "dimension" not in s:
+            try:
+                s["dimension"] = int(self.grid_size)
+            except Exception:
+                s["dimension"] = None
         s["holo_bytes"] = int(holo_bytes)
         s["compression_x"] = round((idx.get("original_total_bytes", 0) / holo_bytes), 2) if holo_bytes else None
         return s

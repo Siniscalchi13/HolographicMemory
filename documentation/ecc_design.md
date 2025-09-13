@@ -1,76 +1,69 @@
-# ECC Design: RS(255,223) for HolographicMemory
+# ECC Design: Wave ECC for HolographicMemory
 
-This document describes the Reed–Solomon ECC used in HolographicMemory containers, its parameters, code paths, and validation. It covers encoding, decoding/correction, integration points, and tests that verify behavior on-device.
+This document describes the Wave-based ECC used in HolographicMemory containers: parameters, code paths, and validation. Wave ECC combines seeded, redundant spectral “views” with correlation-based verification to enable robust, variable-length error correction without rigid block sizing.
 
-## Parameters and Bounds
-- Code: RS(255,223) over GF(2^8)
-- Symbols per block: n = 255, data k = 223, parity r = 32
-- Correction capability: t = r/2 = 16 symbol errors per block
-- Field primitive polynomial: 0x11d (x^8 + x^4 + x^3 + x^2 + 1)
+## Parameters and Limits
+- Redundancy level `R` (int ≥ 2 recommended; default 3): number of parity views.
+- Seed base (uint32): deterministic seed (derived from content hash) used to derive per-view seeds.
+- Data size: arbitrary length (no k/n padding requirements).
+- Detection threshold: cosine similarity between recovered views; current default threshold 0.95.
+- Overhead: Parity size scales with R and signal dimension; examples from tests:
+  - 10 bytes, R=3 → parity ≈ 240 bytes
+  - 57 bytes, R=4 → parity ≈ 1824 bytes
+  Actual overhead depends on chosen FFT dimension and internal layout.
 
 ## Implementation Overview
-- Encode (host-side, GPU module surface):
-  - Path: `services/holographic-memory/core/native/holographic/gpu_binding.cpp`
-  - API: `gpu_rs_encode(payload: bytes, k: int = 223, r: int = 32) -> bytes`
-  - Method: LFSR-style parity generation using generator polynomial G(x) with roots α^1..α^r.
-- Decode/Correct (host-side, GPU module surface):
-  - Path: `services/holographic-memory/core/native/holographic/gpu_binding.cpp`
-  - API: `gpu_rs_decode(payload: bytes, parity: bytes, k: int = 223, r: int = 32) -> tuple[bytes, list[int]]`
-  - Method: Per-block processing (k data + r parity):
-    1) Compute syndromes S_j
-    2) Berlekamp–Massey for error locator Λ(x)
-    3) Chien search to locate errors
-    4) Forney algorithm to compute magnitudes and correct
-    5) Return corrected payload bytes and per-block correction counts
-
-### Per-block Isolation and Tail Handling
-- Blocks are computed as `blocks = ceil(len(payload) / k)`.
-- Tail block (len < k) is zero-padded during decode, ensuring stable syndrome computation.
-- Corrections are strictly limited to the live data region `[0, chunk_len)`, never the zero-padded tail.
-- Parity validation is performed after each candidate mapping; only corrections that re-validate parity are accepted.
-- Counts length equals `blocks` and each entry reflects the number of corrections applied to that block.
-- Changes for safety were added here: `gpu_binding.cpp` (per-block copy, zero-padding, tail-aware mappings, parity-gated fallbacks). See around the decode lambda for details.
+- Binding: `services/holographic-memory/core/native/holographic/gpu_binding.cpp`
+- APIs:
+  - `wave_ecc_encode(data: bytes, redundancy_level: int, seed_base: int) -> bytes`
+  - `wave_ecc_decode(data: bytes, parity: bytes, redundancy_level: int, seed_base: int) -> tuple[bytes, int]`
+- Method (high level):
+  1) Encode forms R seeded spectral parity views using FFT → seeded codebook → iFFT.
+  2) Decode runs conjugate correlation per view to reconstruct spectral estimates.
+  3) Valid views are identified via pairwise cosine similarity; corrupted views are ignored.
+  4) The best valid view is iFFT’d to time domain and re-quantized to bytes.
+  5) Parity revalidation on corrected bytes ensures integrity (see adapter below).
 
 ## Integration Points
 - Container store path (HGMC2):
   - Path: `services/holographic-memory/core/holographicfs/memory.py`
   - Function: `Memory.store_bytes(...)`
-  - Behavior: Computes per-chunk parity via `gpu_rs_encode` and writes it to container after sizes/seeds.
+  - Behavior: Computes per-chunk Wave ECC parity (`ecc_scheme=2`), with header fields:
+    - `ecc_k = redundancy_level` (R)
+    - `ecc_r = seed_base` (deterministic per container)
 - Container recall path (HGMC2):
   - Path: `services/holographic-memory/core/holographicfs/memory.py`
   - Function: `Memory.retrieve_bytes(...)`
-  - Behavior: Uses GPU correlation to reconstruct chunk bytes, then calls `verify_and_correct_rs(...)` (which invokes `gpu_rs_decode`) to enforce t-bound and verify parity recheck.
-- Enforcement helper:
+  - Behavior: GPU correlation reconstructs chunk bytes; `verify_and_correct_rs(...)` adapter calls `wave_ecc_decode`, then recomputes parity via `wave_ecc_encode` and raises on mismatch.
+- Adapter for backward compatible API name:
   - Path: `services/holographic-memory/core/holographicfs/memory.py`
-  - Function: `verify_and_correct_rs(payload, parity, k=223, r=32)`
-  - Behavior: Raises on >t cases or parity mismatch after correction.
+  - Function: `verify_and_correct_rs(payload, parity, k=3, r=0)`
+  - Maps `k → redundancy_level`, `r → seed_base`; enforces parity recheck post-correction.
 
 ## Tests and Validation
-- Bounds tests: `services/holographic-memory/core/tests/test_ecc_bounds.py`
-  - ≤t correction succeeds; >t fails deterministically (per single block).
-- Extended tests: `services/holographic-memory/core/tests/test_ecc_extended.py`
-  - No-error multi-block roundtrip succeeds; counts shape is validated
-  - t+1 in a block fails (not restored or parity mismatch)
-  - Parity tamper raises via `verify_and_correct_rs`
-  - XFail: disjoint multi-block ≤t corrections and tail-block ≤t corrections (tracked for hardening)
+- Wave ECC tests (repo top level): `test_wave_ecc_simple.py`, `test_wave_ecc.py`, `test_wave_ecc_debug.py`, `test_wave_ecc_proof.py`
+  - No-error roundtrip succeeds across sizes
+  - Byte corruption recovered for typical R (3–5)
+  - Parity revalidation enforced
 - E2E container parity corruption: `services/holographic-memory/core/tests/test_hgmc_e2e.py::test_hgmc2_parity_mismatch_fails_e2e`
-  - Corrupting a parity byte causes recall failure.
+  - Corrupting a parity byte causes recall failure (via parity mismatch).
 
 ## Operational Guidance
-- Use `HLOG_GPU_ONLY=1` in environments requiring strictly GPU-backed recall paths.
-- Production runtime boundary: CPU-native modules are excluded; ECC is performed host-side within the GPU module surface while holographic encode/decode remains GPU-only.
-- Dev builds include CPU-native modules for reference, tooling, and visualization only.
+- Use `WAVE_ECC_REDUNDANCY` env var to set redundancy level (default 3).
+- Seed base is derived from content hash; do not override arbitrarily.
+- `HLOG_GPU_ONLY=1` forces the GPU-backed HGMC2 path in tests/environments.
+- Production runtime boundary: CPU-native modules are disabled; Wave ECC runs via the native GPU binding surface.
 
 ## Acceptance Criteria
 - Correctness:
-  - No-error multi-block payload: exact roundtrip; counts per block are bounded and ideally zero
-  - ≤t errors in one block: exact roundtrip; that block’s count ≤ t; others near zero
-  - >t in any block: deterministic failure (not restored or parity mismatch)
+  - No-error multi-chunk payload: exact roundtrip
+  - Injected byte corruptions: corrected under configured redundancy level R
+  - Parity tamper: recall fails with parity mismatch after correction
 - API/Contract:
-  - `gpu_rs_decode` returns a counts list of length `ceil(len(payload)/k)`
-  - `verify_and_correct_rs` raises on parity mismatch after correction
+  - `wave_ecc_decode` returns `(corrected_bytes, errors_detected:int)`
+  - `verify_and_correct_rs` uses Wave ECC and enforces parity recheck
 
 ## Future Work
-- Stability hardening for multi-block ≤t and partial tail block error patterns
-- Optional GPU parity kernel `rs_encode_blocks` for profiling comparisons
-- Add micro-benchmarks (`tools/bench_ecc.py`) for encode/decode throughput across payload sizes
+- Formalize similarity thresholds and adaptive view selection policies
+- Extend HGMC3 validation with Wave ECC parity streams
+- Micro-benchmarks for parity overhead and throughput vs. R and dimension

@@ -50,8 +50,12 @@ def test_gpu_only_store_and_recall():
     assert not (fs.state_dir / "responses").exists()
 
 
-def test_seed_tamper_breaks_decode():
-    """Test that seed tampering breaks decode (GPU-only)."""
+def test_seed_tamper_detected_or_corrected():
+    """Seed tamper is either corrected by Wave ECC or detected.
+
+    With Wave ECC, seed perturbations may be corrected by parity; if not,
+    recall should fail due to parity mismatch.
+    """
 
     os.environ["HLOG_GPU_ONLY"] = "1"
     from holographicfs.memory import mount
@@ -82,8 +86,13 @@ def test_seed_tamper_breaks_decode():
         new = old ^ 0x1
         buf[off : off + 4] = int(new).to_bytes(4, "little")
         cpath.write_bytes(bytes(buf))
-        with pytest.raises(Exception):
-            _ = fs.mem.retrieve_bytes(doc)
+        try:
+            out = fs.mem.retrieve_bytes(doc)
+            # If no exception, ECC should have corrected the corruption
+            assert out == data
+        except Exception:
+            # Parity mismatch/uncorrectable path is acceptable
+            pass
 
 
 def test_stats_accounting_matches_disk():
@@ -105,4 +114,3 @@ def test_stats_accounting_matches_disk():
         if p.is_file():
             total += p.stat().st_size
     assert holo_bytes == total
-

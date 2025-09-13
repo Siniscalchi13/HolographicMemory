@@ -43,7 +43,15 @@ def test_hgmc2_parity_mismatch_fails_e2e():
     ecc_scheme = int.from_bytes(buf[off:off+4], "little"); off += 4
     ecc_k = int.from_bytes(buf[off:off+4], "little"); off += 4
     ecc_r = int.from_bytes(buf[off:off+4], "little"); off += 4
-    assert ecc_scheme == 1 and ecc_k == 223 and ecc_r == 32
+    # Accept Wave ECC (2) header semantics
+    if ecc_scheme == 1:
+        # Legacy RS header is no longer produced by active code
+        assert False, "legacy RS scheme detected unexpectedly"
+    elif ecc_scheme == 2:
+        # Wave ECC: ecc_k=redundancy_level (>0), ecc_r=seed_base (>=0)
+        assert ecc_k > 0 and ecc_r >= 0
+    else:
+        raise AssertionError(f"Unsupported ECC scheme: {ecc_scheme}")
     # Corrupt first parity blob if present
     if n > 0:
         plen = int.from_bytes(buf[off:off+4], "little")
