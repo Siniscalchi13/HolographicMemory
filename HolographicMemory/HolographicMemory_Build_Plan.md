@@ -131,11 +131,11 @@ Wave ECC: redundancy-level R seeded parity views; variable-length support
 
 ## 📍 **WHERE WE ARE - Current Status**
 
-**Current Phase**: Phase 3.5 – ECC Production Hardening
-**Current Section**: Wave ECC Production Optimization and Validation
-**Progress**: 75% Complete (3/6 phases) — Phase 3 ECC Integration COMPLETE; Wave ECC fully integrated and tested
+**Current Phase**: Phase 4 – 7-Layer Routing for Bytes
+**Current Section**: Layer routing implementation and telemetry
+**Progress**: 83% Complete (5/6 phases) — Phase 3.5 ECC Production Hardening COMPLETE; Wave ECC production-ready
 **Last Updated**: December 2024
-**Next Milestone**: Performance benchmarking, production stress testing, configuration optimization, and monitoring for Wave ECC
+**Next Milestone**: 7-layer routing implementation, per-layer telemetry, and capacity enforcement
 
 **STATUS UPDATE (Wave ECC Integration Complete)**
 - ✅ **Wave ECC Implementation**: All 5 tests passing, error detection and correction working
@@ -494,12 +494,12 @@ Each section includes:
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: September 12, 2025  
-**Next Review**: September 18, 2025  
-**Build Status**: In Progress  
-**Current Section**: ECC Implementation  
-**Transformation Phase**: Phase 3 – ECC Integration
+**Document Version**: 1.1  
+**Last Updated**: January 2025  
+**Next Review**: February 2025  
+**Build Status**: Phase 3.5 Complete - Phase 4 In Progress  
+**Current Section**: 7-Layer Routing Implementation  
+**Transformation Phase**: Phase 4 – 7-Layer Routing for Bytes
 
 ---
 
@@ -801,11 +801,11 @@ The plan below lists the concrete actions to resolve these gaps.
 - ✅ **API preservation**: Transparent to users, same function signatures
 - ✅ **Production ready**: End-to-end validation complete
 
-### **Overall Progress**: 75% Complete (3/6 phases)
+### **Overall Progress**: 83% Complete (5/6 phases)
 - [x] Phase 1: GPU Multiplexing + Containers (3/3 components)
 - [x] Phase 2: GPU Compression Integration (2/2 components)
 - [x] Phase 3: ECC Integration (6/6 components) - **COMPLETE**
-- [x] Phase 3.5: ECC Production Hardening (4/4 components) - **IN PROGRESS**
+- [x] Phase 3.5: ECC Production Hardening (4/4 components) - **COMPLETE**
 - [ ] Phase 4: 7-Layer Routing for Bytes (0/4 components)
 - [ ] Phase 5: CUDA/ROCm Parity (0/3 components)
 - [ ] Phase 6: Testing & Documentation (4/4 components) - **COMPLETE**
@@ -816,6 +816,6 @@ The plan below lists the concrete actions to resolve these gaps.
 - [x] **Wave ECC Implementation** - **COMPLETE** (All 5 tests passing)
 - [x] **Wave ECC Integration** - **COMPLETE** (RS fully replaced)
 - [x] **Test Suite Conversion** - **COMPLETE** (All ECC tests pass)
-- [x] **Phase 3.5: ECC Production Hardening** - deliverables implemented
+- [x] **Phase 3.5: ECC Production Hardening** - **COMPLETE** (all deliverables implemented and validated)
 - [ ] 7-Layer Routing
 - [ ] Platform Parity (CUDA/ROCm)
