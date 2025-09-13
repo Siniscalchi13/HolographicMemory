@@ -38,6 +38,26 @@ public:
                        std::vector<float>& real_out,
                        std::vector<float>& imag_out);
 
+    // Inverse transform and codebook helpers (wrappers over MetalBackend)
+    void ifft_transform(const std::vector<float>& real_in,
+                        const std::vector<float>& imag_in,
+                        std::vector<float>& time_out);
+
+    void apply_codebook(const std::vector<float>& in_real,
+                        const std::vector<float>& in_imag,
+                        std::vector<float>& out_real,
+                        std::vector<float>& out_imag,
+                        uint32_t seed);
+
+    void apply_codebook_conj(const std::vector<float>& in_real,
+                             const std::vector<float>& in_imag,
+                             std::vector<float>& out_real,
+                             std::vector<float>& out_imag,
+                             uint32_t seed);
+
+    void accumulate_add_time(std::vector<float>& dst,
+                             const std::vector<float>& add);
+
     std::vector<std::vector<float>> batch_encode(const std::vector<std::vector<float>>& batch_data,
                                                  uint32_t pattern_dim);
     std::vector<std::vector<float>> batch_encode_fft(const std::vector<std::vector<float>>& batch_data,

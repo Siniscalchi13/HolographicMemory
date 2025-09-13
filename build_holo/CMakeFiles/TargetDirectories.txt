@@ -1,0 +1,5 @@
+/Users/smarthaus/Projects/GitHub/HolographicMemory/build_holo/CMakeFiles/holographic_gpu.dir
+/Users/smarthaus/Projects/GitHub/HolographicMemory/build_holo/CMakeFiles/gpu_bench.dir
+/Users/smarthaus/Projects/GitHub/HolographicMemory/build_holo/CMakeFiles/holographic_cpp_3d.dir
+/Users/smarthaus/Projects/GitHub/HolographicMemory/build_holo/CMakeFiles/edit_cache.dir
+/Users/smarthaus/Projects/GitHub/HolographicMemory/build_holo/CMakeFiles/rebuild_cache.dir

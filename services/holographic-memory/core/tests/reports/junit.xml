@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="2.474" timestamp="2025-09-11T13:31:14.828429-04:00" hostname="Philips-Mac-Studio.local"><testcase classname="services.holographic-memory.core.tests.test_memory_basic" name="test_store_and_recall" time="0.118"><failure message="RuntimeError: C++ backend not available. Build the extensions (make native)">tests/test_memory_basic.py:11: in test_store_and_recall
+    fs = mount(root, grid_size=16)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+holographicfs/memory.py:684: in mount
+    return HoloFS(root=Path(path), grid_size=grid_size, state_dir=Path(state_dir) if state_dir else None)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+holographicfs/memory.py:610: in __init__
+    self.mem = Memory(self.state_dir, grid_size=self.grid_size)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+holographicfs/memory.py:140: in __init__
+    raise RuntimeError("C++ backend not available. Build the extensions (make native)")
+E   RuntimeError: C++ backend not available. Build the extensions (make native)</failure></testcase></testsuite></testsuites>

@@ -22,6 +22,37 @@ void MetalHoloCore::fft_transform(const std::vector<float>& input,
     metrics_.batch_time_ms = dt;
 }
 
+void MetalHoloCore::ifft_transform(const std::vector<float>& real_in,
+                                   const std::vector<float>& imag_in,
+                                   std::vector<float>& time_out) {
+    if (!available()) { time_out.clear(); return; }
+    backend_->ifft_transform(real_in, imag_in, time_out);
+}
+
+void MetalHoloCore::apply_codebook(const std::vector<float>& in_real,
+                                   const std::vector<float>& in_imag,
+                                   std::vector<float>& out_real,
+                                   std::vector<float>& out_imag,
+                                   uint32_t seed) {
+    if (!available()) { out_real.clear(); out_imag.clear(); return; }
+    backend_->apply_codebook(in_real, in_imag, out_real, out_imag, seed);
+}
+
+void MetalHoloCore::apply_codebook_conj(const std::vector<float>& in_real,
+                                        const std::vector<float>& in_imag,
+                                        std::vector<float>& out_real,
+                                        std::vector<float>& out_imag,
+                                        uint32_t seed) {
+    if (!available()) { out_real.clear(); out_imag.clear(); return; }
+    backend_->apply_codebook_conj(in_real, in_imag, out_real, out_imag, seed);
+}
+
+void MetalHoloCore::accumulate_add_time(std::vector<float>& dst,
+                                        const std::vector<float>& add) {
+    if (!available()) return;
+    backend_->accumulate_add_time(dst, add);
+}
+
 std::vector<std::vector<float>> MetalHoloCore::batch_encode(const std::vector<std::vector<float>>& batch_data,
                                                             uint32_t pattern_dim) {
     if (!available() || batch_data.empty()) return {};

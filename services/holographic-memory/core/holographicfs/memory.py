@@ -7,6 +7,11 @@ from typing import Optional, Dict, List, Tuple, Any
 import json as _json
 import time as _time
 
+# Build profile flags
+_HOLO_BUILD_PROFILE = os.environ.get("HOLO_BUILD_PROFILE", os.environ.get("HLOG_PROFILE", "dev")).strip().lower()
+_HLOG_NO_CPU = os.environ.get("HLOG_NO_CPU", "0").strip() in ("1", "true", "on")
+_DEV_MODE = (_HOLO_BUILD_PROFILE == "dev") and not _HLOG_NO_CPU
+
 # Prefer C++ backend (prefer local build over site-packages)
 _cpp_loaded = False
 _cpp3d_loaded = False
@@ -28,24 +33,27 @@ except Exception:
     except Exception:
         _cpp_loaded = False
 
-# Try to load CPU/HRR engine independently (prefer from build path)
-try:
-    # Ensure build dir is in path (already added above if exists)
-    import holographic_cpp as _hn_cpu  # type: ignore
-    _cpu_loaded = True
-except Exception:
+# Try to load CPU/HRR engine independently (prefer from build path) — DEV only
+if _DEV_MODE and not _HLOG_NO_CPU:
     try:
-        # Fallback to non-build path
-        _pkg_root = Path(__file__).resolve().parents[1]
-        _cpp_dir = _pkg_root / "native" / "holographic"
-        if _cpp_dir.exists():
-            p = str(_cpp_dir)
-            if p not in sys.path:
-                sys.path.insert(0, p)
+        # Ensure build dir is in path (already added above if exists)
         import holographic_cpp as _hn_cpu  # type: ignore
         _cpu_loaded = True
     except Exception:
-        _cpu_loaded = False
+        try:
+            # Fallback to non-build path
+            _pkg_root = Path(__file__).resolve().parents[1]
+            _cpp_dir = _pkg_root / "native" / "holographic"
+            if _cpp_dir.exists():
+                p = str(_cpp_dir)
+                if p not in sys.path:
+                    sys.path.insert(0, p)
+            import holographic_cpp as _hn_cpu  # type: ignore
+            _cpu_loaded = True
+        except Exception:
+            _cpu_loaded = False
+else:
+    _cpu_loaded = False
 
 # Optional 3D exact-recall backend
 try:
@@ -149,12 +157,12 @@ class Memory:
                 self.backend = None  # type: ignore[assignment]
 
         if not hasattr(self, 'backend') or self.backend is None:  # type: ignore[attr-defined]
-            if _cpu_loaded and _hn_cpu is not None and hasattr(_hn_cpu, 'HolographicMemory'):
+            if _DEV_MODE and _cpu_loaded and _hn_cpu is not None and hasattr(_hn_cpu, 'HolographicMemory'):
                 try:
                     self.backend = _hn_cpu.HolographicMemory(int(grid_size))  # type: ignore[name-defined, attr-defined]
                 except Exception as exc:
                     raise RuntimeError("CPU backend failed to initialize") from exc
-            elif _cpp_loaded and hasattr(_hn, 'HolographicMemory'):
+            elif _DEV_MODE and _cpp_loaded and hasattr(_hn, 'HolographicMemory'):
                 # Fallback to legacy CPU backend if present under holographic_gpu namespace
                 try:
                     self.backend = _hn.HolographicMemory(int(grid_size))  # type: ignore[name-defined, attr-defined]
@@ -293,6 +301,102 @@ class Memory:
         # No base64 HRR or disk copy when 3D backend is available — holographic-only
         return doc_id
 
+    # ----------------- GPU Container (HGMC2/HGMC3) helpers -----------------
+    def _containers_dir(self) -> Path:
+        p = self.state_dir / "hlog" / "containers"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    def _container_map_path(self) -> Path:
+        return self.state_dir / "hlog" / "container_map.json"
+
+    def _register_container(self, doc_id: str, filename: str, dim: int) -> None:
+        mpath = self._container_map_path()
+        db = {}
+        try:
+            if mpath.exists():
+                db = _json.loads(mpath.read_text(encoding='utf-8'))
+        except Exception:
+            db = {}
+        db[str(doc_id)] = {"filename": filename, "dimension": int(dim), "container": f"{doc_id}.hgc"}
+        tmp = mpath.with_suffix(".tmp")
+        tmp.write_text(_json.dumps(db, indent=2), encoding='utf-8')
+        os.replace(tmp, mpath)
+
+    def _gpu_available(self) -> bool:
+        try:
+            import holographic_gpu as _hg  # type: ignore
+            g = _hg.HolographicGPU()  # type: ignore[attr-defined]
+            plats = getattr(_hg, 'available_platforms', lambda: [])()  # type: ignore[attr-defined]
+            if not plats:
+                return False
+            if hasattr(g, 'initialize'):
+                return bool(g.initialize())  # type: ignore[attr-defined]
+            return True
+        except Exception:
+            return False
+
+    def store_bytes(self, data: bytes, doc_id: str, filename: str) -> str:
+        """GPU-only container store (HGMC2) with ECC parity.
+
+        Requires `holographic_gpu` to be available. Creates `.holofs/hlog/containers/{doc_id}.hgc`.
+        """
+        # Honor GPU-only override
+        gpu_only = os.environ.get("HLOG_GPU_ONLY", "0") == "1"
+        if not (gpu_only or self._gpu_available()):
+            raise RuntimeError("GPU backend not available for container store")
+        import hashlib as _hl
+        import numpy as _np
+        try:
+            import holographic_gpu as _hg  # type: ignore
+        except Exception as e:
+            raise RuntimeError("GPU backend not available") from e
+        if not data:
+            out = self._containers_dir() / f"{doc_id}.hgc"
+            out.write_bytes(b"HGMC2\x00" + (0).to_bytes(4,'little')*3)
+            self._register_container(doc_id, filename, 0)
+            self._store_dimension_mapping(doc_id, 0)
+            return doc_id
+        # Seed base from content hash for determinism
+        seed_base = int(_hl.sha256(data).hexdigest()[:8], 16)
+        # Encode and superpose on GPU
+        g = _hg.HolographicGPU()  # type: ignore[attr-defined]
+        if hasattr(g, 'initialize'):
+            _ = g.initialize()  # type: ignore[attr-defined]
+        psi, dim, seeds, sizes = g.encode_superpose_bytes(data, 4096, seed_base)  # type: ignore[attr-defined]
+        psi_arr = _np.asarray(psi, dtype=_np.float32)
+        # ECC parity per original chunk
+        ecc_scheme, ecc_k, ecc_r = 1, 223, 32
+        parities: List[bytes] = []
+        off = 0
+        for sz in sizes:
+            chunk = data[off:off+sz]
+            p = _hg.gpu_rs_encode(chunk, int(ecc_k), int(ecc_r))  # type: ignore[attr-defined]
+            parities.append(bytes(p))
+            off += sz
+        # Write HGMC2 container
+        out = self._containers_dir() / f"{doc_id}.hgc"
+        with open(out, 'wb') as f:
+            f.write(b"HGMC2\x00")
+            f.write(int(dim).to_bytes(4, 'little'))
+            f.write(int(len(data)).to_bytes(4, 'little'))
+            f.write(int(len(sizes)).to_bytes(4, 'little'))
+            for sz in sizes:
+                f.write(int(int(sz)).to_bytes(4, 'little'))
+            for sd in seeds:
+                f.write(int(int(sd)).to_bytes(4, 'little'))
+            f.write(int(ecc_scheme).to_bytes(4, 'little'))
+            f.write(int(ecc_k).to_bytes(4, 'little'))
+            f.write(int(ecc_r).to_bytes(4, 'little'))
+            for pb in parities:
+                f.write(int(len(pb)).to_bytes(4, 'little'))
+                if pb:
+                    f.write(pb)
+            f.write(psi_arr.tobytes(order='C'))
+        self._register_container(doc_id, filename, int(dim))
+        self._store_dimension_mapping(doc_id, int(dim))
+        return doc_id
+
     def retrieve_to(self, doc_id: str, out_path: Path) -> Path:
         # Try holographic-only bytes reconstruction from stored chunks
         try:
@@ -415,13 +519,66 @@ class Memory:
         return metrics
 
     def retrieve_bytes(self, doc_id: str) -> bytes:
-        """Reconstruct file bytes using available mechanisms.
+        """Reconstruct file bytes.
 
         Priority:
-          1) 3D engine exact recall (preferred)
-          2) Legacy HRR chunk/base64 (if present)
-          3) Raise if unavailable
+          1) GPU container (HGMC2/HGMC3) if present or HLOG_GPU_ONLY=1
+          2) 3D engine exact recall (preferred)
+          3) Legacy HRR chunk/base64 (if present)
         """
+        # Try GPU holographic containers first when requested/available
+        try:
+            cpath = self.state_dir / "hlog" / "containers" / f"{doc_id}.hgc"
+            gpu_only = os.environ.get("HLOG_GPU_ONLY", "0") == "1"
+            if cpath.exists() or gpu_only:
+                import numpy as _np
+                import holographic_gpu as _hg  # type: ignore
+                with open(cpath, 'rb') as f:
+                    head = f.read(6)
+                    magic = head[:6]
+                    ecc_scheme = 0; ecc_k = 0; ecc_r = 0
+                    parities: List[bytes] = []
+                    if magic.startswith(b"HGMC3"):
+                        raise RuntimeError("HGMC3 not implemented in this build")
+                    elif magic.startswith(b"HGMC2"):
+                        dim = int.from_bytes(f.read(4), 'little')
+                        orig = int.from_bytes(f.read(4), 'little')
+                        n = int.from_bytes(f.read(4), 'little')
+                        sizes = [int.from_bytes(f.read(4), 'little') for _ in range(n)]
+                        seeds = [int.from_bytes(f.read(4), 'little') for _ in range(n)]
+                        ecc_scheme = int.from_bytes(f.read(4), 'little')
+                        ecc_k = int.from_bytes(f.read(4), 'little')
+                        ecc_r = int.from_bytes(f.read(4), 'little')
+                        for _ in range(n):
+                            plen = int.from_bytes(f.read(4), 'little')
+                            parities.append(f.read(plen) if plen > 0 else b"")
+                        psi = _np.frombuffer(f.read(dim * 4), dtype=_np.float32)
+                    else:
+                        raise RuntimeError("Unsupported holographic container magic")
+                # Decode via GPU correlation
+                g = _hg.HolographicGPU()  # type: ignore[attr-defined]
+                if hasattr(g, 'initialize'):
+                    _ = g.initialize()  # type: ignore[attr-defined]
+                out = g.decode_superposed_bytes(psi.astype(_np.float32).tolist(), int(dim), list(map(int, seeds)), list(map(int, sizes)))  # type: ignore[attr-defined]
+                if not isinstance(out, (bytes, bytearray)):
+                    raise RuntimeError("GPU decode_superposed_bytes returned invalid type")
+                data_bytes = bytes(out)
+                # ECC verify/correct if present
+                if ecc_scheme == 1 and ecc_k > 0 and ecc_r > 0 and parities:
+                    corrected: List[bytes] = []
+                    off = 0
+                    for idx, sz in enumerate(sizes):
+                        chunk = data_bytes[off:off+sz]
+                        par = parities[idx] if idx < len(parities) else b""
+                        if par:
+                            chunk = verify_and_correct_rs(chunk, par, int(ecc_k), int(ecc_r))
+                        corrected.append(chunk)
+                        off += sz
+                    data_bytes = b"".join(corrected)
+                return data_bytes
+        except Exception:
+            if os.environ.get("HLOG_GPU_ONLY", "0") == "1":
+                raise
         # Prefer 3D engine exact recall
         if self.backend3d is not None and hasattr(self.backend3d, "retrieve_bytes"):
             try:
@@ -661,6 +818,22 @@ class HoloFS:
         self.index.add_or_update(path, doc_id=doc_id, size=path.stat().st_size)
         return doc_id
 
+    def store_data(self, data: bytes, filename: str, force: bool = False) -> str:
+        """Store raw data into holographic containers (GPU-only heavy path)."""
+        import hashlib
+        doc_id = hashlib.sha256(data).hexdigest()
+        # Skip if exists
+        if not force:
+            existing = [e for e in self.index.all() if e.doc_id == doc_id]
+            if existing:
+                return doc_id
+        # GPU container store
+        self.mem.store_bytes(data, doc_id, filename)
+        # Index virtual path
+        virtual_path = f"holographic://{filename}#{doc_id[:8]}"
+        self.index.add_or_update(Path(virtual_path), doc_id=doc_id, size=len(data))
+        return doc_id
+
     def recall(self, query_or_doc: str, out: Optional[Path] = None, original: bool = False) -> Path:
         # Resolve doc id by name if not obvious
         doc_id = None
@@ -699,12 +872,26 @@ class HoloFS:
     def stats(self) -> Dict:
         s = self.mem.stats()
         idx = self.index.stats()
-        # On-disk holographic state size
-        wave = self.state_dir / "wave_spatial.npy"
-        holo_bytes = wave.stat().st_size if wave.exists() else 0
-        meta = self.state_dir / "metadata.json"
-        holo_bytes += meta.stat().st_size if meta.exists() else 0
-        holo_bytes += (self.state_dir / "index.json").stat().st_size if (self.state_dir / "index.json").exists() else 0
+        # Sum all bytes under .holofs/hlog for honest accounting
+        holo_root = self.state_dir / "hlog"
+        holo_bytes = 0
+        try:
+            if holo_root.exists():
+                for p in holo_root.rglob("*"):
+                    if p.is_file():
+                        try:
+                            holo_bytes += p.stat().st_size
+                        except OSError:
+                            pass
+        except Exception:
+            pass
+        # Include index metadata files
+        for extra in (self.state_dir / "index.json", self.state_dir / "dimension_map.json", self.state_dir / "engine_map.json"):
+            try:
+                if extra.exists():
+                    holo_bytes += extra.stat().st_size
+            except OSError:
+                pass
         s.update(idx)
         s["holo_bytes"] = int(holo_bytes)
         s["compression_x"] = round((idx.get("original_total_bytes", 0) / holo_bytes), 2) if holo_bytes else None

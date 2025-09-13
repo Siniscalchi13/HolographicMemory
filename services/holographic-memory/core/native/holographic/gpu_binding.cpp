@@ -922,8 +922,7 @@ PYBIND11_MODULE(holographic_gpu, m) {
         std::vector<int> corrected(blocks, 0);
         // Build generator once for parity validation
         std::vector<std::uint8_t> gen = build_generator_fn(r, logt, alogt);
-        const char* rsmap_env = std::getenv("HLOG_RS_MAP");
-        const bool use_std_map = (rsmap_env && std::strcmp(rsmap_env, "std") == 0);
+        // Deterministic decode path only. No variant enumeration.
         auto compute_parity = [&](const std::uint8_t* data, std::size_t len){
             std::vector<std::uint8_t> parr(r,0);
             for (std::uint32_t i=0;i<k;++i){
@@ -951,81 +950,101 @@ PYBIND11_MODULE(holographic_gpu, m) {
             // Append parity for this block
             recv.insert(recv.end(), pr, pr + r);
             auto recv_out_ptr = out.data() + (std::size_t)b * k;
-            // --- Feature-flagged standard mapping attempt (encode-consistent) ---
-            bool accepted_std = false;
-            if (use_std_map){
-                std::vector<std::uint8_t> Sstd(r, 0); bool all_zero_std = true;
-                // S_j = C(α^{j+1}) with C(x) = sum c[i] x^{n-1-i}, j in [0..r-1] (b = 1)
+            // Tail-block deterministic shortened RS decode: s = k - chunk_len
+            if (chunk_len < k){
+                const std::uint32_t sshort = (std::uint32_t)(k - chunk_len);
+                // Compute syndromes for shortened RS code
+                // The recv buffer is [data_L | zeros_(k-L) | parity_r]
+                // Standard syndrome uses full block convention
+                std::vector<std::uint8_t> S(r, 0); bool all_zero = true;
                 for (std::uint32_t j=0;j<r;++j){
                     std::uint8_t Sj=0;
-                    std::uint32_t j1 = j + 1; // 1..r
+                    // Process the full codeword as-is (zeros are already in place)
                     for (std::uint32_t i=0;i<n;++i){
-                        std::uint8_t c = recv[i]; if (!c) continue;
-                        int ex = (int)(((int)(n - 1 - i) * (int)j1) % 255);
-                        if (ex < 0) ex += 255;
-                        Sj = gf_add(Sj, alogt[(std::size_t)((logt[c] + ex) % 255)]);
+                        std::uint8_t c = recv[i];
+                        if (c){
+                            // Standard RS syndrome: S_j = C(α^(j+1)) where C(x) = Σ c[i]*x^(n-1-i)
+                            int ex = ((n - 1 - i) * (j + 1)) % 255;
+                            if (ex<0) ex+=255;
+                            Sj = gf_add(Sj, alogt[(logt[c] + ex) % 255]);
+                        }
                     }
-                    Sstd[j]=Sj; all_zero_std = all_zero_std && (Sj==0);
+                    S[j]=Sj; all_zero = all_zero && (Sj==0);
                 }
-                if (all_zero_std){
-                    std::memcpy(recv_out_ptr, recv.data(), k);
+                if (all_zero){ std::memcpy(recv_out_ptr, recv.data(), k); continue; }
+                // BM
+                std::vector<std::uint8_t> Lambda(1,1), Bm(1,1); std::uint8_t bcoef=1; int L=0; int m=1;
+                for (std::uint32_t nsy=0;nsy<r;++nsy){
+                    std::uint8_t dsc=S[nsy];
+                    for (int i=1;i<=L;++i){ if (i < (int)Lambda.size() && (int)(nsy - i) >= 0) dsc = gf_add(dsc, gf_mul(Lambda[(std::size_t)i], S[(std::size_t)(nsy - i)], logt, alogt)); }
+                    if (dsc == 0){ m++; continue; }
+                    std::vector<std::uint8_t> T = Lambda;
+                    auto poly_scale = [&](const std::vector<std::uint8_t>& p, std::uint8_t x){ std::vector<std::uint8_t> outp(p.size()); for (std::size_t ii=0;ii<p.size();++ii) outp[ii]=gf_mul(p[ii], x, logt, alogt); return outp; };
+                    std::vector<std::uint8_t> xmb(Bm.size()+ (std::size_t)m, 0); for (std::size_t ii=0;ii<Bm.size();++ii) xmb[ii]=Bm[ii]; for (int sh=0; sh<m; ++sh) xmb.insert(xmb.begin(), 0);
+                    std::uint8_t scale = gf_div(dsc, bcoef, logt, alogt);
+                    auto scaled = poly_scale(xmb, scale);
+                    std::size_t nmax = std::max(Lambda.size(), scaled.size()); std::vector<std::uint8_t> newL(nmax,0);
+                    for (std::size_t ii=0;ii<nmax;++ii){ std::uint8_t av = (ii<Lambda.size())?Lambda[Lambda.size()-1-ii]:0; std::uint8_t bv=(ii<scaled.size())?scaled[scaled.size()-1-ii]:0; newL[nmax-1-ii] = gf_add(av, bv); }
+                    Lambda.swap(newL);
+                    if (2*L <= (int)nsy){ L = (int)nsy + 1 - L; Bm = T; bcoef = dsc; m = 1; } else { m++; }
+                }
+                // Chien: Xi = alpha^{-i}
+                std::vector<int> err_pos; err_pos.reserve(r);
+                for (std::uint32_t i=0;i<n;++i){ std::uint8_t x = alogt[(std::size_t)((255 - (int)(i % 255)) % 255)]; if (poly_eval(Lambda, x, logt, alogt)==0){ err_pos.push_back((int)i); } }
+                if (err_pos.empty() || (int)err_pos.size() > L){ std::memcpy(recv_out_ptr, recv.data(), k); continue; }
+                // Omega and Lambda'
+                std::vector<std::uint8_t> Sx = S; std::vector<std::uint8_t> prod(Sx.size()+Lambda.size()-1, 0);
+                for (std::size_t ii=0;ii<Sx.size();++ii) for (std::size_t jj=0;jj<Lambda.size();++jj) prod[ii+jj] = gf_add(prod[ii+jj], gf_mul(Sx[ii], Lambda[jj], logt, alogt));
+                std::vector<std::uint8_t> Omega(prod.begin(), prod.begin()+ std::min<std::size_t>(prod.size(), r));
+                std::vector<std::uint8_t> Lp; for (std::size_t ii=1;ii<Lambda.size();++ii) if (ii%2==1) Lp.push_back(Lambda[ii]);
+                // Apply corrections mapped to data indices: idx_full = n-1-pos; data_idx = idx_full - s, if in [0,L)
+                auto trial = recv; auto base = recv;
+                const char* dbg_tail = std::getenv("HG_ECC_DEBUG");
+                if (dbg_tail && *dbg_tail){
+                    std::fprintf(stderr, "[ECC] Tail block b=%u L=%d roots=%zu chunk_len=%zu\n", b, L, err_pos.size(), chunk_len);
+                }
+                for (int pos_i : err_pos){
+                    // For Xi = α^{−pos_i}, Xi^{-1} = α^{+pos_i}
+                    std::uint8_t Xi_inv = alogt[(std::size_t)(pos_i % 255)];
+                    std::uint8_t num = poly_eval(Omega, Xi_inv, logt, alogt);
+                    std::uint8_t den = poly_eval(Lp, Xi_inv, logt, alogt);
+                    if (!den) continue;
+                    std::uint8_t mag = gf_div(num, den, logt, alogt);
+                    // Map error position to data index
+                    // pos_i is the position in the full codeword where Λ(α^{-pos_i}) = 0
+                    // For data bytes, this maps directly to index in recv buffer
+                    std::size_t idx = (std::size_t)(n - 1 - pos_i);
+                    if (dbg_tail && *dbg_tail){
+                        std::fprintf(stderr, "[ECC] Tail root pos=%d idx=%zu chunk_len=%zu\n", pos_i, idx, chunk_len);
+                    }
+                    // Only correct data bytes, not parity
+                    if (idx < chunk_len) {
+                        trial[idx] = gf_add(trial[idx], mag);
+                        if (dbg_tail && *dbg_tail){
+                            std::fprintf(stderr, "[ECC]   Correcting byte at idx=%zu: %02x -> %02x\n", idx, (unsigned)recv[idx], (unsigned)trial[idx]);
+                        }
+                    }
+                }
+                auto parr_try = compute_parity(trial.data(), chunk_len);
+                if (std::memcmp(parr_try.data(), pr, r) == 0){
+                    int changes = 0; for (std::size_t ii=0; ii<chunk_len; ++ii){ if (trial[ii] != base[ii]) ++changes; }
+                    corrected[(std::size_t)b] = changes;
+                    std::memcpy(recv_out_ptr, trial.data(), k);
                     continue;
                 }
-                // BM on Sstd
-                std::vector<std::uint8_t> LambdaS(1,1), BS(1,1); std::uint8_t bcoefS=1; int LS=0; int mS=1;
-                for (std::uint32_t nsy=0;nsy<r;++nsy){
-                    std::uint8_t dsc=Sstd[nsy];
-                    for (int i=1;i<=LS;++i){ if (i < (int)LambdaS.size() && (int)(nsy - i) >= 0) dsc = gf_add(dsc, gf_mul(LambdaS[(std::size_t)i], Sstd[(std::size_t)(nsy - i)], logt, alogt)); }
-                    if (dsc == 0){ mS++; continue; }
-                    std::vector<std::uint8_t> TS = LambdaS;
-                    auto poly_scaleS = [&](const std::vector<std::uint8_t>& p, std::uint8_t x){ std::vector<std::uint8_t> outp(p.size()); for (std::size_t i=0;i<p.size();++i) outp[i]=gf_mul(p[i], x, logt, alogt); return outp; };
-                    std::vector<std::uint8_t> xmbS(BS.size()+ (std::size_t)mS, 0); for (std::size_t i=0;i<BS.size();++i) xmbS[i]=BS[i]; for (int sh=0; sh<mS; ++sh) xmbS.insert(xmbS.begin(), 0);
-                    std::uint8_t scaleS = gf_div(dsc, bcoefS, logt, alogt);
-                    auto scaledS = poly_scaleS(xmbS, scaleS);
-                    std::size_t nmaxS = std::max(LambdaS.size(), scaledS.size()); std::vector<std::uint8_t> newLS(nmaxS,0);
-                    for (std::size_t i=0;i<nmaxS;++i){ std::uint8_t av = (i<LambdaS.size())?LambdaS[LambdaS.size()-1-i]:0; std::uint8_t bv=(i<scaledS.size())?scaledS[scaledS.size()-1-i]:0; newLS[nmaxS-1-i] = gf_add(av, bv); }
-                    LambdaS.swap(newLS);
-                    if (2*LS <= (int)nsy){ LS = (int)nsy + 1 - LS; BS = TS; bcoefS = dsc; mS = 1; } else { mS++; }
-                }
-                // Try both Chien schedules and both index orientations
-                // OmegaS, LpS
-                std::vector<std::uint8_t> SxS = Sstd; std::vector<std::uint8_t> prodS(SxS.size()+LambdaS.size()-1, 0);
-                for (std::size_t i=0;i<SxS.size();++i) for (std::size_t j=0;j<LambdaS.size();++j) prodS[i+j] = gf_add(prodS[i+j], gf_mul(SxS[i], LambdaS[j], logt, alogt));
-                std::vector<std::uint8_t> OmegaS(prodS.begin(), prodS.begin()+ std::min<std::size_t>(prodS.size(), r));
-                std::vector<std::uint8_t> LpS; for (std::size_t i=1;i<LambdaS.size();++i) if (i%2==1) LpS.push_back(LambdaS[i]);
-                for (int chien_mode=0; chien_mode<2; ++chien_mode){
-                    std::vector<int> err_posS; err_posS.reserve(r);
-                    if (chien_mode == 0){ for (std::uint32_t i=0;i<n;++i){ std::uint8_t Xi = alogt[(std::size_t)((255 - (int)(i % 255)) % 255)]; if (poly_eval(LambdaS, Xi, logt, alogt) == 0){ err_posS.push_back((int)i); } } }
-                    else { for (std::uint32_t i=0;i<n;++i){ std::uint8_t Xi = alogt[(std::size_t)(i % 255)]; if (poly_eval(LambdaS, Xi, logt, alogt) == 0){ err_posS.push_back((int)i); } } }
-                    if (err_posS.empty() || (int)err_posS.size() > LS) continue;
-                    for (int idx_mode=0; idx_mode<2; ++idx_mode){
-                        auto trial = recv; auto base = recv;
-                        for (int pos : err_posS){
-                            std::uint8_t Xi_inv = (chien_mode==0) ? alogt[(std::size_t)((pos % 255 + 255) % 255)]
-                                                                  : alogt[(std::size_t)((255 - (int)(pos % 255)) % 255)];
-                            std::uint8_t num = poly_eval(OmegaS, Xi_inv, logt, alogt);
-                            std::uint8_t den = poly_eval(LpS, Xi_inv, logt, alogt);
-                            if (!den) continue;
-                            std::uint8_t mag = gf_div(num, den, logt, alogt);
-                            std::size_t idx = (idx_mode==0) ? (std::size_t)(n - 1 - pos) : (std::size_t)pos;
-                            if (idx < chunk_len) trial[idx] = gf_add(trial[idx], mag);
-                        }
-                        auto parrS = compute_parity(trial.data(), chunk_len);
-                        bool okS = (std::memcmp(parrS.data(), pr, r) == 0);
-                        if (okS){ int changesS = 0; for (std::size_t i=0; i<chunk_len; ++i){ if (trial[i] != base[i]) ++changesS; } corrected[(std::size_t)b] = changesS; std::memcpy(recv_out_ptr, trial.data(), k); accepted_std = true; break; }
-                    }
-                }
-                // If std attempts failed, fall through to legacy mapping below
+                // If not accepted, leave unchanged for this block
+                std::memcpy(recv_out_ptr, recv.data(), k);
+                continue;
             }
-            if (accepted_std){ continue; }
-            // Syndromes (legacy mapping retained for stability):
+            // Syndromes: S_j = C(α^(j+1)) for generator with roots α^1..α^32
             std::vector<std::uint8_t> S(r, 0); bool all_zero = true;
             for (std::uint32_t j=0;j<r;++j){
                 std::uint8_t Sj=0;
                 for (std::uint32_t i=0;i<n;++i){
                     std::uint8_t c = recv[i];
                     if (c){
-                        int pow = (int)((n-1 - i) + j) % 255;
+                        // S_j = Σ c[i] * α^((n-1-i)*(j+1))
+                        int pow = ((n-1 - i) * (j + 1)) % 255;
                         if (pow<0) pow+=255;
                         Sj = gf_add(Sj, gf_mul(c, alogt[(std::size_t)pow], logt, alogt));
                     }
@@ -1398,6 +1417,240 @@ PYBIND11_MODULE(holographic_gpu, m) {
         return py::make_tuple(py::bytes(reinterpret_cast<const char*>(out.data()), (py::ssize_t)s.size()), counts);
     }, py::arg("payload"), py::arg("parity"), py::arg("k")=(std::uint32_t)223, py::arg("r")=(std::uint32_t)32,
        "GPU RS(255,223) ECC decode/correct payload using parity (host-side)");
+
+    // Wave-based ECC functions
+    m.def("wave_ecc_encode", [](py::bytes data, std::uint32_t redundancy_level, std::uint32_t seed_base) {
+        std::string s = data;
+        if (s.empty() || redundancy_level == 0) {
+            return py::bytes("");
+        }
+        
+#ifdef PLATFORM_METAL
+        auto core = holo::MetalHoloCore();
+        if (!core.available()) throw std::runtime_error("GPU backend not available");
+        
+        // Convert data to normalized float signal
+        std::vector<float> signal(s.size());
+        for (size_t i = 0; i < s.size(); ++i) {
+            signal[i] = static_cast<float>(static_cast<unsigned char>(s[i])) / 255.0f;
+        }
+        
+        // FFT transform to frequency domain
+        std::vector<float> real, imag;
+        core.fft_transform(signal, real, imag);
+        
+        // Generate redundant views using seeded codebooks
+        std::vector<float> parity_real(real.size() * redundancy_level, 0.0f);
+        std::vector<float> parity_imag(imag.size() * redundancy_level, 0.0f);
+        
+        for (std::uint32_t r = 0; r < redundancy_level; ++r) {
+            std::uint32_t seed = seed_base ^ r;
+            std::vector<float> coded_real, coded_imag;
+            
+            // Apply seeded codebook
+            core.apply_codebook(real, imag, coded_real, coded_imag, seed);
+            
+            // Store in parity with phase rotation for diversity
+            float phase = static_cast<float>(r) * 2.0f * 3.14159265359f / static_cast<float>(redundancy_level);
+            float cos_p = std::cos(phase);
+            float sin_p = std::sin(phase);
+            
+            for (size_t i = 0; i < coded_real.size(); ++i) {
+                size_t idx = r * real.size() + i;
+                // Rotate by phase for redundancy diversity
+                parity_real[idx] = coded_real[i] * cos_p - coded_imag[i] * sin_p;
+                parity_imag[idx] = coded_real[i] * sin_p + coded_imag[i] * cos_p;
+            }
+        }
+        
+        // Convert parity to bytes (interleaved real/imag as float32)
+        std::vector<uint8_t> parity_bytes;
+        parity_bytes.reserve(parity_real.size() * 8);
+        
+        for (size_t i = 0; i < parity_real.size(); ++i) {
+            // Store as float32 bytes
+            float r = parity_real[i];
+            float im = parity_imag[i];
+            uint8_t* r_bytes = reinterpret_cast<uint8_t*>(&r);
+            uint8_t* i_bytes = reinterpret_cast<uint8_t*>(&im);
+            for (int j = 0; j < 4; ++j) parity_bytes.push_back(r_bytes[j]);
+            for (int j = 0; j < 4; ++j) parity_bytes.push_back(i_bytes[j]);
+        }
+        
+        return py::bytes(reinterpret_cast<const char*>(parity_bytes.data()), parity_bytes.size());
+#else
+        throw std::runtime_error("Wave ECC requires GPU backend");
+#endif
+    }, py::arg("data"), py::arg("redundancy_level")=3, py::arg("seed_base")=42,
+       "Encode data using wave-based ECC with seeded redundancy");
+    
+    m.def("wave_ecc_decode", [](py::bytes data, py::bytes parity, std::uint32_t redundancy_level, std::uint32_t seed_base) {
+        std::string s = data;
+        std::string p = parity;
+        
+        if (s.empty()) {
+            return py::make_tuple(py::bytes(""), 0);
+        }
+        
+#ifdef PLATFORM_METAL
+        auto core = holo::MetalHoloCore();
+        if (!core.available()) throw std::runtime_error("GPU backend not available");
+        
+        // Convert data to normalized float signal
+        std::vector<float> signal(s.size());
+        for (size_t i = 0; i < s.size(); ++i) {
+            signal[i] = static_cast<float>(static_cast<unsigned char>(s[i])) / 255.0f;
+        }
+        
+        // FFT transform to frequency domain
+        std::vector<float> data_real, data_imag;
+        core.fft_transform(signal, data_real, data_imag);
+        
+        // Decode parity bytes back to complex waves
+        size_t expected_parity_size = s.size() * redundancy_level * 8;
+        if (p.size() != expected_parity_size) {
+            // Parity size mismatch, return uncorrected
+            return py::make_tuple(py::bytes(s), 0);
+        }
+        
+        std::vector<float> parity_real(s.size() * redundancy_level);
+        std::vector<float> parity_imag(s.size() * redundancy_level);
+        
+        const uint8_t* parity_ptr = reinterpret_cast<const uint8_t*>(p.data());
+        for (size_t i = 0; i < parity_real.size(); ++i) {
+            float r, im;
+            std::memcpy(&r, parity_ptr + i * 8, 4);
+            std::memcpy(&im, parity_ptr + i * 8 + 4, 4);
+            parity_real[i] = r;
+            parity_imag[i] = im;
+        }
+        
+        // Compute correlations for each redundant view
+        std::vector<float> correlations(redundancy_level);
+        std::vector<bool> view_valid(redundancy_level, true);
+        float avg_correlation = 0.0f;
+        
+        for (std::uint32_t r = 0; r < redundancy_level; ++r) {
+            std::uint32_t seed = seed_base ^ r;
+            
+            // Extract this redundant view
+            std::vector<float> view_real(data_real.size());
+            std::vector<float> view_imag(data_imag.size());
+            
+            // Undo phase rotation
+            float phase = static_cast<float>(r) * 2.0f * 3.14159265359f / static_cast<float>(redundancy_level);
+            float cos_p = std::cos(-phase);
+            float sin_p = std::sin(-phase);
+            
+            for (size_t i = 0; i < view_real.size(); ++i) {
+                size_t idx = r * data_real.size() + i;
+                float pr = parity_real[idx];
+                float pi = parity_imag[idx];
+                view_real[i] = pr * cos_p - pi * sin_p;
+                view_imag[i] = pr * sin_p + pi * cos_p;
+            }
+            
+            // Apply conjugate codebook to recover original
+            std::vector<float> recovered_real, recovered_imag;
+            core.apply_codebook_conj(view_real, view_imag, recovered_real, recovered_imag, seed);
+            
+            // Compute correlation with data
+            float correlation = 0.0f;
+            for (size_t i = 0; i < data_real.size(); ++i) {
+                float dr = data_real[i] - recovered_real[i];
+                float di = data_imag[i] - recovered_imag[i];
+                correlation += dr * dr + di * di;
+            }
+            correlations[r] = correlation;
+            avg_correlation += correlation;
+        }
+        
+        avg_correlation /= redundancy_level;
+        
+        // Detect views with errors (high deviation from average)
+        float threshold = avg_correlation * 2.0f;
+        int errors_detected = 0;
+        
+        for (std::uint32_t r = 0; r < redundancy_level; ++r) {
+            if (correlations[r] > threshold) {
+                view_valid[r] = false;
+                errors_detected++;
+            }
+        }
+        
+        // If errors detected and we have enough clean views, reconstruct
+        if (errors_detected > 0 && errors_detected < redundancy_level / 2) {
+            // Voting reconstruction from clean views
+            std::vector<float> corrected_real(data_real.size(), 0.0f);
+            std::vector<float> corrected_imag(data_imag.size(), 0.0f);
+            int valid_count = 0;
+            
+            for (std::uint32_t r = 0; r < redundancy_level; ++r) {
+                if (view_valid[r]) {
+                    std::uint32_t seed = seed_base ^ r;
+                    
+                    // Extract and decode this view
+                    std::vector<float> view_real(data_real.size());
+                    std::vector<float> view_imag(data_imag.size());
+                    
+                    float phase = static_cast<float>(r) * 2.0f * 3.14159265359f / static_cast<float>(redundancy_level);
+                    float cos_p = std::cos(-phase);
+                    float sin_p = std::sin(-phase);
+                    
+                    for (size_t i = 0; i < view_real.size(); ++i) {
+                        size_t idx = r * data_real.size() + i;
+                        float pr = parity_real[idx];
+                        float pi = parity_imag[idx];
+                        view_real[i] = pr * cos_p - pi * sin_p;
+                        view_imag[i] = pr * sin_p + pi * cos_p;
+                    }
+                    
+                    std::vector<float> recovered_real, recovered_imag;
+                    core.apply_codebook_conj(view_real, view_imag, recovered_real, recovered_imag, seed);
+                    
+                    // Accumulate for voting
+                    for (size_t i = 0; i < corrected_real.size(); ++i) {
+                        corrected_real[i] += recovered_real[i];
+                        corrected_imag[i] += recovered_imag[i];
+                    }
+                    valid_count++;
+                }
+            }
+            
+            // Average the valid views
+            if (valid_count > 0) {
+                for (size_t i = 0; i < corrected_real.size(); ++i) {
+                    corrected_real[i] /= valid_count;
+                    corrected_imag[i] /= valid_count;
+                }
+                
+                // iFFT to get corrected signal
+                std::vector<float> corrected_signal;
+                core.ifft_transform(corrected_real, corrected_imag, corrected_signal);
+                
+                // Convert back to bytes
+                std::vector<uint8_t> corrected_bytes(s.size());
+                for (size_t i = 0; i < s.size(); ++i) {
+                    float val = corrected_signal[i] * 255.0f;
+                    if (val < 0) val = 0;
+                    if (val > 255) val = 255;
+                    corrected_bytes[i] = static_cast<uint8_t>(val + 0.5f);
+                }
+                
+                return py::make_tuple(
+                    py::bytes(reinterpret_cast<const char*>(corrected_bytes.data()), corrected_bytes.size()),
+                    errors_detected
+                );
+            }
+        }
+        
+        // No errors or couldn't correct, return original
+        return py::make_tuple(py::bytes(s), 0);
+#else
+        throw std::runtime_error("Wave ECC requires GPU backend");
+#endif
+    }, py::arg("data"), py::arg("parity"), py::arg("redundancy_level")=3, py::arg("seed_base")=42,
+       "Decode data using wave-based ECC with correlation detection and voting correction");
 
     m.def("available_platforms", &HolographicGPUWrapper::available_platforms,
           "Return a list of available GPU platforms (e.g., ['cuda','metal']).");

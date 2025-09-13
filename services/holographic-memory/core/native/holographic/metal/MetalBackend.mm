@@ -87,9 +87,13 @@ void MetalBackend::load_shaders() {
     pso_batch_store_ = create_pipeline("batch_holographic_store");
     pso_similarity_ = create_pipeline("holographic_similarity_search");
     pso_fft_ = create_pipeline("holographic_fft_transform");
+    pso_ifft_ = create_pipeline("holographic_ifft_transform");
     pso_batch_store_fft_ = create_pipeline("batch_holographic_encode_fft");
     pso_dot_norm_ = create_pipeline("dot_norm_kernel");
     pso_corr_off_ = create_pipeline("correlation_offset_kernel");
+    pso_apply_code_ = create_pipeline("apply_codebook");
+    pso_apply_code_conj_ = create_pipeline("apply_codebook_conj");
+    pso_accumulate_add_ = create_pipeline("accumulate_add_time");
     
     // GPU Compression Pipeline - Kernel 1: Quantization
     pso_quantize_ = create_pipeline("gpu_holographic_quantize");
@@ -275,6 +279,126 @@ std::vector<std::vector<float>> MetalBackend::batch_holographic_store(
     // ARC cleans up
     
     return result;
+}
+
+void MetalBackend::ifft_transform(const std::vector<float>& real_in,
+                                  const std::vector<float>& imag_in,
+                                  std::vector<float>& time_out) {
+    if (!available() || real_in.size() != imag_in.size()) { time_out.clear(); return; }
+    uint32_t n = static_cast<uint32_t>(real_in.size());
+    time_out.assign(n, 0.0f);
+
+    id<MTLBuffer> bre = [device_ newBufferWithBytes:real_in.data() length:n * sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bim = [device_ newBufferWithBytes:imag_in.data() length:n * sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bout = [device_ newBufferWithBytes:time_out.data() length:n * sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> blen = [device_ newBufferWithBytes:&n length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+
+    id<MTLCommandBuffer> cmd = [queue_ commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
+    [enc setComputePipelineState:pso_ifft_];
+    [enc setBuffer:bre offset:0 atIndex:0];
+    [enc setBuffer:bim offset:0 atIndex:1];
+    [enc setBuffer:bout offset:0 atIndex:2];
+    [enc setBuffer:blen offset:0 atIndex:3];
+    NSUInteger tgX = 256;
+    NSUInteger gridX = ((n + tgX - 1) / tgX) * tgX;
+    [enc dispatchThreads:MTLSizeMake(gridX, 1, 1) threadsPerThreadgroup:MTLSizeMake(tgX, 1, 1)];
+    [enc endEncoding];
+    [cmd commit]; [cmd waitUntilCompleted];
+    std::memcpy(time_out.data(), [bout contents], n * sizeof(float));
+}
+
+void MetalBackend::apply_codebook(const std::vector<float>& in_real,
+                                  const std::vector<float>& in_imag,
+                                  std::vector<float>& out_real,
+                                  std::vector<float>& out_imag,
+                                  uint32_t seed) {
+    if (!available() || in_real.size() != in_imag.size()) { out_real.clear(); out_imag.clear(); return; }
+    uint32_t n = static_cast<uint32_t>(in_real.size());
+    out_real.assign(n, 0.0f);
+    out_imag.assign(n, 0.0f);
+
+    id<MTLBuffer> binr = [device_ newBufferWithBytes:in_real.data() length:n * sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> binm = [device_ newBufferWithBytes:in_imag.data() length:n * sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> boutr = [device_ newBufferWithBytes:out_real.data() length:n * sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> boutm = [device_ newBufferWithBytes:out_imag.data() length:n * sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bdim = [device_ newBufferWithBytes:&n length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bseed = [device_ newBufferWithBytes:&seed length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+
+    id<MTLCommandBuffer> cmd = [queue_ commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
+    [enc setComputePipelineState:pso_apply_code_];
+    [enc setBuffer:binr offset:0 atIndex:0];
+    [enc setBuffer:binm offset:0 atIndex:1];
+    [enc setBuffer:boutr offset:0 atIndex:2];
+    [enc setBuffer:boutm offset:0 atIndex:3];
+    [enc setBuffer:bdim offset:0 atIndex:4];
+    [enc setBuffer:bseed offset:0 atIndex:5];
+    NSUInteger tgX = 256;
+    NSUInteger gridX = ((n + tgX - 1) / tgX) * tgX;
+    [enc dispatchThreads:MTLSizeMake(gridX, 1, 1) threadsPerThreadgroup:MTLSizeMake(tgX, 1, 1)];
+    [enc endEncoding];
+    [cmd commit]; [cmd waitUntilCompleted];
+    std::memcpy(out_real.data(), [boutr contents], n * sizeof(float));
+    std::memcpy(out_imag.data(), [boutm contents], n * sizeof(float));
+}
+
+void MetalBackend::apply_codebook_conj(const std::vector<float>& in_real,
+                                       const std::vector<float>& in_imag,
+                                       std::vector<float>& out_real,
+                                       std::vector<float>& out_imag,
+                                       uint32_t seed) {
+    if (!available() || in_real.size() != in_imag.size()) { out_real.clear(); out_imag.clear(); return; }
+    uint32_t n = static_cast<uint32_t>(in_real.size());
+    out_real.assign(n, 0.0f);
+    out_imag.assign(n, 0.0f);
+
+    id<MTLBuffer> binr = [device_ newBufferWithBytes:in_real.data() length:n * sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> binm = [device_ newBufferWithBytes:in_imag.data() length:n * sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> boutr = [device_ newBufferWithBytes:out_real.data() length:n * sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> boutm = [device_ newBufferWithBytes:out_imag.data() length:n * sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bdim = [device_ newBufferWithBytes:&n length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> bseed = [device_ newBufferWithBytes:&seed length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+
+    id<MTLCommandBuffer> cmd = [queue_ commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
+    [enc setComputePipelineState:pso_apply_code_conj_];
+    [enc setBuffer:binr offset:0 atIndex:0];
+    [enc setBuffer:binm offset:0 atIndex:1];
+    [enc setBuffer:boutr offset:0 atIndex:2];
+    [enc setBuffer:boutm offset:0 atIndex:3];
+    [enc setBuffer:bdim offset:0 atIndex:4];
+    [enc setBuffer:bseed offset:0 atIndex:5];
+    NSUInteger tgX = 256;
+    NSUInteger gridX = ((n + tgX - 1) / tgX) * tgX;
+    [enc dispatchThreads:MTLSizeMake(gridX, 1, 1) threadsPerThreadgroup:MTLSizeMake(tgX, 1, 1)];
+    [enc endEncoding];
+    [cmd commit]; [cmd waitUntilCompleted];
+    std::memcpy(out_real.data(), [boutr contents], n * sizeof(float));
+    std::memcpy(out_imag.data(), [boutm contents], n * sizeof(float));
+}
+
+void MetalBackend::accumulate_add_time(std::vector<float>& dst,
+                                       const std::vector<float>& add) {
+    if (!available() || dst.size() != add.size()) return;
+    uint32_t n = static_cast<uint32_t>(dst.size());
+
+    id<MTLBuffer> bdst = [device_ newBufferWithBytes:dst.data() length:n * sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> badd = [device_ newBufferWithBytes:add.data() length:n * sizeof(float) options:MTLResourceStorageModeManaged];
+    id<MTLBuffer> blen = [device_ newBufferWithBytes:&n length:sizeof(uint32_t) options:MTLResourceStorageModeManaged];
+
+    id<MTLCommandBuffer> cmd = [queue_ commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
+    [enc setComputePipelineState:pso_accumulate_add_];
+    [enc setBuffer:bdst offset:0 atIndex:0];
+    [enc setBuffer:badd offset:0 atIndex:1];
+    [enc setBuffer:blen offset:0 atIndex:2];
+    NSUInteger tgX = 256;
+    NSUInteger gridX = ((n + tgX - 1) / tgX) * tgX;
+    [enc dispatchThreads:MTLSizeMake(gridX, 1, 1) threadsPerThreadgroup:MTLSizeMake(tgX, 1, 1)];
+    [enc endEncoding];
+    [cmd commit]; [cmd waitUntilCompleted];
+    std::memcpy(dst.data(), [bdst contents], n * sizeof(float));
 }
 
 std::vector<float> MetalBackend::similarity_search(const std::vector<float>& query,

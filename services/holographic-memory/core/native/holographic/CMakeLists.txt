@@ -12,6 +12,16 @@ option(BUILD_CUDA "Build CUDA backend" OFF)
 option(BUILD_ROCM "Build ROCm backend" OFF)
 option(BUILD_METAL "Build Metal backend" ON)
 option(BUILD_3D "Build 3D exact-recall backend (holographic_cpp_3d)" ON)
+# Build profile: Dev vs Prod (controls dev-only extras like 3D CPU backend)
+option(HOLO_BUILD_DEV "Enable development-only components" ON)
+
+# If building in production profile, force-disable dev-only targets
+if(NOT HOLO_BUILD_DEV)
+    if(BUILD_3D)
+        message(STATUS "HOLO_BUILD_DEV=OFF -> Disabling BUILD_3D for production build")
+        set(BUILD_3D OFF CACHE BOOL "Build 3D exact-recall backend (holographic_cpp_3d)" FORCE)
+    endif()
+endif()
 
 # Platform detection
 if(APPLE)

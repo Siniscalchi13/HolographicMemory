@@ -32,6 +32,29 @@ public:
                        std::vector<float>& real_out,
                        std::vector<float>& imag_out);
 
+    // Inverse transform: complex spectrum -> time-domain real signal
+    void ifft_transform(const std::vector<float>& real_in,
+                        const std::vector<float>& imag_in,
+                        std::vector<float>& time_out);
+
+    // Apply seeded codebook (phase-only) in frequency domain
+    void apply_codebook(const std::vector<float>& in_real,
+                        const std::vector<float>& in_imag,
+                        std::vector<float>& out_real,
+                        std::vector<float>& out_imag,
+                        uint32_t seed);
+
+    // Apply conjugate seeded codebook
+    void apply_codebook_conj(const std::vector<float>& in_real,
+                             const std::vector<float>& in_imag,
+                             std::vector<float>& out_real,
+                             std::vector<float>& out_imag,
+                             uint32_t seed);
+
+    // Accumulate time-domain vector (dst += add)
+    void accumulate_add_time(std::vector<float>& dst,
+                             const std::vector<float>& add);
+
     // Similarity search: query (dim) vs stored (pattern_count x dim). Returns similarities per pattern.
     std::vector<float> similarity_search(const std::vector<float>& query,
                                          const std::vector<std::vector<float>>& stored);
@@ -200,12 +223,16 @@ private:
     // Pipeline states for different kernels
     id<MTLComputePipelineState> pso_vector_add_ = nil;
     id<MTLComputePipelineState> pso_fft_ = nil;
+    id<MTLComputePipelineState> pso_ifft_ = nil;
     id<MTLComputePipelineState> pso_interference_ = nil;
     id<MTLComputePipelineState> pso_dot_norm_ = nil;
     id<MTLComputePipelineState> pso_corr_off_ = nil;
     id<MTLComputePipelineState> pso_batch_store_ = nil;
     id<MTLComputePipelineState> pso_similarity_ = nil;
     id<MTLComputePipelineState> pso_batch_store_fft_ = nil;
+    id<MTLComputePipelineState> pso_apply_code_ = nil;
+    id<MTLComputePipelineState> pso_apply_code_conj_ = nil;
+    id<MTLComputePipelineState> pso_accumulate_add_ = nil;
     
     // GPU Compression Pipeline - Kernel 1: Quantization
     id<MTLComputePipelineState> pso_quantize_ = nil;

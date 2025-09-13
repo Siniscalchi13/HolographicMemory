@@ -279,7 +279,7 @@ dev-native:
 	@cd services/holographic-memory/core/native/holographic && \
 		mkdir -p build && \
 		cd build && \
-		cmake .. -DCMAKE_BUILD_TYPE=Debug -DBUILD_METAL=ON -DBUILD_3D=ON && \
+		cmake .. -DCMAKE_BUILD_TYPE=Debug -DBUILD_METAL=ON -DHOLO_BUILD_DEV=ON -DBUILD_3D=ON && \
 		make -j$(shell sysctl -n hw.ncpu)
 	@echo "✅ Native extensions built successfully!"
 

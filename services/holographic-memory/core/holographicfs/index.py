@@ -47,9 +47,16 @@ class Index:
         os.replace(tmp, self.index_path)
 
     def add_or_update(self, path: Path, doc_id: str, size: int) -> None:
-        p = str(path.resolve())
-        st = path.stat()
-        self.entries[p] = IndexEntry(path=p, doc_id=doc_id, size=size, mtime=st.st_mtime)
+        p = str(path)
+        # Allow virtual or non-existent paths (e.g., holographic URIs)
+        try:
+            st = Path(p).resolve().stat()
+            mtime = st.st_mtime
+            p_resolved = str(Path(p).resolve())
+        except FileNotFoundError:
+            mtime = 0.0
+            p_resolved = p
+        self.entries[p_resolved] = IndexEntry(path=p_resolved, doc_id=doc_id, size=size, mtime=mtime)
         self._save()
 
     def remove(self, path: Path) -> None:

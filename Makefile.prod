@@ -96,7 +96,7 @@ prod-native:
 	@cd services/holographic-memory/core/native/holographic && \
 		mkdir -p build && \
 		cd build && \
-		cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_METAL=ON -DBUILD_3D=ON && \
+		cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_METAL=ON -DHOLO_BUILD_DEV=OFF -DBUILD_3D=OFF && \
 		make -j$(shell sysctl -n hw.ncpu)
 	@echo "✅ Production native extensions built successfully!"
 
