@@ -369,12 +369,14 @@ Each section includes:
 - ✅ Initial GPU compression integrated (HGMC3)
 - ✅ Tests for GPU-only, seed tamper, and stats parity
 - ✅ Clear operator docs for containers
+- ✅ **Wave ECC fully implemented** with variable-length support and production hardening
+- ✅ **Production monitoring** with benchmarking, stress testing, and optimization tools
+- ✅ **Complete ECC test suite** with error injection and validation
 
 **Areas to Enhance**
-- ❌ ECC for guaranteed exact recall (in progress next)
-- ❌ 7-layer routing for bytes and per-layer telemetry
-- ❌ CUDA/ROCm parity for non‑Metal systems
-- ❌ Expanded microbench + correctness suite and docs
+- ❌ 7-layer routing for bytes and per-layer telemetry (Phase 4 target)
+- ❌ CUDA/ROCm parity for non‑Metal systems (Phase 5 target)
+- ❌ Expanded microbench + correctness suite and docs (Phase 6 target)
 - ❌ Tech-debt: ensure legacy 3D contiguous placement remains disabled for new stores; retain only for backward compatibility if needed (no active store/recall path uses it)
 
 ---
