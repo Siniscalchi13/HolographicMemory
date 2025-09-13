@@ -102,6 +102,7 @@ Wave ECC: redundancy-level R seeded parity views; variable-length support
 
 #### **Technical Implementation**
 - **`documentation/ecc_design.md`**: Error correction design and parameters
+- **`documentation/wave_ecc_production_guide.md`**: Production deployment and operational procedures
 - **`services/holographic-memory/core/native/holographic/README.md`**: Native implementation details
 - **`services/holographic-memory/core/holographicfs/memory.py`**: Python API and orchestration
 
